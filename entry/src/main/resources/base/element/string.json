@@ -11,6 +11,18 @@
     {
       "name": "EntryAbility_label",
       "value": "CodexBar"
+    },
+    {
+      "name": "widget_2x2_name",
+      "value": "CodexBar 额度速览"
+    },
+    {
+      "name": "widget_2x4_name",
+      "value": "CodexBar 额度列表"
+    },
+    {
+      "name": "widget_desc",
+      "value": "AI 服务商用量与重置倒计时"
     }
   ]
 }

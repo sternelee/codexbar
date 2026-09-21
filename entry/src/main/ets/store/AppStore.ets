@@ -8,6 +8,7 @@ import { ProviderRegistry } from '../providers/ProviderRegistry';
 import { UsageProvider } from '../providers/ProviderBase';
 import { Settings } from './Settings';
 import { Reminders } from './Reminders';
+import { WidgetDataStore } from './WidgetData';
 
 export class AppStore {
   private static instance: AppStore | null = null;
@@ -124,8 +125,24 @@ export class AppStore {
       Settings.setLastSuccess(providerId, state.lastSuccessAt);
       Settings.setCache(providerId, JSON.stringify(snap));
       Reminders.checkState(state);
+      this.updateWidgets();
     }
     this.bump();
+  }
+
+  /** 刷新成功后更新桌面卡片数据；鸿蒙上动态加载 FormPush 即时推送（跨端导入失败自动跳过） */
+  private async updateWidgets(): Promise<void> {
+    const json = WidgetDataStore.update(this.states);
+    if (json.length === 0) {
+      return;
+    }
+    try {
+      const mod = await import('../form/FormPush');
+      await mod.FormPush.pushAll(json);
+    } catch (e) {
+      // 非鸿蒙平台（Android/iOS）无 Form Kit：跳过即时推送，
+      // 数据已写入 Preferences，由卡片定时更新兜底
+    }
   }
 
   /** 并发刷新全部已启用且已配置凭证的服务商 */

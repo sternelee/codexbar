@@ -396,4 +396,61 @@ export class Settings {
   static accountCount(providerId: string): number {
     return Settings.accounts(providerId).length;
   }
+
+  // ---------------- 桌面卡片（服务卡片）数据 ----------------
+
+  /** 卡片数据 JSON（WidgetDataStore.update 写入，EntryFormAbility 读取） */
+  static widgetData(): string {
+    return Settings.getString('widget_data', '');
+  }
+
+  static setWidgetData(json: string): void {
+    Settings.setString('widget_data', json);
+  }
+
+  /** 已添加卡片的 formId 列表（JSON 数组文本） */
+  static formIds(): string[] {
+    const raw = Settings.getString('widget_form_ids', '[]');
+    try {
+      const arr = JSON.parse(raw) as string[];
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: string[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        if (typeof arr[i] === 'string') {
+          out.push(arr[i] as string);
+        }
+      }
+      return out;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static setFormIds(ids: string[]): void {
+    Settings.setString('widget_form_ids', JSON.stringify(ids));
+  }
+
+  static addFormId(formId: string): void {
+    if (formId.length === 0) {
+      return;
+    }
+    const ids = Settings.formIds();
+    if (ids.indexOf(formId) < 0) {
+      ids.push(formId);
+      Settings.setFormIds(ids);
+    }
+  }
+
+  static removeFormId(formId: string): void {
+    const ids = Settings.formIds();
+    const next: string[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i] !== formId) {
+        next.push(ids[i]);
+      }
+    }
+    Settings.setFormIds(next);
+  }
 }

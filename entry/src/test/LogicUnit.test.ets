@@ -17,6 +17,7 @@ import {
   removeAccountFromList,
   renameAccountInList,
 } from '../main/ets/store/Settings';
+import { buildWidgetItems } from '../main/ets/store/WidgetData';
 import {
   base64UrlDecode,
   base64UrlEncode,
@@ -31,12 +32,12 @@ import {
 } from '../main/ets/common/OAuth';
 
 /** 构造只带一个主窗口的服务商状态（提醒测试用） */
-function stateWith(primary: RateWindow): ProviderState {
+function stateWith(primary: RateWindow, title: string = '演示', enabled: boolean = true): ProviderState {
   const d: ProviderDescriptor = {
-    id: 'demo', title: '演示', authKind: AuthKind.DEMO,
+    id: 'demo', title: title, authKind: AuthKind.DEMO,
     accentColor: '#16D3B4', authHint: '', authUrl: ''
   };
-  const s = new ProviderState(d, { enabled: true, credential: '', credential2: '' });
+  const s = new ProviderState(d, { enabled: enabled, credential: '', credential2: '' });
   s.snapshot = UsageSnapshot.success(primary, null, null);
   return s;
 }
@@ -439,6 +440,43 @@ export default function logicUnitTest() {
       expect(same.length).assertEqual(2);
       expect(same[0].name).assertEqual('账号 1');
       expect(same[1].name).assertEqual('账号 2');
+    });
+
+    it('WidgetData_build_items', 0, () => {
+      const now = 1758000000000;
+      const a = stateWith(makeWindow(42, now + 2 * 3600000, true), 'Alpha');
+      const rows = buildWidgetItems([a], now);
+      expect(rows.length).assertEqual(1);
+      expect(rows[0].name).assertEqual('Alpha');
+      expect(rows[0].pct).assertEqual('42%');
+      expect(rows[0].barPct).assertEqual(42);
+      expect(rows[0].color).assertEqual(Theme.accent);
+      expect(rows[0].cd.indexOf('2小时') >= 0).assertTrue();
+      // 过滤：未启用 / 失败快照 / 无窗口
+      const off = stateWith(makeWindow(10, 0, true), 'Off', false);
+      const fail = stateWith(makeWindow(10, 0, true), 'Fail');
+      fail.snapshot = UsageSnapshot.failure('x');
+      const empty = stateWith(makeWindow(10, 0, true), 'Empty');
+      empty.snapshot = UsageSnapshot.success(null, null, null);
+      const rows2 = buildWidgetItems([off, fail, empty, a], now);
+      expect(rows2.length).assertEqual(1);
+      // 按用量降序 + 上限 4 条
+      const many: ProviderState[] = [];
+      for (let i = 0; i < 6; i++) {
+        many.push(stateWith(makeWindow(10 + i * 10, 0, true), `P${i}`));
+      }
+      const rows3 = buildWidgetItems(many, now);
+      expect(rows3.length).assertEqual(4);
+      expect(rows3[0].name).assertEqual('P5');
+      expect(rows3[3].name).assertEqual('P2');
+      // 无主窗口回退次窗口；usageKnown=false 灰色；重置已过无倒计时
+      const b = stateWith(makeWindow(1, 0, true), 'B');
+      b.snapshot = UsageSnapshot.success(null, makeWindow(55, now - 60000, false), null);
+      const rows4 = buildWidgetItems([b], now);
+      expect(rows4.length).assertEqual(1);
+      expect(rows4[0].pct).assertEqual('55%');
+      expect(rows4[0].color).assertEqual('#3A3A44');
+      expect(rows4[0].cd).assertEqual('');
     });
   });
 }

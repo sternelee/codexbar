@@ -6,5 +6,8 @@
   "platforms": [
     "android",
     "ios"
-  ]
+  ],
+  "buildOption": {
+    "ignoreCrossPlatform": true
+  }
 }

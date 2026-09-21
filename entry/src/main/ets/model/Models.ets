@@ -162,6 +162,16 @@ export interface ProviderAccount {
   refreshToken: string;
 }
 
+/** 用量历史的单日聚合记录（当日最后一条成功样本；移动端为刷新采样估算） */
+export interface HistoryDay {
+  /** 本地日期键 YYYY-MM-DD */
+  d: string;
+  /** 当日最后的主窗口用量 %（无主窗口取第一个可用窗口） */
+  p: number;
+  /** 当日最后的余额（providerCost.remaining），-1 表示不可得 */
+  b: number;
+}
+
 /** ReminderConfig 默认值（配置缺省/解析失败时） */
 export function defaultReminder(): ReminderConfig {
   return { enabled: false, usageThreshold: 90, resetLeadMinutes: 15 };

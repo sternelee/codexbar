@@ -6,7 +6,7 @@
 
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
-import { defaultReminder, ProviderAccount, ProviderSetting, ReminderConfig } from '../model/Models';
+import { defaultReminder, HistoryDay, ProviderAccount, ProviderSetting, ReminderConfig } from '../model/Models';
 
 // ---------------- 账号列表纯函数（本地单元测试覆盖） ----------------
 
@@ -452,5 +452,31 @@ export class Settings {
       }
     }
     Settings.setFormIds(next);
+  }
+
+  // ---------------- 用量历史（每日采样，统计页数据源） ----------------
+
+  static history(providerId: string): HistoryDay[] {
+    const raw = Settings.getString(`hist_${providerId}`, '[]');
+    try {
+      const arr = JSON.parse(raw) as HistoryDay[];
+      if (!Array.isArray(arr)) {
+        return [];
+      }
+      const out: HistoryDay[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const r = arr[i];
+        if (r != null && typeof r.d === 'string' && typeof r.p === 'number' && typeof r.b === 'number') {
+          out.push({ d: r.d as string, p: r.p as number, b: r.b as number });
+        }
+      }
+      return out;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static setHistory(providerId: string, records: HistoryDay[]): void {
+    Settings.setString(`hist_${providerId}`, JSON.stringify(records));
   }
 }

@@ -9,6 +9,7 @@ import { UsageProvider } from '../providers/ProviderBase';
 import { Settings } from './Settings';
 import { Reminders } from './Reminders';
 import { WidgetDataStore } from './WidgetData';
+import { recordSampleFor } from './UsageHistory';
 
 export class AppStore {
   private static instance: AppStore | null = null;
@@ -125,6 +126,11 @@ export class AppStore {
       Settings.setLastSuccess(providerId, state.lastSuccessAt);
       Settings.setCache(providerId, JSON.stringify(snap));
       Reminders.checkState(state);
+      try {
+        recordSampleFor(state, state.lastSuccessAt);
+      } catch (e) {
+        // 历史采样失败不影响主流程
+      }
       this.updateWidgets();
     }
     this.bump();

@@ -103,6 +103,19 @@ struct Index {
           })
 
         Button() {
+          Text('📊')
+            .fontSize(15)
+            .fontColor(Theme.text)
+        }
+        .backgroundColor(Theme.card)
+        .height(32)
+        .width(36)
+        .borderRadius(10)
+        .onClick(() => {
+          Nav.toStats('');
+        })
+
+        Button() {
           Text('⚙')
             .fontSize(18)
             .fontColor(Theme.text)

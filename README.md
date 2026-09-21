@@ -12,6 +12,7 @@
 - **仪表盘**：服务商卡片列表，用量进度条（会话 / 每周 / 每月窗口）、重置倒计时（秒级刷新）、余额展示、下拉刷新与一键全量刷新。
 - **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新。
 - **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效。
+- **用量统计**（仪表盘 📊 进入，对标 macOS CostHistoryChartMenuView）：按服务商的每日柱形图——「用量增量（百分点）」与「消费（余额降幅估算）」双指标、近7天/近30天范围切换；峰值日黄色帽、[0, 中点, 最大] 刻度、首末日期轴；今日/近7天/近30天合计。数据为本地刷新采样估算（每日最后样本，保留 62 天），与源工程扫描 CLI 会话的精确统计存在差异。
 - **桌面卡片**（HarmonyOS 服务卡片，对标 macOS WidgetExtension）：2x2 速览卡（最紧急 2 家）与 2x4 列表卡（4 家），显示用量条 + 重置倒计时，点击进应用。应用每次刷新成功即写入摘要数据并即时推送已添加的卡片，另有 30 分钟定时更新兜底。
 - **多账号**（全部服务商）：设置卡片「账号」条——点 chip 切换激活账号（立即刷新）、「＋」添加、长按弹出重命名/删除菜单（内联输入行改名，删除带确认框）；详情页显示当前激活账号名。Claude/Codex 的 ＋ 走网页登录新建账号；其他服务商 ＋ 直接建空账号，填凭证保存即生效。同凭证自动去重（重复登录只切换不重复建），删除激活账号时自动转移到第一个剩余账号；凭证解析顺序为激活账号 → 旧单凭证键（完全向后兼容）。
 - **网页登录**（Claude / Codex）：设置页点「网页登录」在应用内 Web 组件直接完成登录——Claude 登录 claude.ai 后自动捕获 `sessionKey` Cookie（`fetchCookie` 轮询）；Codex 走完整 PKCE 授权码流程（client_id/端点与 Codex CLI 一致，回调 `localhost:1455` 由 Web 组件拦截换取令牌，access token 自动解析 `chatgpt_account_id`），支持 refresh token 静默续期（401/403 自动换新重试）。
@@ -94,7 +95,9 @@ entry/src/main/ets/
 │   ├── Nav.ets               ← 路由与 Toast
 │   ├── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求）
 │   └── OAuth.ets             ← 纯 TS SHA-256/PKCE/JWT 解码 + Codex 授权码换令牌/刷新
-│   （store/WidgetData.ets ← 卡片摘要数据；form/FormPush.ets ← 鸿蒙专属推送，动态加载）
+│   （store/UsageHistory.ets ← 用量历史采样与统计派生；store/WidgetData.ets ← 卡片摘要数据；
+│     form/FormPush.ets ← 鸿蒙专属推送，动态加载）
+├── pages/StatsPage.ets      ← 用量统计（柱形图 + 周/月合计）
 ├── net/
 │   ├── Http.ets              ← ProviderHTTPTransport（@ohos.net.http 封装，ArkUI-X 三端映射）
 │   └── Json.ets              ← JSONSerialization 解析辅助（ArkTS 严格模式）
@@ -188,5 +191,4 @@ xcrun simctl launch <udid> com.example.codexbar
 ## 后续计划
 
 - 更多服务商（MiniMax、智谱 GLM、火山方舟/豆包、Groq、xAI 等）
-- 用量历史曲线
 - 多账号切换（对应 macOS 版 Managed Accounts）

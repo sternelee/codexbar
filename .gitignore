@@ -24,3 +24,5 @@
 /.cache
 /.pi
 .arkui-x/android/local.properties
+
+.arkui-x/android/.hvigor

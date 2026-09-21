@@ -56,6 +56,13 @@ export class Nav {
     router.pushUrl({ url: 'pages/OAuthLogin', params: p });
   }
 
+  /** 统计页；providerId 可为空（进入后自选服务商） */
+  static toStats(providerId: string = ''): void {
+    const p = new DetailRouteParam();
+    p.id = providerId;
+    router.pushUrl({ url: 'pages/StatsPage', params: p });
+  }
+
   static back(): void {
     router.back();
   }

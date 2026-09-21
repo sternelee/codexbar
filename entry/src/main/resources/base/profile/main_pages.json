@@ -3,6 +3,7 @@
     "pages/Index",
     "pages/ProviderDetail",
     "pages/SettingsPage",
-    "pages/OAuthLogin"
+    "pages/OAuthLogin",
+    "pages/StatsPage"
   ]
 }

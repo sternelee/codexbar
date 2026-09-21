@@ -18,6 +18,19 @@ import {
   renameAccountInList,
 } from '../main/ets/store/Settings';
 import { buildWidgetItems } from '../main/ets/store/WidgetData';
+import { HistoryDay } from '../main/ets/model/Models';
+import { ChartPoint } from '../main/ets/store/UsageHistory';
+import {
+  costDeltas,
+  dateKeyMinus,
+  dayLabel,
+  localDateKey,
+  scaleFraction,
+  scaleMax,
+  sumLast,
+  usageDeltas,
+  yAxisTicks,
+} from '../main/ets/store/UsageHistory';
 import {
   base64UrlDecode,
   base64UrlEncode,
@@ -477,6 +490,70 @@ export default function logicUnitTest() {
       expect(rows4[0].pct).assertEqual('55%');
       expect(rows4[0].color).assertEqual('#3A3A44');
       expect(rows4[0].cd).assertEqual('');
+    });
+
+    it('UsageHistory_date_and_deltas', 0, () => {
+      // 日期键
+      expect(localDateKey(new Date(2026, 8, 21, 15, 40).getTime())).assertEqual('2026-09-21');
+      expect(dayLabel('2026-09-21')).assertEqual('9/21');
+      expect(dateKeyMinus('2026-09-21', 6)).assertEqual('2026-09-15');
+      // 跨月
+      expect(dateKeyMinus('2026-09-03', 7)).assertEqual('2026-08-27');
+
+      // 用量增量：正常差值 / 回落归零 / 跨天重置取当日值
+      const recs: HistoryDay[] = [
+        { d: '2026-09-19', p: 10, b: -1 },
+        { d: '2026-09-20', p: 45, b: -1 },
+        { d: '2026-09-21', p: 30, b: -1 },
+        { d: '2026-09-22', p: 5, b: -1 },
+        { d: '2026-09-23', p: 50, b: -1 },
+      ];
+      const u = usageDeltas(recs);
+      expect(u.length).assertEqual(4);
+      expect(u[0].v).assertEqual(35);
+      expect(u[1].v).assertEqual(0);
+      expect(u[2].v).assertEqual(0);
+      expect(u[3].v).assertEqual(45);
+      expect(u[3].label).assertEqual('9/23');
+
+      // 消费：余额降幅；充值记 0；缺余额跳过
+      const recs2: HistoryDay[] = [
+        { d: '2026-09-19', p: 10, b: 100 },
+        { d: '2026-09-20', p: 45, b: 97.5 },
+        { d: '2026-09-21', p: 30, b: 102 },
+        { d: '2026-09-22', p: 5, b: -1 },
+        { d: '2026-09-23', p: 50, b: 99.2 },
+      ];
+      const c = costDeltas(recs2);
+      expect(c.length).assertEqual(2);
+      expect(c[0].v).assertEqual(2.5);
+      expect(c[1].v).assertEqual(0);
+
+      // 合计：近 N 天（含今天）
+      const today = '2026-09-23';
+      const pts: ChartPoint[] = [
+        { d: '2026-09-15', label: '9/15', v: 5 },
+        { d: '2026-09-17', label: '9/17', v: 3 },
+        { d: '2026-09-23', label: '9/23', v: 4.5 },
+      ];
+      expect(sumLast(pts, today, 1)).assertEqual(4.5);
+      expect(sumLast(pts, today, 7)).assertEqual(7.5);
+      expect(sumLast(pts, today, 30)).assertEqual(12.5);
+    });
+
+    it('UsageHistory_scale_ticks', 0, () => {
+      expect(scaleMax([1, 5, 3])).assertEqual(5);
+      expect(scaleMax([-1, NaN])).assertEqual(0);
+      expect(scaleFraction(2.5, 5)).assertEqual(0.5);
+      expect(scaleFraction(9, 5)).assertEqual(1);
+      expect(scaleFraction(0, 0)).assertEqual(0);
+      // 费用 < $1：[0,max]；否则 [0, 中点, max]
+      expect(yAxisTicks(0.75, true).length).assertEqual(2);
+      const t = yAxisTicks(8, true);
+      expect(t.length).assertEqual(3);
+      expect(t[1]).assertEqual(4);
+      expect(yAxisTicks(1.5, false).length).assertEqual(2);
+      expect(yAxisTicks(2.5, false).length).assertEqual(3);
     });
   });
 }

@@ -25,17 +25,21 @@ class DemoProvider implements UsageProvider {
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const now = Date.now();
+    // 随时间缓慢漂移，让统计页的柱形图有真实变化
+    const driftPct = (now / 600000) % 40;
     const snap = UsageSnapshot.success(
-      makeWindow(42, now + 3 * 3600 * 1000 + 12 * 60 * 1000, true),
-      makeWindow(68, now + 4 * 86400 * 1000 + 7 * 3600 * 1000, true),
+      makeWindow(35 + driftPct, now + 3 * 3600 * 1000 + 12 * 60 * 1000, true),
+      makeWindow(55 + (driftPct / 2), now + 4 * 86400 * 1000 + 7 * 3600 * 1000, true),
       makeWindow(25, now + 21 * 86400 * 1000, true)
     );
     snap.extraRateWindows = [
-      { id: 'demo_opus', title: 'Opus 每周', window: makeWindow(81, now + 4 * 86400 * 1000, true) },
+      { id: 'demo_opus', title: 'Opus 每周', window: makeWindow(70 + (driftPct / 4), now + 4 * 86400 * 1000, true) },
     ];
+    const remaining = Math.max(0, 212.4 - (now / 1800000) % 30);
     snap.providerCost = {
-      remaining: 212.4, used: 787.6, currency: 'USD',
-      displayText: Format.money(212.4, 'USD'),
+      remaining: Math.round(remaining * 100) / 100,
+      used: 787.6, currency: 'USD',
+      displayText: Format.money(Math.round(remaining * 100) / 100, 'USD'),
     };
     snap.identity = {
       accountEmail: 'demo@codexbar.app',

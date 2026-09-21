@@ -4,7 +4,7 @@
 
 本项目是 [CodexBar](https://github.com/steipete/CodexBar)（macOS 菜单栏应用，Swift，追踪约 75 家 AI 服务商限额）向 **HarmonyOS ArkTS 移动端** 的迁移版本，并借助 **ArkUI-X**（`.arkui-x/`，`crossplatform: true`，platforms: `android` / `ios`）面向 **鸿蒙手机、Android、iOS** 三个平台。
 
-- SDK：`targetSdkVersion / compatibleSdkVersion 26.0.0`（HarmonyOS 7.0）
+- SDK：`targetSdkVersion 26.0.0`（HarmonyOS 7.0）、`compatibleSdkVersion 6.1.1(24)`（见 `build-profile.json5`）
 - 入口：`entry` 模块 · `EntryAbility` · `pages/Index`
 
 ## 功能
@@ -19,7 +19,7 @@
 - **设置页**：逐服务商开关 + 凭证录入，凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
-## 支持的服务商（v9，53 家）
+## 支持的服务商（v10，54 家）
 
 | 服务商 | 方式 | 凭证 | 展示内容 |
 |---|---|---|---|
@@ -76,12 +76,15 @@
 | OpenCode Go | 会话 Cookie | Cookie | Go 计费窗口 |
 | Groq | 会话 Cookie | stytch_session（可选组织 ID） | 近 30 天活动用量（Stytch 交换） |
 | 阿里云百炼编码计划 | API Key | 百炼/DashScope Key（intl/cn） | 5 小时/周/账单月 配额窗口 |
+| Doubao (豆包/火山方舟) | AK/SK 或 API Key | 火山方舟 AK + Secret Access Key（或单独 Ark API Key） | 编码计划 5h/周/月 + Agent 计划窗口；仅填 API Key 时按请求额度探测 |
 | 演示模式 | 无 | — | 拟真数据 |
 
 ### 其余服务商可行性分级（对照源工程 75+ 家）
 
-- **桌面专属（无法移动化）**：依赖本地 CLI 配置/钥匙串/浏览器 Cookie 存储导入器、云控制台签名 RPC 或 IAM 签名的服务：Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor（浏览器抓取）、Doubao（火山 HMAC）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud 与 Alibaba Token Plan（阿里云控制台 Cookie+sec_token 签名 RPC 网关）、Grok 消费版（需桌面 `grok login` 授权，区别于已迁移的 xAI Management API）、Pi（本地 CLI 会话读取器）、Amp/Augment/JetBrains/Zed/CodeRabbit/Factory（CLI 探测/本地会话基础设施）、Wayfinder（仅 localhost）。
-- **HTML 抓取 / 桌面专属（最终分类）**：Sakana（计费页 HTML 解析）、Replicate（HTML 抓取）、Windsurf（依赖 Devin 会话探测基础设施）、Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor、Doubao（火山 HMAC）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud（阿里云控制台签名 RPC）、Amp/Augment/JetBrains/Zed/CodeRabbit/Factory（CLI 探测/本地会话）、Wayfinder（仅 localhost）。除上述外，源工程全部服务商均已迁移。
+- **桌面专属（无法移动化）**：依赖本地 CLI 配置/钥匙串/浏览器 Cookie 存储导入器、云控制台签名 RPC 或 IAM 签名的服务：Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor（浏览器抓取）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud 与 Alibaba Token Plan（阿里云控制台 Cookie+sec_token 签名 RPC 网关）、Grok 消费版（需桌面 `grok login` 授权，区别于已迁移的 xAI Management API）、Pi（本地 CLI 会话读取器）、Amp/Augment/JetBrains/Zed/CodeRabbit（CLI 探测/本地会话基础设施）、Wayfinder（仅 localhost）。
+- **HTML 抓取 / 桌面专属（最终分类）**：Sakana（计费页 HTML 解析）、Replicate（HTML 抓取）、Windsurf（依赖 Devin 会话探测基础设施）、Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud（阿里云控制台签名 RPC）、Amp/Augment/JetBrains/Zed/CodeRabbit（CLI 探测/本地会话）、Wayfinder（仅 localhost）。除上述外，源工程全部服务商均已迁移。
+
+> Doubao（豆包/火山方舟）原分类为「桌面专属（火山 HMAC）」——实际火山引擎 Top OpenAPI 仅需 HMAC-SHA256 签名（纯 TS 可实现，见 `common/VolcSign.ets`），故已迁移为 AK/SK 签名模式。（桌面版另有 `arkcli` 本地 CLI 模式，移动端不适用。）
 
 端点与解析逻辑逐一对照 Swift 源码迁移（见下表），凭证登录态刷新流程与 macOS 版一致。
 
@@ -95,16 +98,16 @@ entry/src/main/ets/
 │   ├── Format.ets            ← 倒计时/百分比/金额格式化
 │   ├── Nav.ets               ← 路由与 Toast
 │   ├── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求）
-│   └── OAuth.ets             ← 纯 TS SHA-256/PKCE/JWT 解码 + Codex 授权码换令牌/刷新
-│   （store/UsageHistory.ets ← 用量历史采样与统计派生；store/WidgetData.ets ← 卡片摘要数据；
-│     form/FormPush.ets ← 鸿蒙专属推送，动态加载）
-├── pages/StatsPage.ets      ← 用量统计（柱形图 + 周/月合计）
+│   ├── OAuth.ets             ← 纯 TS SHA-256/PKCE/JWT 解码 + Codex 授权码换令牌/刷新
+│   └── VolcSign.ets          ← 纯 TS HMAC-SHA256 + 火山引擎 V4 请求签名（Doubao）
 ├── net/
 │   ├── Http.ets              ← ProviderHTTPTransport（@ohos.net.http 封装，ArkUI-X 三端映射）
 │   └── Json.ets              ← JSONSerialization 解析辅助（ArkTS 严格模式）
 ├── store/
 │   ├── Settings.ets          ← resolved config（~/.config/codexbar/config.json）→ Preferences
 │   ├── Reminders.ets         ← 额度提醒引擎（阈值/提前量判定 + 30s 周期检查 + 周期去重）
+│   ├── UsageHistory.ets      ← 用量历史采样与统计派生（统计页数据源）
+│   ├── WidgetData.ets        ← 桌面卡片摘要数据
 │   └── AppStore.ets          ← 用量状态中心 + 并发刷新编排
 ├── providers/
 │   ├── ProviderBase.ets      ← UsageFetcher 协议 → UsageProvider 接口
@@ -117,15 +120,19 @@ entry/src/main/ets/
 │   ├── MoreProviders3.ets    ← Providers/{XAI,Qoder,Venice,Nous,Muse,Deepgram,ClinePass,Crof,Synthetic,ClawRouter,LiteLLM,LLMProxy}（含 QuickJS 插件移植）
 │   ├── MoreProviders4.ets    ← Providers/{ElevenLabs,Fireworks,NeuralWatt,IBMBob,Ai&,Codebuff,Sub2API,Devin,Abacus,CommandCode,LongCat,ZoomMate,Notion}
 │   ├── MoreProviders5.ets    ← Providers/{HuggingFace,Warp,OpenCode,OpenCodeGo,Groq}
-│   ├── MoreProviders6.ets    ← Providers/Alibaba/{AlibabaCodingPlan 百炼编码计划}
+│   ├── MoreProviders6.ets    ← Providers/{Alibaba/AlibabaCodingPlan 百炼编码计划, Factory}
+│   ├── DoubaoProvider.ets    ← Providers/Doubao/{DoubaoUsageFetcher,DoubaoVolcengineSigner}
 │   └── DemoProvider.ets      ← 演示数据
-├── view/UsageBar.ets         ← 用量条 + 窗口块组件
-├── view/ProviderIcon.ets     ← 服务商品牌图标（lobe-icons 彩色 SVG + 白色圆角衬底）
+├── view/
+│   ├── UsageBar.ets          ← 用量条 + 窗口块组件
+│   └── ProviderIcon.ets      ← 服务商品牌图标（lobe-icons 彩色 SVG + 白色圆角衬底）
 ├── pages/
 │   ├── Index.ets             ← 菜单弹层 → 移动仪表盘
 │   ├── ProviderDetail.ets    ← 服务商详情
 │   ├── SettingsPage.ets      ← Settings → Providers 设置
+│   ├── StatsPage.ets         ← 用量统计（柱形图 + 周/月合计）
 │   └── OAuthLogin.ets        ← 应用内网页登录（Web 组件 + 回调拦截 + Cookie 轮询）
+├── form/FormPush.ets         ← 鸿蒙专属卡片推送（动态加载）
 ├── entryformability/EntryFormAbility.ets ← 服务卡片 FormExtensionAbility（添加/定时更新/移除）
 ├── widget/pages/            ← 卡片页：WidgetCard(2x2)、WidgetListCard(2x4)
 └── entryability/EntryAbility.ets
@@ -148,8 +155,11 @@ devecocli signature generate --product default
 devecocli run
 
 # 补充：本地宿主单元测试（纯逻辑层，无需设备）
+# hvigorw 随 DevEco Studio 分发；不在 PATH 上时用绝对路径（并确保 DEVECO_SDK_HOME 指向 SDK）：
+#   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
+#   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 8, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 31, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -177,13 +187,13 @@ xcrun simctl launch <udid> com.example.codexbar
 
 | 平台 | 产物 | 验证 |
 |---|---|---|
-| HarmonyOS 7.0 (API 26) | `entry-default-unsigned.hap` | hvigor BUILD SUCCESSFUL + 本地单元测试 8/8 |
+| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | hvigor BUILD SUCCESSFUL + 本地单元测试 31/31 |
 | Android（arm64-v8a / armeabi-v7a） | `app-release.apk` | 真机（MEY-AN00）安装、启动、设置页/卡片/开关/输入框/保存交互正常 |
 | iOS（Simulator arm64） | `app.app` | iPhone 16 模拟器启动，仪表盘 8 家服务商卡片渲染正常（`screenshots/ios-dashboard.png`）|
 
 ## 图标
 
-服务商品牌图标来自 [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）的彩色/品牌 SVG，存放于 `entry/src/main/resources/rawfile/icons/`，经规范化（尺寸 1em→24、currentColor→纯黑）后由 `Image($rawfile(...))` 加载，渲染在白色圆角衬底上以保证深色主题下单色品牌标的可见性。无品牌图的服务商（Chutes、T3Chat、Deepgram、Crof、Synthetic、LiteLLM、演示模式）回退为强调色圆点。
+服务商品牌图标来自 [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）的彩色/品牌 SVG，存放于 `entry/src/main/resources/rawfile/icons/`，经规范化（尺寸 1em→24、currentColor→纯黑）后由 `Image($rawfile(...))` 加载，渲染在白色圆角衬底上以保证深色主题下单色品牌标的可见性。未收录品牌图的服务商（Abacus、Ai&、阿里云百炼、Chutes、Codebuff、Command Code、Crof、Deepgram、Factory AI、LiteLLM、LongCat、NeuralWatt、Sub2API、Synthetic、T3 Chat、Warp、ZoomMate、演示模式）回退为强调色圆点。
 
 ## 隐私
 
@@ -191,5 +201,11 @@ xcrun simctl launch <udid> com.example.codexbar
 
 ## 后续计划
 
-- 更多服务商（MiniMax、智谱 GLM、火山方舟/豆包、Groq、xAI 等）
-- 多账号切换（对应 macOS 版 Managed Accounts）
+上一轮计划已全部完成：更多服务商（MiniMax、智谱 GLM、火山方舟/豆包、Groq、xAI 等）、多账号切换（对应 macOS 版 Managed Accounts）。
+
+剩余源工程服务商均属桌面专属或 HTML 抓取型（见上方可行性分级）。若要继续扩展，按「可纯 HTTP 复刻」优先级排序：
+
+- **Azure OpenAI**：`api-key` 头 + 用户自定义端点/api-version（最易，无需签名）。
+- **Gemini（消费级）**：需 OAuth 令牌导入或设备码流程，且额度仅存在于私有接口，稳定性待验证。
+- **Copilot**：设备码授权 + 预算页抓取，授权流程可移，数据源依赖网页结构。
+- **Sakana / Replicate**：HTML/计费页解析，页面改版即失效，不建议移动端维护。

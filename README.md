@@ -11,6 +11,7 @@
 
 - **仪表盘**：服务商卡片列表，用量进度条（会话 / 每周 / 每月窗口）、重置倒计时（秒级刷新）、余额展示、下拉刷新与一键全量刷新。
 - **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新。
+- **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效。
 - **设置页**：逐服务商开关 + 凭证录入，凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
@@ -87,12 +88,14 @@ entry/src/main/ets/
 ├── common/
 │   ├── Theme.ets             ← 菜单栏弹层深色风格（docs/codexbar.png）
 │   ├── Format.ets            ← 倒计时/百分比/金额格式化
-│   └── Nav.ets               ← 路由与 Toast
+│   ├── Nav.ets               ← 路由与 Toast
+│   └── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求）
 ├── net/
 │   ├── Http.ets              ← ProviderHTTPTransport（@ohos.net.http 封装，ArkUI-X 三端映射）
 │   └── Json.ets              ← JSONSerialization 解析辅助（ArkTS 严格模式）
 ├── store/
 │   ├── Settings.ets          ← resolved config（~/.config/codexbar/config.json）→ Preferences
+│   ├── Reminders.ets         ← 额度提醒引擎（阈值/提前量判定 + 30s 周期检查 + 周期去重）
 │   └── AppStore.ets          ← 用量状态中心 + 并发刷新编排
 ├── providers/
 │   ├── ProviderBase.ets      ← UsageFetcher 协议 → UsageProvider 接口

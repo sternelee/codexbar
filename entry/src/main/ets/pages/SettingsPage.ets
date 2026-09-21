@@ -27,6 +27,9 @@ struct ProviderSettingCard {
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
   private canWebLogin: boolean = false;
+  /** 请求父页面弹确认框（卡片内不放弹窗，保证覆盖全屏与主题一致） */
+  onAsk: (title: string, message: string, confirmText: string, action: () => void) => void =
+    (_t: string, _m: string, _c: string, _a: () => void) => {};
   pid: string = '';
 
   aboutToAppear(): void {
@@ -66,23 +69,14 @@ struct ProviderSettingCard {
   }
 
   /** 删除账号（长按菜单触发，确认后执行） */
-  confirmDeleteAccount(a: ProviderAccount): void {
-    AlertDialog.show({
-      title: '删除账号',
-      message: `确定删除「${a.name}」？`,
-      primaryButton: { value: '取消', action: () => {} },
-      secondaryButton: {
-        value: '删除',
-        fontColor: Theme.danger,
-        action: () => {
-          Settings.removeAccount(this.pid, a.aid);
-          AppStore.get().reloadSetting(this.pid);
-          AppStore.get().refreshOne(this.pid);
-          this.reloadFromStore();
-          this.accRev += 1;
-          Nav.toast('已删除');
-        }
-      },
+  confirmDeleteAccount(a: ProviderAccount, pid: string): void {
+    this.onAsk('删除账号', `确定删除「${a.name}」？`, '删除', () => {
+      Settings.removeAccount(pid, a.aid);
+      AppStore.get().reloadSetting(pid);
+      AppStore.get().refreshOne(pid);
+      this.reloadFromStore();
+      this.accRev += 1;
+      Nav.toast('已删除');
     });
   }
 
@@ -100,7 +94,7 @@ struct ProviderSettingCard {
         this.renameText = a.name;
         this.accRev += 1;
       } else if (res.index === 1) {
-        this.confirmDeleteAccount(a);
+        this.confirmDeleteAccount(a, this.pid);
       }
     }).catch(() => {});
   }
@@ -318,21 +312,55 @@ struct SettingsPage {
     this.ver = AppStore.get().version;
   }
 
+  /** 搜索关键字（按名称/ID 过滤） */
+  @State keyword: string = '';
+  /** 自绘确认弹窗状态 */
+  @State askVisible: boolean = false;
+  @State askTitle: string = '';
+  @State askMessage: string = '';
+  @State askConfirmText: string = '确认';
+  private askAction: (() => void) | null = null;
+
   /** 从 OAuthLogin 等页面返回时刷新账号条 */
   onPageShow(): void {
     this.ver += 1;
   }
 
-  ids(v: number): string[] {
+  askConfirm(title: string, message: string, confirmText: string, action: () => void): void {
+    this.askTitle = title;
+    this.askMessage = message;
+    this.askConfirmText = confirmText;
+    this.askAction = action;
+    this.askVisible = true;
+  }
+
+  onAskClose(confirmed: boolean): void {
+    const action = this.askAction;
+    this.askVisible = false;
+    this.askAction = null;
+    if (confirmed && action != null) {
+      action();
+    }
+  }
+
+  /** 服务商列表；有关键字时按名称/ID 过滤 */
+  ids(v: number, kw: string): string[] {
     const list: string[] = [];
+    const key = kw.trim().toLowerCase();
     const states = AppStore.get().states;
     for (let i = 0; i < states.length; i++) {
+      if (key.length > 0 &&
+        states[i].descriptor.title.toLowerCase().indexOf(key) < 0 &&
+        states[i].descriptor.id.toLowerCase().indexOf(key) < 0) {
+        continue;
+      }
       list.push(states[i].descriptor.id);
     }
     return list;
   }
 
   build() {
+    Stack() {
     Column() {
       Row({ space: 10 }) {
         Button() {
@@ -359,6 +387,21 @@ struct SettingsPage {
 
       List({ space: 12 }) {
         ListItem() {
+          TextInput({ placeholder: '🔍 搜索服务商', text: this.keyword })
+            .fontSize(13)
+            .fontColor(Theme.text)
+            .placeholderColor(Theme.textDim)
+            .placeholderFont({ size: 13 })
+            .backgroundColor(Theme.input)
+            .borderRadius(10)
+            .height(38)
+            .width('100%')
+            .onChange((v: string) => {
+              this.keyword = v;
+            })
+        }
+
+        ListItem() {
           Column({ space: 4 }) {
             Text('凭证仅保存在本机应用数据中，刷新时直连服务商接口。')
               .fontSize(12)
@@ -368,9 +411,31 @@ struct SettingsPage {
           .padding(12)
         }
 
-        ForEach(this.ids(this.ver), (id: string) => {
+        if (this.ids(this.ver, this.keyword).length === 0) {
           ListItem() {
-            ProviderSettingCard({ pid: id, rev: this.ver })
+            Column({ space: 6 }) {
+              Text('未找到匹配的服务商')
+                .fontSize(14)
+                .fontColor(Theme.text)
+              Text('试试其他关键词，如 "Claude" 或 "deepseek"')
+                .fontSize(11)
+                .fontColor(Theme.textDim)
+            }
+            .width('100%')
+            .padding(24)
+            .alignItems(HorizontalAlign.Center)
+          }
+        }
+
+        ForEach(this.ids(this.ver, this.keyword), (id: string) => {
+          ListItem() {
+            ProviderSettingCard({
+              pid: id,
+              rev: this.ver,
+              onAsk: (t: string, m: string, c: string, a: () => void) => {
+                this.askConfirm(t, m, c, a);
+              }
+            })
           }
         }, (id: string) => id)
       }
@@ -378,6 +443,55 @@ struct SettingsPage {
       .width('100%')
       .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
       .scrollBar(BarState.Off)
+      }
+
+      // 自绘确认弹窗（暗色模式可读，不依赖系统主题）
+      if (this.askVisible) {
+        Column() {
+          Column({ space: 14 }) {
+            Text(this.askTitle)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Theme.text)
+            Text(this.askMessage)
+              .fontSize(13)
+              .fontColor(Theme.textDim)
+              .width('100%')
+            Row({ space: 10 }) {
+              Button('取消')
+                .fontSize(14)
+                .fontColor(Theme.textDim)
+                .backgroundColor(Theme.input)
+                .layoutWeight(1)
+                .height(38)
+                .onClick(() => {
+                  this.onAskClose(false);
+                })
+              Button(this.askConfirmText)
+                .fontSize(14)
+                .fontColor(Theme.bg)
+                .backgroundColor(Theme.danger)
+                .layoutWeight(1)
+                .height(38)
+                .onClick(() => {
+                  this.onAskClose(true);
+                })
+            }
+            .width('100%')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .padding(20)
+          .borderRadius(Theme.radius)
+          .backgroundColor(Theme.card)
+          .border({ width: 1, color: Theme.stroke })
+          .width('86%')
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.55)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
     }
     .width('100%')
     .height('100%')

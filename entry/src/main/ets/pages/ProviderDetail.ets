@@ -78,6 +78,12 @@ struct ProviderDetail {
   @State editingCred: boolean = false;
   @State credInput: string = '';
   @State cred2Input: string = '';
+  /** 自绘确认弹窗（替代系统 AlertDialog，暗色模式下可读） */
+  @State askVisible: boolean = false;
+  @State askTitle: string = '';
+  @State askMessage: string = '';
+  @State askConfirmText: string = '确认';
+  private askAction: (() => void) | null = null;
 
   /** 是否需要第二凭证（与设置页一致） */
   needSecond(pid: string): boolean {
@@ -134,6 +140,32 @@ struct ProviderDetail {
     Nav.toast('已保存，正在查询');
   }
 
+  /** 弹出自绘确认框 */
+  askConfirm(title: string, message: string, confirmText: string, action: () => void): void {
+    this.askTitle = title;
+    this.askMessage = message;
+    this.askConfirmText = confirmText;
+    this.askAction = action;
+    this.askVisible = true;
+  }
+
+  onAskClose(confirmed: boolean): void {
+    const action = this.askAction;
+    this.askVisible = false;
+    this.askAction = null;
+    if (confirmed && action != null) {
+      action();
+    }
+  }
+
+  /** 清除凭证（确认后执行：停用并清空，详情页回到未配置态） */
+  confirmClearCredential(s: ProviderState): void {
+    this.askConfirm('清除凭证', `确定清除「${s.descriptor.title}」的凭证？清除后需要重新配置才能查询。`, '清除', () => {
+      AppStore.get().clearCredential(this.providerId);
+      Nav.toast('凭证已清除');
+    });
+  }
+
   /** 激活账号显示名（无账号或未命中返回空串） */
   activeAccountName(): string {
     const accounts = Settings.accounts(this.providerId);
@@ -164,6 +196,7 @@ struct ProviderDetail {
   }
 
   build() {
+    Stack() {
     Column() {
       // 顶栏
       Row({ space: 10 }) {
@@ -238,6 +271,55 @@ struct ProviderDetail {
       .width('100%')
       .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
       .scrollBar(BarState.Off)
+      }
+
+      // 自绘确认弹窗（暗色模式可读，不依赖系统主题）
+      if (this.askVisible) {
+        Column() {
+          Column({ space: 14 }) {
+            Text(this.askTitle)
+              .fontSize(16)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(Theme.text)
+            Text(this.askMessage)
+              .fontSize(13)
+              .fontColor(Theme.textDim)
+              .width('100%')
+            Row({ space: 10 }) {
+              Button('取消')
+                .fontSize(14)
+                .fontColor(Theme.textDim)
+                .backgroundColor(Theme.input)
+                .layoutWeight(1)
+                .height(38)
+                .onClick(() => {
+                  this.onAskClose(false);
+                })
+              Button(this.askConfirmText)
+                .fontSize(14)
+                .fontColor(Theme.bg)
+                .backgroundColor(Theme.danger)
+                .layoutWeight(1)
+                .height(38)
+                .onClick(() => {
+                  this.onAskClose(true);
+                })
+            }
+            .width('100%')
+          }
+          .alignItems(HorizontalAlign.Start)
+          .padding(20)
+          .borderRadius(Theme.radius)
+          .backgroundColor(Theme.card)
+          .border({ width: 1, color: Theme.stroke })
+          .width('86%')
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(0,0,0,0.55)')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+      }
     }
     .width('100%')
     .height('100%')
@@ -275,6 +357,19 @@ struct ProviderDetail {
           Text(`当前账号：${this.activeAccountName()}`)
             .fontSize(12)
             .fontColor(Theme.accent)
+        }
+        // 清除凭证入口（已配置时显示）
+        if (s.setting.credential.length > 0) {
+          Row() {
+            Blank()
+            Text('清除凭证')
+              .fontSize(12)
+              .fontColor(Theme.danger)
+              .onClick(() => {
+                this.confirmClearCredential(s);
+              })
+          }
+          .width('100%')
         }
         if (s.snapshot != null && !s.snapshot.ok) {
           Row({ space: 6 }) {

@@ -93,6 +93,21 @@ export class AppStore {
     }
   }
 
+  /** 清除凭证：停用服务商并清空本地凭证/缓存，详情页回到未配置状态 */
+  clearCredential(providerId: string): void {
+    Settings.clearCredential(providerId);
+    Settings.setCache(providerId, '');
+    Settings.setLastSuccess(providerId, 0);
+    const state = this.find(providerId);
+    if (state != null) {
+      state.setting = Settings.provider(providerId);
+      state.fetchGen += 1;
+      state.snapshot = null;
+      state.lastSuccessAt = 0;
+    }
+    this.bump();
+  }
+
   /** 设置变更后重读存储（如登录页新增账号返回时） */
   reloadSetting(providerId: string): void {
     const state = this.find(providerId);
@@ -111,6 +126,8 @@ export class AppStore {
     if (provider == null) {
       return;
     }
+    state.fetchGen += 1;
+    const gen = state.fetchGen;
     state.loading = true;
     this.bump();
     let snap: UsageSnapshot;
@@ -120,6 +137,11 @@ export class AppStore {
       snap = UsageSnapshot.failure(e instanceof Error ? e.message : '查询失败');
     }
     state.loading = false;
+    // 查询期间凭证发生变更（清除/切换账号/重新保存）：丢弃过期结果
+    if (gen !== state.fetchGen) {
+      this.bump();
+      return;
+    }
     state.snapshot = snap;
     if (snap.ok) {
       state.lastSuccessAt = Date.now();

@@ -185,6 +185,8 @@ export class ProviderState {
   loading: boolean = false;
   /** 上次成功刷新时间（Unix 毫秒），0 表示从未成功 */
   lastSuccessAt: number = 0;
+  /** 查询代际：凭证变更（清除/换账号/重新保存）后 +1，进行中的过期结果按此丢弃 */
+  fetchGen: number = 0;
 
   constructor(descriptor: ProviderDescriptor, setting: ProviderSetting) {
     this.descriptor = descriptor;

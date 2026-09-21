@@ -454,6 +454,22 @@ export class Settings {
     Settings.setFormIds(next);
   }
 
+  /** 清除凭证：激活账号与旧键、refresh token、启用标记一并清空（防回退链复活旧凭证） */
+  static clearCredential(providerId: string): void {
+    const accounts = Settings.accounts(providerId);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
+    if (active != null) {
+      active.credential = '';
+      active.credential2 = '';
+      active.refreshToken = '';
+      Settings.saveAccounts(providerId, accounts);
+    }
+    Settings.setString(`${PREFIX}${providerId}`, '0');
+    Settings.setString(`${KEY_PREFIX}${providerId}_c1`, '');
+    Settings.setString(`${KEY_PREFIX}${providerId}_c2`, '');
+    Settings.setString(`rt_${providerId}`, '');
+  }
+
   // ---------------- 用量历史（每日采样，统计页数据源） ----------------
 
   static history(providerId: string): HistoryDay[] {

@@ -52,7 +52,7 @@ export struct WindowBlock {
       UsageBar({ percent: this.win.usedPercent, usageKnown: this.win.usageKnown })
 
       if (this.win.resetsAt > 0) {
-        Text(` ${Format.countdown(this.win.resetsAt - Date.now())}后重置`)
+        Text(` ${Format.resetIn(this.win.resetsAt - Date.now())}`)
           .fontSize(11)
           .fontColor(Theme.textDim)
           .margin({ top: 2 })

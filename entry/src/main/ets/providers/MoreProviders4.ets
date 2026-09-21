@@ -744,80 +744,152 @@ class AbacusProvider implements UsageProvider {
 // CommandCode
 // ---------------------------------------------------------------------------
 
+const CC_API = 'https://api.commandcode.ai';
+const CC_WEB = 'https://commandcode.ai';
+
+function ccHeaders(credential: string): Record<string, string> {
+  // 对照 macOS：浏览器 UA + Origin/Referer 为服务端必需校验头
+  const h: Record<string, string> = {
+    'accept': 'application/json, text/plain, */*',
+    'accept-language': 'en-US,en;q=0.9',
+    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+    'origin': CC_WEB,
+    'referer': `${CC_WEB}/`,
+  };
+  if (credential.indexOf('=') >= 0) {
+    h['cookie'] = credential;
+  } else {
+    // API Key 模式
+    h['authorization'] = `Bearer ${credential}`;
+  }
+  return h;
+}
+
+/** 数值兼容数字/字符串（对照 macOS double(from:)） */
+function ccNum(v: Json | null): number | null {
+  if (typeof v === 'number') {
+    return isFinite(v) ? v as number : null;
+  }
+  if (typeof v === 'string') {
+    const t = (v as string).trim();
+    if (t.length === 0) {
+      return null;
+    }
+    const p = parseFloat(t);
+    return isNaN(p) ? null : p;
+  }
+  return null;
+}
+
+/** 时间戳（秒/毫秒）或 ISO8601 → 毫秒 */
+function ccDateMs(v: Json | null): number {
+  if (typeof v === 'number') {
+    const n = v as number;
+    if (n > 1e12) {
+      return n;
+    }
+    return n > 1e9 ? n * 1000 : 0;
+  }
+  if (typeof v === 'string' && (v as string).length > 0) {
+    const p = Date.parse(v as string);
+    return isNaN(p) ? 0 : p;
+  }
+  return 0;
+}
+
+function ccWindow(limit: Record<string, Json> | null): RateWindow | null {
+  if (limit == null) {
+    return null;
+  }
+  const cap = ccNum(limit['cap']);
+  if (cap == null || cap <= 0) {
+    return null;
+  }
+  const used = ccNum(limit['used']) ?? 0;
+  return makeWindow(Math.max(0, Math.min(100, (used / cap) * 100)), ccDateMs(limit['resetAt']), true);
+}
+
 class CommandCodeProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'commandcode',
     title: 'Command Code',
     authKind: AuthKind.SESSION,
     accentColor: '#EA580C',
-    authHint: '粘贴 commandcode.ai 的会话 Cookie',
+    authHint: '粘贴 commandcode.ai 的会话 Cookie，或 API Key',
     authUrl: 'https://commandcode.ai/settings/billing',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
-    const cookie = setting.credential.trim();
-    if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+    const credential = setting.credential.trim();
+    if (credential.length === 0) {
+      return UsageSnapshot.failure('未配置会话 Cookie 或 API Key');
     }
-    const headers: Record<string, string> = {
-      'cookie': cookie,
-      'accept': 'application/json, text/plain, */*',
-    };
-    const creditsResp = await Http.get('https://api.commandcode.ai/internal/billing/credits', headers);
+    const headers = ccHeaders(credential);
+
+    // credits（必需；结构对照 macOS parseCredits）
+    const creditsResp = await Http.get(`${CC_API}/internal/billing/credits`, headers);
     if (!creditsResp.ok) {
       return UsageSnapshot.failure(creditsResp.errorText());
     }
     const cRoot = asObj(creditsResp.json());
-    if (cRoot == null || !bool(cRoot, 'success')) {
+    if (cRoot == null) {
       return UsageSnapshot.failure('响应解析失败');
     }
-    const cData = asObj(cRoot['data']);
-    let purchased = 0;
-    let monthly = 0;
-    if (cData != null) {
-      purchased = num(cData, 'purchasedCredits', 0);
-      monthly = num(cData, 'monthlyCredits', 0);
+    const credits = asObj(cRoot['credits']);
+    if (credits == null) {
+      return UsageSnapshot.failure('响应缺少 credits 字段');
     }
-    const snap = UsageSnapshot.success(null, null, null);
-    const balance = purchased + monthly;
+    const monthly = ccNum(credits['monthlyCredits']);
+    if (monthly == null) {
+      return UsageSnapshot.failure('响应缺少 monthlyCredits');
+    }
+    const purchased = ccNum(credits['purchasedCredits']) ?? 0;
+    const premium = ccNum(credits['premiumMonthlyCredits']) ?? 0;
+    const opensource = ccNum(credits['opensourceMonthlyCredits']) ?? 0;
+    const wl = asObj(cRoot['windowLimits']) ?? asObj(credits['windowLimits']);
+
+    const snap = UsageSnapshot.success(
+      ccWindow(wl != null ? asObj(wl['fiveHour']) : null),
+      ccWindow(wl != null ? asObj(wl['weekly']) : null),
+      null
+    );
+    const balance = monthly + purchased;
     snap.providerCost = {
       remaining: balance, used: 0, currency: 'CREDITS',
-      displayText: `${balance} credits`,
+      displayText: `${Math.round(balance * 100) / 100} credits`,
     };
+
+    // subscriptions（增强信息，失败不阻断）
     const rows: ProviderDetailRow[] = [
       { label: '月度额度', value: `${monthly}` },
       { label: '已购额度', value: `${purchased}` },
+      { label: '高级月度', value: `${premium}` },
+      { label: '开源月度', value: `${opensource}` },
     ];
-    const subResp = await Http.get('https://api.commandcode.ai/internal/billing/subscriptions', headers);
+    const subResp = await Http.get(`${CC_API}/internal/billing/subscriptions`, headers);
     if (subResp.ok) {
       const sRoot = asObj(subResp.json());
-      const sData = sRoot != null ? asObj(sRoot['data']) : null;
-      const sub = sData != null ? (asArray(sData['subscriptions']) != null
-        ? asObj((asArray(sData['subscriptions']) as Json[])[0])
-        : sData) : null;
-      if (sub != null) {
-        const fiveHour = asObj(sub['fiveHour']);
-        if (fiveHour != null) {
-          const used = optNum(fiveHour, 'used');
-          const cap = optNum(fiveHour, 'cap');
-          const reset = optNum(fiveHour, 'resetAt');
-          if (used != null && cap != null && cap > 0) {
-            const resetMs = reset != null && reset > 1e9 ? (reset > 1e12 ? reset : reset * 1000) : 0;
-            snap.primary = makeWindow(Math.min(100, (used / cap) * 100), resetMs, true);
+      if (sRoot != null && sRoot['success'] === true) {
+        const sData = asObj(sRoot['data']);
+        if (sData != null) {
+          const planId = optStr(sData, 'planId');
+          if (planId != null && planId.length > 0) {
+            rows.push({ label: '计划', value: planId });
           }
-        }
-        const status = optStr(sub, 'status');
-        const planId = optStr(sub, 'planId');
-        if (status != null) {
-          rows.push({ label: '状态', value: status });
-        }
-        if (planId != null) {
-          rows.push({ label: '计划', value: planId });
+          const status = optStr(sData, 'status');
+          if (status != null) {
+            rows.push({ label: '状态', value: status });
+          }
+          const period = ccDateMs(sData['currentPeriodEnd']);
+          if (period > 0) {
+            rows.push({ label: '账期截止', value: Format.dateTime(period) });
+          }
+        } else {
+          rows.push({ label: '状态', value: '免费版' });
         }
       }
     }
-    const section: ProviderDetailSection = { title: '订阅', rows: rows };
-    snap.details = [section];
+    snap.details = [{ title: '订阅', rows: rows }];
     return snap;
   }
 }

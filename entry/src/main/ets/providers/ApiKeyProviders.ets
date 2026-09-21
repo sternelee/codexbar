@@ -11,7 +11,7 @@
  */
 
 import { Http } from '../net/Http';
-import { asArray, asObj, num, optStr, str } from '../net/Json';
+import { asArray, asObj, Json, num, optNum, optStr, str } from '../net/Json';
 import {
   AuthKind,
   makeWindow,
@@ -143,47 +143,84 @@ class DeepSeekProvider implements UsageProvider {
 // Kimi / Moonshot
 // ---------------------------------------------------------------------------
 
+/** Moonshot 区域端点选项 */
+interface MoonshotRegionOption {
+  base: string;
+  currency: string;
+  label: string;
+}
+
 class MoonshotProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'moonshot',
     title: 'Kimi (Moonshot)',
     authKind: AuthKind.API_KEY,
     accentColor: '#17C0AA',
-    authHint: '粘贴 Moonshot 开放平台 API Key（sk-… 开头）',
+    authHint: '粘贴 Moonshot 开放平台 API Key（中国区/国际区自动识别）',
     authUrl: 'https://platform.moonshot.cn/console/api-keys',
   };
+
+  /** 余额字段兼容数字与字符串两种形态 */
+  private static balanceNum(data: Record<string, Json>, key: string): number {
+    const n = optNum(data, key);
+    if (n != null) {
+      return n;
+    }
+    const s = optStr(data, key);
+    if (s != null && s.length > 0) {
+      const parsed = parseFloat(s);
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  }
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
       return UsageSnapshot.failure('未配置 API Key');
     }
-    const resp = await Http.get('https://api.moonshot.cn/v1/users/me/balance', bearer(key));
-    if (!resp.ok) {
-      return UsageSnapshot.failure(resp.errorText());
+    // 双区域回退（对照 macOS MoonshotRegion）：key 属于哪个平台就哪个端点成功
+    const regions: MoonshotRegionOption[] = [
+      { base: 'https://api.moonshot.cn', currency: 'CNY', label: '中国区' },
+      { base: 'https://api.moonshot.ai', currency: 'USD', label: '国际区' },
+    ];
+    let lastFail = '查询失败';
+    for (let i = 0; i < regions.length; i++) {
+      const resp = await Http.get(`${regions[i].base}/v1/users/me/balance`, bearer(key));
+      if (!resp.ok) {
+        lastFail = resp.errorText();
+        continue;
+      }
+      const root = asObj(resp.json());
+      const data = root != null ? asObj(root['data']) : null;
+      const code = root != null ? optNum(root, 'code') : null;
+      const ok = root != null && root['status'] === true && (code == null || code === 0);
+      if (data == null || !ok) {
+        lastFail = `Moonshot ${regions[i].label} 响应异常`;
+        continue;
+      }
+      const currency = regions[i].currency;
+      const available = MoonshotProvider.balanceNum(data, 'available_balance');
+      const voucher = MoonshotProvider.balanceNum(data, 'voucher_balance');
+      const cash = MoonshotProvider.balanceNum(data, 'cash_balance');
+      const snap = UsageSnapshot.success(null, null, null);
+      snap.providerCost = {
+        remaining: available, used: 0, currency: currency,
+        displayText: Format.money(available, currency),
+      };
+      snap.details = [{
+        title: '余额构成',
+        rows: [
+          { label: '可用余额', value: Format.money(available, currency) },
+          { label: '代金券', value: Format.money(voucher, currency) },
+          { label: '现金余额', value: Format.money(cash, currency) },
+        ],
+      }];
+      return snap;
     }
-    const root = asObj(resp.json());
-    const data = root != null ? asObj(root['data']) : null;
-    if (data == null) {
-      return UsageSnapshot.failure('响应解析失败');
-    }
-    const available = parseMoney(optStr(data, 'available_balance'), 'CNY');
-    const voucher = parseMoney(optStr(data, 'voucher_balance'), 'CNY');
-    const cash = parseMoney(optStr(data, 'cash_balance'), 'CNY');
-    const snap = UsageSnapshot.success(null, null, null);
-    snap.providerCost = {
-      remaining: available, used: 0, currency: 'CNY',
-      displayText: Format.money(available, 'CNY'),
-    };
-    snap.details = [{
-      title: '余额构成',
-      rows: [
-        { label: '可用余额', value: Format.money(available, 'CNY') },
-        { label: '代金券', value: Format.money(voucher, 'CNY') },
-        { label: '现金余额', value: Format.money(cash, 'CNY') },
-      ],
-    }];
-    return snap;
+    return UsageSnapshot.failure(lastFail);
   }
 }
 

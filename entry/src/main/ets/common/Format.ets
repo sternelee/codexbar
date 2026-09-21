@@ -44,6 +44,18 @@ export class Format {
     return `${seconds}秒`;
   }
 
+  /** 重置时间统一文案：已重置 / X后重置 / 重置于 日期（超 99 天封顶） */
+  static resetIn(msUntil: number): string {
+    if (msUntil <= 0) {
+      return '已重置';
+    }
+    const cd = Format.countdown(msUntil);
+    if (cd === '已重置' || cd.startsWith('重置于')) {
+      return cd;
+    }
+    return `${cd}后重置`;
+  }
+
   /** Unix 毫秒 → "HH:mm" */
   static clock(ms: number): string {
     const d = new Date(ms);

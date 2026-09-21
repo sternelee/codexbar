@@ -62,7 +62,7 @@ import {
   createSub2ApiProvider,
   createZoomMateProvider
 } from './MoreProviders4';
-import { createAlibabaCodingPlanProvider } from './MoreProviders6';
+import { createAlibabaCodingPlanProvider, createFactoryProvider } from './MoreProviders6';
 import {
   createGroqProvider,
   createHuggingFaceProvider,
@@ -130,6 +130,7 @@ export class ProviderRegistry {
         createOpenCodeGoProvider(),
         createGroqProvider(),
         createAlibabaCodingPlanProvider(),
+        createFactoryProvider(),
         createDemoProvider(),
       ];
     }

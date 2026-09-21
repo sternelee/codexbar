@@ -85,6 +85,11 @@ export default function logicUnitTest() {
       expect(capped.indexOf('重置于') >= 0).assertTrue();
       // 99 天内：保持相对时长
       expect(Format.countdown(30 * 86400 * 1000)).assertEqual('30天');
+      // resetIn 统一文案：封顶时不叠"后重置"
+      expect(Format.resetIn(30 * 86400 * 1000)).assertEqual('30天后重置');
+      expect(Format.resetIn(45 * 60 * 1000)).assertEqual('45分钟后重置');
+      expect(Format.resetIn(-1)).assertEqual('已重置');
+      expect(Format.resetIn(20713302 * 86400 * 1000).indexOf('后重置') < 0).assertTrue();
     });
 
     it('Format_ago_compact', 0, () => {

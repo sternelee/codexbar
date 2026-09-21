@@ -244,6 +244,57 @@ function getPercent3(o: Record<string, Json>): number | null {
   return v <= 1 ? v * 100 : v;
 }
 
+/** 用量窗口：百分比键 + 绝对/相对重置键（对照 macOS percentKeys/resetKeys） */
+function ocWindowFrom(value: Json, now: number): RateWindow | null {
+  const o = asObj(value);
+  if (o == null) {
+    return null;
+  }
+  const pctKeys = ['usagePercent', 'usedPercent', 'percentUsed', 'percent', 'usage_percent',
+    'used_percent', 'utilization', 'utilizationPercent', 'usage'];
+  let percent: number | null = null;
+  for (let i = 0; i < pctKeys.length && percent == null; i++) {
+    const v = optNum(o, pctKeys[i]);
+    if (v != null) {
+      percent = v <= 1 ? v * 100 : v;
+    }
+  }
+  const cap = optNum(o, 'cap') ?? optNum(o, 'limit');
+  const used = optNum(o, 'used') ?? optNum(o, 'consumed');
+  if (percent == null && used != null && cap != null && cap > 0) {
+    percent = (used / cap) * 100;
+  }
+  if (percent == null) {
+    return null;
+  }
+  // 重置：优先绝对时间，其次相对秒数
+  const atKeys = ['resetAt', 'resetsAt', 'reset_at', 'resets_at', 'nextReset', 'next_reset'];
+  const inKeys = ['resetInSec', 'resetInSeconds', 'resetSeconds', 'reset_sec', 'reset_in_sec',
+    'resetsInSec', 'resetsInSeconds', 'resetIn', 'resetSec'];
+  let reset = 0;
+  for (let i = 0; i < atKeys.length && reset === 0; i++) {
+    const iso = optStr(o, atKeys[i]);
+    if (iso != null) {
+      const ms = isoToMs5(iso);
+      if (ms > 0) {
+        reset = ms;
+      }
+    }
+  }
+  for (let i = 0; i < inKeys.length && reset === 0; i++) {
+    const sec = optNum(o, inKeys[i]);
+    if (sec != null && sec > 0) {
+      reset = now + sec * 1000;
+    }
+  }
+  return makeWindow(Math.max(0, Math.min(100, percent)), reset, true);
+}
+
+function isoToMs5(iso: string): number {
+  const parsed = Date.parse(iso);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 /** 从文本中提取第一个 32 位十六进制 workspace ID */
 function ocExtractWorkspaceID(text: string): string | null {
   const matches = text.match(/[0-9a-f]{32}/g);
@@ -381,9 +432,46 @@ class OpenCodeGoProvider extends OpenCodeBaseProvider {
       title: 'OpenCode Go',
       authKind: AuthKind.SESSION,
       accentColor: '#E76F51',
-      authHint: '粘贴 opencode.ai 会话 Cookie（Go 计划）',
+      authHint: '粘贴 opencode.ai 会话 Cookie 或 Zen API Key（Go 计划）；可选第二栏填工作区 ID',
       authUrl: 'https://opencode.ai/workspace',
     }, true);
+  }
+
+  /** API Key 模式（对照 macOS fetchAPIUsage：Bearer 调 zen usage API） */
+  private async fetchWithAPIKey(key: string): Promise<UsageSnapshot> {
+    const resp = await Http.get('https://opencode.ai/zen/go/v1/usage', {
+      'authorization': `Bearer ${key}`,
+      'accept': 'application/json',
+      'user-agent': 'CodexBar',
+    });
+    if (!resp.ok) {
+      return UsageSnapshot.failure(resp.errorText());
+    }
+    const root = asObj(resp.json());
+    const usage = root != null ? asObj(root['usage']) : null;
+    if (usage == null) {
+      return UsageSnapshot.failure('响应缺少 usage 字段');
+    }
+    const now = Date.now();
+    const rolling = ocWindowFrom(usage['rolling'], now);
+    if (rolling == null) {
+      return UsageSnapshot.failure('响应缺少 rolling 用量');
+    }
+    const snap = UsageSnapshot.success(
+      rolling,
+      ocWindowFrom(usage['weekly'], now),
+      ocWindowFrom(usage['monthly'], now)
+    );
+    return snap;
+  }
+
+  async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
+    const cred = setting.credential.trim();
+    // 无 "=" 的凭证视为 API Key；否则走 Cookie _server 协议
+    if (cred.length > 0 && cred.indexOf('=') < 0) {
+      return this.fetchWithAPIKey(cred);
+    }
+    return super.fetch(setting);
   }
 }
 

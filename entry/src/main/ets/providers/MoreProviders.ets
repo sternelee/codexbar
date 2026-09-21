@@ -350,9 +350,50 @@ class KimiCodingProvider implements UsageProvider {
     title: 'Kimi 编码版',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#6E56CF',
-    authHint: '粘贴 kimi.com 的 authToken（浏览器 Cookie kimi-auth 的值）',
+    authHint: '粘贴 kimi.com 的 authToken，或 Kimi Code API Key（sk-… 开头）',
     authUrl: 'https://www.kimi.com/code/console',
   };
+
+  /** API Key 模式（对照 macOS fetchCodeAPIUsage：Bearer 调 Code usages API） */
+  private async fetchWithAPIKey(key: string): Promise<UsageSnapshot> {
+    const resp = await Http.get('https://api.kimi.com/coding/v1/usages', {
+      'authorization': `Bearer ${key}`,
+      'accept': 'application/json',
+    });
+    if (!resp.ok) {
+      return UsageSnapshot.failure(resp.errorText());
+    }
+    const root = asObj(resp.json());
+    if (root == null) {
+      return UsageSnapshot.failure('响应解析失败');
+    }
+    // usages 池（limit_5h / limit_7d / limit_month_total）或 usage 明细，两者字段同构
+    const pools = asObj(root['usages']) ?? asObj(root['usage']);
+    if (pools == null) {
+      return UsageSnapshot.failure('未返回用量数据');
+    }
+    const snap = UsageSnapshot.success(
+      KimiCodingProvider.windowOf(pools, 'limit_5h'),
+      KimiCodingProvider.windowOf(pools, 'limit_7d'),
+      KimiCodingProvider.windowOf(pools, 'limit_month_total')
+    );
+    // 会员等级 → 计划名（对照 macOS planName 映射）
+    const user = asObj(root['user']);
+    const membership = user != null ? asObj(user['membership']) : null;
+    const level = membership != null ? optStr(membership, 'level') : null;
+    if (level != null && level.length > 0 && level !== 'LEVEL_UNSPECIFIED') {
+      const names: Record<string, string> = {
+        'LEVEL_FREE': 'Adagio',
+        'LEVEL_TRIAL': 'Andante',
+        'LEVEL_BASIC': 'Moderato',
+        'LEVEL_INTERMEDIATE': 'Allegretto',
+        'LEVEL_ADVANCED': 'Allegro',
+      };
+      const plan = names[level] != null ? names[level] : level;
+      snap.details = [{ title: '订阅', rows: [{ label: '计划', value: plan }] }];
+    }
+    return snap;
+  }
 
   private headers(token: string): Record<string, string> {
     const h: Record<string, string> = {
@@ -388,6 +429,10 @@ class KimiCodingProvider implements UsageProvider {
     const token = setting.credential.trim();
     if (token.length === 0) {
       return UsageSnapshot.failure('未配置 authToken');
+    }
+    // sk- 开头视为 Kimi Code API Key
+    if (token.startsWith('sk-')) {
+      return this.fetchWithAPIKey(token);
     }
     const resp = await Http.post(
       'https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages',

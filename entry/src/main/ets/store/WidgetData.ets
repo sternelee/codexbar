@@ -52,7 +52,7 @@ export function buildWidgetItems(states: ProviderState[], now: number): WidgetIt
     if (win == null) {
       continue;
     }
-    const cd = win.resetsAt > now ? `${Format.countdown(win.resetsAt - now)}后重置` : '';
+    const cd = win.resetsAt > now ? Format.resetIn(win.resetsAt - now) : '';
     const item: WidgetItem = {
       name: s.descriptor.title,
       pct: Format.percent(win.usedPercent),

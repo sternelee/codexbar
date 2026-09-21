@@ -19,7 +19,7 @@
 - **设置页**：逐服务商开关 + 凭证录入，凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
-## 支持的服务商（v8，52 家）
+## 支持的服务商（v9，53 家）
 
 | 服务商 | 方式 | 凭证 | 展示内容 |
 |---|---|---|---|
@@ -57,6 +57,7 @@
 | LiteLLM | 虚拟密钥 | 自托管地址 + Key | 预算消耗率 + 重置时间 |
 | LLM Proxy | API Key | 自托管地址 + Key | 配额组窗口 |
 | ElevenLabs | API Key | `xi-api-key` | 字符用量窗口 + 套餐 |
+| Factory AI | API Key | Bearer（fk-…） | billing/limits 限额窗口 + analytics 近30天 token 用量 |
 | Fireworks | API Key | Bearer | 近 30 天计费汇总（lineItems 求和） |
 | NeuralWatt | API Key | Bearer | 额度余量/已用/周期额度 |
 | IBM Bob | API Key | JWT/Apikey | 各团队 Bobcoin 用量 + 预算窗口 |

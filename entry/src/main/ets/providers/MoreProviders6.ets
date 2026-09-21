@@ -1,5 +1,7 @@
 /**
  * 服务商第七批（审计补漏）：
+ * - Factory AI: GET api.factory.ai/api/billing/limits（Bearer fk- Key + x-factory-client）
+ *               GET api.factory.ai/api/v1/analytics/tokens?startDate&endDate（近30天用量）
  * - Alibaba Coding Plan（百炼编码计划）：
  *   POST {region}/data/api.json?action=zeldaEasy.broadscope-bailian.codingPlan.queryCodingPlanInstanceInfoV2
  *        &product=broadscope-bailian&api=queryCodingPlanInstanceInfoV2&currentRegionId=...
@@ -22,6 +24,7 @@ import {
   UsageSnapshot
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
+import { Format } from '../common/Format';
 
 const ALIBABA_ACTION = 'zeldaEasy.broadscope-bailian.codingPlan.queryCodingPlanInstanceInfoV2';
 
@@ -190,4 +193,164 @@ class AlibabaCodingPlanProvider implements UsageProvider {
 
 export function createAlibabaCodingPlanProvider(): UsageProvider {
   return new AlibabaCodingPlanProvider();
+}
+
+// ---------------------------------------------------------------------------
+// Factory AI（API Key：billing/limits 限额 + analytics/tokens 近30天用量）
+// ---------------------------------------------------------------------------
+
+function factoryWindowMs(v: Json): number {
+  if (typeof v === 'number') {
+    return v > 1e12 ? v : v * 1000;
+  }
+  if (typeof v === 'string' && (v as string).length > 0) {
+    const parsed = Date.parse(v as string);
+    if (!isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function factoryWindow(o: Record<string, Json> | null, now: number): RateWindow | null {
+  if (o == null) {
+    return null;
+  }
+  const pct = optNum(o, 'usedPercent');
+  if (pct == null) {
+    return null;
+  }
+  let reset = 0;
+  const secs = optNum(o, 'secondsRemaining');
+  if (secs != null && secs > 0) {
+    reset = now + secs * 1000;
+  } else {
+    reset = factoryWindowMs(o['windowEnd']);
+  }
+  return makeWindow(Math.max(0, Math.min(100, pct)), reset, true);
+}
+
+class FactoryProvider implements UsageProvider {
+  descriptor: ProviderDescriptor = {
+    id: 'factory',
+    title: 'Factory AI',
+    authKind: AuthKind.API_KEY,
+    accentColor: '#E8833A',
+    authHint: '粘贴 Factory API Key（fk-… 开头）',
+    authUrl: 'https://factory.ai/account',
+  };
+
+  async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
+    const key = setting.credential.trim();
+    if (key.length === 0) {
+      return UsageSnapshot.failure('未配置 API Key');
+    }
+    const headers: Record<string, string> = {
+      'authorization': `Bearer ${key}`,
+      'accept': 'application/json',
+      'x-factory-client': 'web-app',
+      'origin': 'https://app.factory.ai',
+      'referer': 'https://app.factory.ai/',
+    };
+
+    const now = Date.now();
+    const snap = UsageSnapshot.success(null, null, null);
+    const sections: ProviderDetailSection[] = [];
+    let limitsFail = '';
+    let analyticsFail = '';
+
+    // 1) 限额（5小时/每周/月度，standard 与 core 池）
+    const limitsResp = await Http.get('https://api.factory.ai/api/billing/limits', headers);
+    if (limitsResp.ok) {
+      const root = asObj(limitsResp.json());
+      const limits = root != null ? asObj(root['limits']) : null;
+      const std = limits != null ? asObj(limits['standard']) : null;
+      if (std != null) {
+        snap.primary = factoryWindow(asObj(std['fiveHour']), now);
+        snap.secondary = factoryWindow(asObj(std['weekly']), now);
+        const monthly = factoryWindow(asObj(std['monthly']), now);
+        const extra: NamedRateWindow[] = [];
+        if (monthly != null) {
+          extra.push({ id: 'factory_monthly', title: '月度', window: monthly });
+        }
+        const core = limits != null ? asObj(limits['core']) : null;
+        if (core != null) {
+          const c5 = factoryWindow(asObj(core['fiveHour']), now);
+          const cw = factoryWindow(asObj(core['weekly']), now);
+          if (c5 != null) {
+            extra.push({ id: 'core_5h', title: 'Core 5小时', window: c5 });
+          }
+          if (cw != null) {
+            extra.push({ id: 'core_weekly', title: 'Core 每周', window: cw });
+          }
+        }
+        snap.extraRateWindows = extra;
+      }
+      const cents = root != null ? optNum(root, 'extraUsageBalanceCents') : null;
+      if (cents != null && cents > 0) {
+        snap.providerCost = {
+          remaining: cents / 100, used: 0, currency: 'USD',
+          displayText: Format.money(cents / 100, 'USD'),
+        };
+      }
+    } else {
+      limitsFail = limitsResp.errorText();
+    }
+
+    // 2) 近30天用量统计（analytics/tokens；数据仅到昨日 UTC）
+    const end = new Date(now - 86400 * 1000);
+    const start = new Date(now - 30 * 86400 * 1000);
+    const dkey = (d: Date): string => {
+      const p = (n: number): string => (n < 10 ? `0${n}` : `${n}`);
+      return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    };
+    const aResp = await Http.get(
+      `https://api.factory.ai/api/v1/analytics/tokens?startDate=${dkey(start)}&endDate=${dkey(end)}&group_by=model`,
+      headers
+    );
+    if (aResp.ok) {
+      const root = asObj(aResp.json());
+      const data = root != null ? asArray(root['data']) : null;
+      if (data != null && data.length > 0) {
+        let billable = 0;
+        let input = 0;
+        let output = 0;
+        let lastDay = '';
+        for (let i = 0; i < data.length; i++) {
+          const day = asObj(data[i]);
+          if (day == null) {
+            continue;
+          }
+          billable += num(day, 'billable_tokens', 0);
+          input += num(day, 'input_tokens', 0);
+          output += num(day, 'output_tokens', 0);
+          lastDay = str(day, 'date', lastDay);
+        }
+        const rows: ProviderDetailRow[] = [
+          { label: '可计费 tokens', value: Format.compact(billable) },
+          { label: '输入 / 输出', value: `${Format.compact(input)} / ${Format.compact(output)}` },
+        ];
+        if (lastDay.length > 0) {
+          rows.push({ label: '统计截止', value: lastDay });
+        }
+        sections.push({ title: '近30天用量', rows: rows });
+      }
+    } else {
+      analyticsFail = aResp.errorText();
+    }
+
+    if (snap.primary == null && sections.length === 0) {
+      // 两个来源都失败：优先返回限额端的错误
+      return UsageSnapshot.failure(limitsFail.length > 0 ? limitsFail : analyticsFail);
+    }
+    if (limitsFail.length > 0 && snap.primary == null) {
+      sections.push({ title: '提示', rows: [{ label: '限额查询失败', value: limitsFail }] });
+    }
+    snap.details = sections;
+    return snap;
+  }
+}
+
+export function createFactoryProvider(): UsageProvider {
+  return new FactoryProvider();
 }

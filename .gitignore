@@ -23,3 +23,4 @@
 # 本地工具状态
 /.cache
 /.pi
+.arkui-x/android/local.properties

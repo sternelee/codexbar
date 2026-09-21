@@ -1,0 +1,25 @@
+/node_modules
+/oh_modules
+/local.properties
+/.idea
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+# ArkUI-X 构建时由 SDK/ace 自动注入的引擎库与拷贝资产（ace build 可再生）
+.arkui-x/android/.gradle
+.arkui-x/android/app/libs
+.arkui-x/android/app/src/main/assets
+.arkui-x/android/buildArkTS
+.arkui-x/android/buildArkTS.bat
+.arkui-x/ios/buildArkTS.sh
+.arkui-x/ios/frameworks
+.arkui-x/ios/arkui-x
+
+# 本地工具状态
+/.cache
+/.pi

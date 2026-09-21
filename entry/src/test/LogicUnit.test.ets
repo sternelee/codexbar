@@ -1,0 +1,162 @@
+import { describe, it, expect } from '@ohos/hypium';
+import { Format } from '../main/ets/common/Format';
+import { Theme } from '../main/ets/common/Theme';
+import { parseJson, asObj, asArray, str, num, optNum, optStr } from '../main/ets/net/Json';
+import { makeWindow, UsageSnapshot, RateWindow } from '../main/ets/model/Models';
+import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
+import { chutesWindow } from '../main/ets/providers/MoreProviders';
+import { zaiLimitWindow, t3chatFindCustomerData } from '../main/ets/providers/MoreProviders2';
+
+export default function logicUnitTest() {
+  describe('logicUnitTest', () => {
+    it('Format_percent', 0, () => {
+      expect(Format.percent(85)).assertEqual('85%');
+      expect(Format.percent(85.44)).assertEqual('85.4%');
+      expect(Format.percent(0)).assertEqual('0%');
+      expect(Format.percent(100)).assertEqual('100%');
+    });
+
+    it('Format_money', 0, () => {
+      expect(Format.money(12.5, 'USD')).assertEqual('$12.50');
+      expect(Format.money(110, 'CNY')).assertEqual('¥110.00');
+      expect(Format.money(0, 'USD')).assertEqual('$0.00');
+    });
+
+    it('Format_countdown', 0, () => {
+      expect(Format.countdown(-1)).assertEqual('已重置');
+      expect(Format.countdown(0)).assertEqual('已重置');
+      expect(Format.countdown(45 * 1000)).assertEqual('45秒');
+      expect(Format.countdown(45 * 60 * 1000)).assertEqual('45分钟');
+      expect(Format.countdown((3 * 3600 + 15 * 60) * 1000)).assertEqual('3小时15分');
+      expect(Format.countdown((4 * 86400 + 7 * 3600) * 1000)).assertEqual('4天7小时');
+    });
+
+    it('Format_ago_compact', 0, () => {
+      expect(Format.ago(0)).assertEqual('从未');
+      expect(Format.ago(Date.now() - 30 * 1000)).assertEqual('刚刚');
+      expect(Format.compact(999)).assertEqual('999');
+      expect(Format.compact(12345)).assertEqual('12.3K');
+      expect(Format.compact(1_500_000)).assertEqual('1.50M');
+    });
+
+    it('Theme_barColor_thresholds', 0, () => {
+      expect(Theme.barColor(10, true)).assertEqual(Theme.accent);
+      expect(Theme.barColor(75, true)).assertEqual(Theme.warn);
+      expect(Theme.barColor(95, true)).assertEqual(Theme.danger);
+      expect(Theme.barColor(95, false)).assertEqual('#3A3A44');
+    });
+
+    it('Json_helpers', 0, () => {
+      const parsed = parseJson('{"name":"DeepSeek","total":"110.00","rate":42,"arr":[1,2],"nested":{"a":1}}');
+      const o = asObj(parsed);
+      expect(o != null).assertTrue();
+      if (o != null) {
+        expect(str(o, 'name')).assertEqual('DeepSeek');
+        expect(str(o, 'missing', 'dflt')).assertEqual('dflt');
+        expect(num(o, 'rate')).assertEqual(42);
+        expect(num(o, 'total')).assertEqual(110);
+        expect(optNum(o, 'missing')).assertEqual(null);
+        const nested = asObj(o['nested']);
+        expect(nested != null).assertTrue();
+        const arr = asArray(o['arr']);
+        expect(arr != null).assertTrue();
+        if (arr != null) {
+          expect(arr.length).assertEqual(2);
+        }
+      }
+      expect(asObj(parseJson('bad json'))).assertEqual(null);
+      expect(asObj(parseJson('[1,2]'))).assertEqual(null);
+    });
+
+    it('UsageSnapshot_lifecycle', 0, () => {
+      const w: RateWindow = makeWindow(42, 123456, true);
+      expect(w.usedPercent).assertEqual(42);
+      expect(w.usageKnown).assertTrue();
+
+      const ok = UsageSnapshot.success(w, null, null);
+      expect(ok.ok).assertTrue();
+      expect(ok.primary != null).assertTrue();
+      expect(ok.error).assertEqual('');
+
+      const fail = UsageSnapshot.failure('凭证无效');
+      expect(fail.ok).assertFalse();
+      expect(fail.error).assertEqual('凭证无效');
+      expect(fail.primary).assertEqual(null);
+    });
+
+    it('Nav_parseDetailParam', 0, () => {
+      // 类实例形态（鸿蒙原生路由）
+      const typed = new DetailRouteParam();
+      typed.id = 'claude';
+      expect(parseDetailParam(typed)).assertEqual('claude');
+      // 普通对象形态（ArkUI-X 跨端序列化后）
+      const plain: DetailRouteParam = JSON.parse('{"id":"deepseek"}') as DetailRouteParam;
+      expect(parseDetailParam(plain)).assertEqual('deepseek');
+      // 异常形态
+      expect(parseDetailParam(null)).assertEqual('');
+      const empty: DetailRouteParam = JSON.parse('{}') as DetailRouteParam;
+      expect(parseDetailParam(empty)).assertEqual('');
+    });
+
+    it('Chutes_alias_windows', 0, () => {
+      // 滚动窗口：used/limit 推算百分比
+      const rolling: Record<string, Object> =
+        JSON.parse('{"used": 30, "limit": 100, "reset_at": "2026-09-21T12:00:00Z"}') as Record<string, Object>;
+      const w1 = chutesWindow(rolling as Record<string, Object>, '4 小时窗口');
+      expect(w1 != null).assertTrue();
+      if (w1 != null) {
+        expect(w1.usedPercent).assertEqual(30);
+        expect(w1.resetsAt > 0).assertTrue();
+      }
+      // 月度窗口：percent_remaining 反推
+      const monthly: Record<string, Object> = JSON.parse('{"percent_remaining": 80}') as Record<string, Object>;
+      const w2 = chutesWindow(monthly as Record<string, Object>, '月度窗口');
+      expect(w2 != null).assertTrue();
+      if (w2 != null) {
+        expect(w2.usedPercent).assertEqual(20);
+      }
+      // 无法得出百分比时返回 null
+      const bad: Record<string, Object> = JSON.parse('{"foo": 1}') as Record<string, Object>;
+      expect(chutesWindow(bad as Record<string, Object>, 'x')).assertEqual(null);
+    });
+
+    it('Zai_limit_window', 0, () => {
+      // 5 小时 TIME_LIMIT：百分比 + 重置时间（unix 秒）
+      const five: Record<string, Object> = JSON.parse(
+        '{"type":"TIME_LIMIT","unit":5,"number":5,"percentage":42,"usage":1000,"remaining":580,"nextResetTime":1758000000}'
+      ) as Record<string, Object>;
+      const w = zaiLimitWindow(five);
+      expect(w != null).assertTrue();
+      if (w != null) {
+        expect(w.title).assertEqual('5 小时窗口');
+        expect(Math.round(w.window.usedPercent)).assertEqual(42);
+        expect(w.window.resetsAt).assertEqual(1758000000000);
+      }
+      // Token 配额：unit=3(小时)、number=8
+      const tokens: Record<string, Object> = JSON.parse(
+        '{"type":"TOKENS_LIMIT","unit":3,"number":8,"percentage":10}'
+      ) as Record<string, Object>;
+      const w2 = zaiLimitWindow(tokens);
+      expect(w2 != null).assertTrue();
+      if (w2 != null) {
+        expect(w2.title).assertEqual('Token 配额');
+      }
+      // 未知类型拒绝
+      const bad: Record<string, Object> = JSON.parse('{"type":"OTHER","unit":1,"number":1}') as Record<string, Object>;
+      expect(zaiLimitWindow(bad)).assertEqual(null);
+    });
+
+    it('T3Chat_find_customer_data', 0, () => {
+      const line = '{"0":{"result":{"data":{"json":{"subTier":"yearly","usageFourHourPercentage":55.5,' +
+        '"usageFourHourNextResetAt":1758000000,"usageMonthPercentage":12,"billingNextResetAt":1760000000}}}}}';
+      const found = t3chatFindCustomerData(JSON.parse(line) as Record<string, Object>);
+      expect(found != null).assertTrue();
+      if (found != null) {
+        const fourHour = found['usageFourHourPercentage'];
+        expect(fourHour != null).assertTrue();
+        expect(JSON.stringify(found).indexOf('subTier') >= 0).assertTrue();
+      }
+      expect(t3chatFindCustomerData(null)).assertEqual(null);
+    });
+  });
+}

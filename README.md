@@ -14,7 +14,7 @@
 - **设置页**：逐服务商开关 + 凭证录入，凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
-## 支持的服务商（v6，46 家）
+## 支持的服务商（v8，52 家）
 
 | 服务商 | 方式 | 凭证 | 展示内容 |
 |---|---|---|---|
@@ -64,12 +64,18 @@
 | LongCat | 会话 Cookie | longcat.chat Cookie | Token 份额窗口 |
 | ZoomMate | 令牌/Cookie | zoommate.zoom.us | 今日/每周 额度窗口 |
 | Notion AI | 会话 Cookie | 含 token_v2 | 额度速率窗口 |
+| HuggingFace | Token | Bearer（Billing 读权限） | 推理计费窗口 + ZeroGPU |
+| Warp | API Key | Bearer | 请求额度窗口（GraphQL GetRequestLimitInfo） |
+| OpenCode | 会话 Cookie | Cookie（可选工作区 ID） | 订阅/PAYG 计费窗口（_server RPC） |
+| OpenCode Go | 会话 Cookie | Cookie | Go 计费窗口 |
+| Groq | 会话 Cookie | stytch_session（可选组织 ID） | 近 30 天活动用量（Stytch 交换） |
+| 阿里云百炼编码计划 | API Key | 百炼/DashScope Key（intl/cn） | 5 小时/周/账单月 配额窗口 |
 | 演示模式 | 无 | — | 拟真数据 |
 
 ### 其余服务商可行性分级（对照源工程 75+ 家）
 
-- **桌面专属（无法移动化）**：依赖本地 CLI 配置/钥匙串/浏览器 Cookie 存储导入器、云控制台签名 RPC 或 IAM 签名的服务：Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor（浏览器抓取）、Doubao（火山 HMAC）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud（阿里云控制台签名 RPC）、Amp/Augment/JetBrains/Zed/CodeRabbit/Factory（CLI 探测/本地会话基础设施）、Wayfinder（仅 localhost）。
-- **HTML 抓取 / 复杂会话协议（不建议移动端）**：Sakana（计费页 HTML 解析）、Groq（Stytch 会话交换 + Prometheus 指标查询）、Replicate（HTML 抓取）、Windsurf（Devin 会话探测复用）、Warp（GraphQL requestContext 专属结构）、HuggingFace（usage-v2 多层嵌套）、OpenCode/OpenCodeGo（_server 会话协议）。
+- **桌面专属（无法移动化）**：依赖本地 CLI 配置/钥匙串/浏览器 Cookie 存储导入器、云控制台签名 RPC 或 IAM 签名的服务：Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor（浏览器抓取）、Doubao（火山 HMAC）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud 与 Alibaba Token Plan（阿里云控制台 Cookie+sec_token 签名 RPC 网关）、Grok 消费版（需桌面 `grok login` 授权，区别于已迁移的 xAI Management API）、Pi（本地 CLI 会话读取器）、Amp/Augment/JetBrains/Zed/CodeRabbit/Factory（CLI 探测/本地会话基础设施）、Wayfinder（仅 localhost）。
+- **HTML 抓取 / 桌面专属（最终分类）**：Sakana（计费页 HTML 解析）、Replicate（HTML 抓取）、Windsurf（依赖 Devin 会话探测基础设施）、Ollama 本地、AWS Bedrock、VertexAI/Gemini OAuth、Azure、Copilot、Cursor、Doubao（火山 HMAC）、Kiro（AWS）、Antigravity、StepFun（设备注册）、QwenCloud（阿里云控制台签名 RPC）、Amp/Augment/JetBrains/Zed/CodeRabbit/Factory（CLI 探测/本地会话）、Wayfinder（仅 localhost）。除上述外，源工程全部服务商均已迁移。
 
 端点与解析逻辑逐一对照 Swift 源码迁移（见下表），凭证登录态刷新流程与 macOS 版一致。
 
@@ -98,6 +104,8 @@ entry/src/main/ets/
 │   ├── MoreProviders2.ets    ← Providers/{MiniMax,MiMo,Mistral,Kilo,Poe,T3Chat,Zai}
 │   ├── MoreProviders3.ets    ← Providers/{XAI,Qoder,Venice,Nous,Muse,Deepgram,ClinePass,Crof,Synthetic,ClawRouter,LiteLLM,LLMProxy}（含 QuickJS 插件移植）
 │   ├── MoreProviders4.ets    ← Providers/{ElevenLabs,Fireworks,NeuralWatt,IBMBob,Ai&,Codebuff,Sub2API,Devin,Abacus,CommandCode,LongCat,ZoomMate,Notion}
+│   ├── MoreProviders5.ets    ← Providers/{HuggingFace,Warp,OpenCode,OpenCodeGo,Groq}
+│   ├── MoreProviders6.ets    ← Providers/Alibaba/{AlibabaCodingPlan 百炼编码计划}
 │   └── DemoProvider.ets      ← 演示数据
 ├── view/UsageBar.ets         ← 用量条 + 窗口块组件
 ├── view/ProviderIcon.ets     ← 服务商品牌图标（lobe-icons 彩色 SVG + 白色圆角衬底）

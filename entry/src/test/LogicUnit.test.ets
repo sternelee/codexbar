@@ -2,10 +2,24 @@ import { describe, it, expect } from '@ohos/hypium';
 import { Format } from '../main/ets/common/Format';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr } from '../main/ets/net/Json';
-import { makeWindow, UsageSnapshot, RateWindow } from '../main/ets/model/Models';
+import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderSetting, ProviderState,
+  AuthKind, defaultReminder } from '../main/ets/model/Models';
 import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow } from '../main/ets/providers/MoreProviders';
 import { zaiLimitWindow, t3chatFindCustomerData } from '../main/ets/providers/MoreProviders2';
+import { evaluateReminder, ReminderHit } from '../main/ets/store/Reminders';
+import { Settings } from '../main/ets/store/Settings';
+
+/** 构造只带一个主窗口的服务商状态（提醒测试用） */
+function stateWith(primary: RateWindow): ProviderState {
+  const d: ProviderDescriptor = {
+    id: 'demo', title: '演示', authKind: AuthKind.DEMO,
+    accentColor: '#16D3B4', authHint: '', authUrl: ''
+  };
+  const s = new ProviderState(d, { enabled: true, credential: '', credential2: '' });
+  s.snapshot = UsageSnapshot.success(primary, null, null);
+  return s;
+}
 
 export default function logicUnitTest() {
   describe('logicUnitTest', () => {
@@ -157,6 +171,98 @@ export default function logicUnitTest() {
         expect(JSON.stringify(found).indexOf('subTier') >= 0).assertTrue();
       }
       expect(t3chatFindCustomerData(null)).assertEqual(null);
+    });
+
+    it('Reminder_usage_threshold', 0, () => {
+      const cfg = defaultReminder();
+      cfg.enabled = true;
+      cfg.usageThreshold = 90;
+      cfg.resetLeadMinutes = 0;
+      const now = 1758000000000;
+      // 达到阈值：命中用量提醒
+      const s = stateWith(makeWindow(95, now + 3600000, true));
+      const hit = evaluateReminder(s, cfg, now);
+      expect(hit != null).assertTrue();
+      if (hit != null) {
+        expect(hit.kind).assertEqual('usage');
+        expect(hit.windowId).assertEqual('primary');
+        expect(hit.dedupeKey).assertEqual(`u_primary_${now + 3600000}`);
+        expect(hit.title.indexOf('演示') >= 0).assertTrue();
+        expect(hit.text.indexOf('95%') >= 0).assertTrue();
+      }
+      // 低于阈值：不提醒
+      const s2 = stateWith(makeWindow(89, now + 3600000, true));
+      expect(evaluateReminder(s2, cfg, now)).assertEqual(null);
+      // 用量未知（usageKnown=false）：不提醒
+      const s3 = stateWith(makeWindow(95, now + 3600000, false));
+      expect(evaluateReminder(s3, cfg, now)).assertEqual(null);
+      // 阈值为 0：关闭用量提醒
+      cfg.usageThreshold = 0;
+      const s4 = stateWith(makeWindow(100, now + 3600000, true));
+      expect(evaluateReminder(s4, cfg, now)).assertEqual(null);
+    });
+
+    it('Reminder_reset_lead', 0, () => {
+      const cfg = defaultReminder();
+      cfg.enabled = true;
+      cfg.usageThreshold = 0;
+      cfg.resetLeadMinutes = 15;
+      const now = 1758000000000;
+      // 10 分钟后重置：命中恢复提醒
+      const resetsAt = now + 10 * 60000;
+      const s = stateWith(makeWindow(20, resetsAt, true));
+      const hit = evaluateReminder(s, cfg, now);
+      expect(hit != null).assertTrue();
+      if (hit != null) {
+        expect(hit.kind).assertEqual('reset');
+        expect(hit.dedupeKey).assertEqual(`r_primary_${resetsAt}`);
+        expect(hit.text.indexOf('10') >= 0).assertTrue();
+      }
+      // 1 小时后重置：超出提前量，不提醒
+      const s2 = stateWith(makeWindow(20, now + 3600000, true));
+      expect(evaluateReminder(s2, cfg, now)).assertEqual(null);
+      // 重置时间已过：不提醒
+      const s3 = stateWith(makeWindow(20, now - 60000, true));
+      expect(evaluateReminder(s3, cfg, now)).assertEqual(null);
+      // 重置时间未知（0）：不提醒
+      const s4 = stateWith(makeWindow(20, 0, true));
+      expect(evaluateReminder(s4, cfg, now)).assertEqual(null);
+    });
+
+    it('Reminder_reset_priority_and_dedupe', 0, () => {
+      // 两个条件同时满足：优先"即将恢复"
+      const cfg = defaultReminder();
+      cfg.enabled = true;
+      cfg.usageThreshold = 90;
+      cfg.resetLeadMinutes = 15;
+      const now = 1758000000000;
+      const s = stateWith(makeWindow(95, now + 10 * 60000, true));
+      const hit = evaluateReminder(s, cfg, now);
+      expect(hit != null).assertTrue();
+      if (hit != null) {
+        expect(hit.kind).assertEqual('reset');
+      }
+      // 窗口周期推进后（重置时间变化），去重键随之变化
+      const hit2 = evaluateReminder(stateWith(makeWindow(95, now + 7200000, true)), cfg, now);
+      expect(hit2 != null).assertTrue();
+      if (hit != null && hit2 != null) {
+        expect(hit.dedupeKey === hit2.dedupeKey).assertFalse();
+      }
+    });
+
+    it('Reminder_config_default', 0, () => {
+      // 本地测试无 Preferences 上下文：读取返回默认值，保存静默不崩溃
+      const dflt = defaultReminder();
+      expect(dflt.enabled).assertFalse();
+      expect(dflt.usageThreshold).assertEqual(90);
+      expect(dflt.resetLeadMinutes).assertEqual(15);
+      Settings.saveReminder('x', { enabled: true, usageThreshold: 80, resetLeadMinutes: 5 });
+      const back = Settings.reminder('x');
+      expect(back.enabled).assertEqual(dflt.enabled);
+      // 损坏的 JSON 同样回退默认
+      Settings.saveReminder('y', { enabled: true, usageThreshold: 80, resetLeadMinutes: 5 });
+      expect(Settings.reminder('y').usageThreshold).assertEqual(dflt.usageThreshold);
+      expect(Settings.reminderFiredKey('x', 'usage')).assertEqual('');
     });
   });
 }

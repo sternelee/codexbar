@@ -62,6 +62,14 @@ import {
   createSub2ApiProvider,
   createZoomMateProvider
 } from './MoreProviders4';
+import { createAlibabaCodingPlanProvider } from './MoreProviders6';
+import {
+  createGroqProvider,
+  createHuggingFaceProvider,
+  createOpenCodeGoProvider,
+  createOpenCodeProvider,
+  createWarpProvider
+} from './MoreProviders5';
 
 export class ProviderRegistry {
   private static providers: UsageProvider[] = [];
@@ -116,6 +124,12 @@ export class ProviderRegistry {
         createLongCatProvider(),
         createZoomMateProvider(),
         createNotionProvider(),
+        createHuggingFaceProvider(),
+        createWarpProvider(),
+        createOpenCodeProvider(),
+        createOpenCodeGoProvider(),
+        createGroqProvider(),
+        createAlibabaCodingPlanProvider(),
         createDemoProvider(),
       ];
     }

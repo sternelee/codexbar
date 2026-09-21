@@ -72,6 +72,13 @@ export function iconFileFor(providerId: string): string | null {
       return 'devin-color.svg';
     case 'notion':
       return 'notion.svg';
+    case 'huggingface':
+      return 'huggingface-color.svg';
+    case 'groq':
+      return 'groq.svg';
+    case 'opencode':
+    case 'opencodego':
+      return 'opencode.svg';
     default:
       return null;
   }

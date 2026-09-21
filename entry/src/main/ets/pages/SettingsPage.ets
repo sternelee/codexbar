@@ -31,7 +31,8 @@ struct ProviderSettingCard {
         const pid = s.descriptor.id;
         this.needSecond = pid === 'claude' || pid === 'codex' || pid === 'kilo' ||
           pid === 'xai' || pid === 'litellm' || pid === 'llmproxy' ||
-          pid === 'sub2api' || pid === 'devin';
+          pid === 'sub2api' || pid === 'devin' ||
+          pid === 'opencode' || pid === 'opencodego' || pid === 'groq';
         break;
       }
     }

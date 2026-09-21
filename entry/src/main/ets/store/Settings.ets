@@ -6,7 +6,7 @@
 
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
-import { ProviderSetting } from '../model/Models';
+import { defaultReminder, ProviderSetting, ReminderConfig } from '../model/Models';
 
 const STORE_NAME = 'codexbar_settings';
 const PREFIX = 'p_';
@@ -101,5 +101,40 @@ export class Settings {
 
   static setCache(providerId: string, jsonText: string): void {
     Settings.setString(`cache_${providerId}`, jsonText);
+  }
+
+  /** 读取某服务商的提醒配置；缺失或损坏时返回默认值 */
+  static reminder(providerId: string): ReminderConfig {
+    const raw = Settings.getString(`r_${providerId}`, '');
+    if (raw.length === 0) {
+      return defaultReminder();
+    }
+    try {
+      const parsed = JSON.parse(raw) as ReminderConfig;
+      if (typeof parsed.enabled !== 'boolean') {
+        return defaultReminder();
+      }
+      const dflt = defaultReminder();
+      return {
+        enabled: parsed.enabled,
+        usageThreshold: typeof parsed.usageThreshold === 'number' ? parsed.usageThreshold : dflt.usageThreshold,
+        resetLeadMinutes: typeof parsed.resetLeadMinutes === 'number' ? parsed.resetLeadMinutes : dflt.resetLeadMinutes,
+      };
+    } catch (e) {
+      return defaultReminder();
+    }
+  }
+
+  static saveReminder(providerId: string, config: ReminderConfig): void {
+    Settings.setString(`r_${providerId}`, JSON.stringify(config));
+  }
+
+  /** 最近一次已提醒的去重键（kind: 'usage' | 'reset'），用于同一周期只提醒一次 */
+  static reminderFiredKey(providerId: string, kind: string): string {
+    return Settings.getString(`f_${kind}_${providerId}`, '');
+  }
+
+  static setReminderFiredKey(providerId: string, kind: string, key: string): void {
+    Settings.setString(`f_${kind}_${providerId}`, key);
   }
 }

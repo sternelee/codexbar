@@ -2,6 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { Settings } from '../store/Settings';
+import { Notify } from '../common/Notify';
 
 const DOMAIN = 0x0000;
 
@@ -9,6 +10,7 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
     Settings.init(this.context);
+    Notify.init(this.context);
   }
 
   onDestroy(): void {

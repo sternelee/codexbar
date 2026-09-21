@@ -138,6 +138,21 @@ export interface ProviderSetting {
   credential2: string;
 }
 
+/** 单服务商的额度提醒配置（详情页"提醒设置"卡片） */
+export interface ReminderConfig {
+  /** 总开关 */
+  enabled: boolean;
+  /** 任一窗口用量达到该百分比时提醒；0 表示关闭用量提醒 */
+  usageThreshold: number;
+  /** 重置前多少分钟提醒；0 表示关闭恢复提醒 */
+  resetLeadMinutes: number;
+}
+
+/** ReminderConfig 默认值（配置缺省/解析失败时） */
+export function defaultReminder(): ReminderConfig {
+  return { enabled: false, usageThreshold: 90, resetLeadMinutes: 15 };
+}
+
 /** 一次刷新后某服务商的展示状态 */
 export class ProviderState {
   descriptor: ProviderDescriptor;

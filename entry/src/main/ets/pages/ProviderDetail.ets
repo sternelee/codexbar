@@ -3,13 +3,39 @@
  * 展示全部用量窗口、余额、账号身份、明细与错误信息。
  */
 
-import { AuthKind, NamedRateWindow, ProviderDetailRow, ProviderDetailSection, ProviderState } from '../model/Models';
+import { AuthKind, NamedRateWindow, ProviderDetailRow, ProviderDetailSection, ProviderState, ReminderConfig } from '../model/Models';
 import { AppStore } from '../store/AppStore';
+import { Reminders } from '../store/Reminders';
+import { Settings } from '../store/Settings';
+import { Notify } from '../common/Notify';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
 import { WindowBlock } from '../view/UsageBar';
 import { ProviderIcon } from '../view/ProviderIcon';
+
+/** 恢复提醒的提前量档位（分钟） */
+const LEAD_OPTIONS: number[] = [0, 5, 15, 30, 60];
+
+function leadLabel(m: number): string {
+  if (m === 0) {
+    return '关';
+  }
+  if (m < 60) {
+    return `${m}分`;
+  }
+  return '1小时';
+}
+
+function leadPhrase(m: number): string {
+  if (m === 0) {
+    return '已关闭';
+  }
+  if (m < 60) {
+    return `重置前 ${m} 分钟提醒`;
+  }
+  return '重置前 1 小时提醒';
+}
 
 @Entry
 @Component
@@ -17,10 +43,17 @@ struct ProviderDetail {
   @State providerId: string = '';
   @State ver: number = 0;
   @State tick: number = 0;
+  @State remEnabled: boolean = false;
+  @State remThreshold: number = 90;
+  @State remLead: number = 15;
   private timerId: number = -1;
 
   aboutToAppear(): void {
     this.providerId = Nav.detailParam();
+    const cfg: ReminderConfig = Settings.reminder(this.providerId);
+    this.remEnabled = cfg.enabled;
+    this.remThreshold = cfg.usageThreshold;
+    this.remLead = cfg.resetLeadMinutes;
     this.ver = AppStore.get().version;
     this.timerId = setInterval(() => {
       if (AppStore.get().version !== this.ver) {
@@ -39,6 +72,23 @@ struct ProviderDetail {
 
   state(v: number, t: number): ProviderState | null {
     return AppStore.get().find(this.providerId);
+  }
+
+  /** 持久化提醒配置；开启时顺带请求通知授权 */
+  saveReminder(): void {
+    const cfg: ReminderConfig = {
+      enabled: this.remEnabled,
+      usageThreshold: this.remThreshold,
+      resetLeadMinutes: this.remLead,
+    };
+    Reminders.applyConfig(this.providerId, cfg);
+    if (this.remEnabled) {
+      Notify.ensurePermission().then((ok: boolean) => {
+        if (!ok) {
+          Nav.toast('通知权限未开启，可在系统设置中允许通知');
+        }
+      });
+    }
   }
 
   build() {
@@ -292,6 +342,9 @@ struct ProviderDetail {
         }, (sec: ProviderDetailSection) => sec.title)
       }
 
+      // 提醒设置
+      this.reminderCard(s)
+
       // 认证说明
       if (s.descriptor.authKind !== AuthKind.DEMO && s.descriptor.authUrl.length > 0) {
         Text(`凭证获取：${s.descriptor.authUrl}`)
@@ -302,5 +355,97 @@ struct ProviderDetail {
       }
     }
     .width('100%')
+  }
+
+  @Builder
+  reminderCard(s: ProviderState) {
+    Column({ space: 12 }) {
+      Row({ space: 8 }) {
+        Text('🔔')
+          .fontSize(14)
+        Text('提醒设置')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Theme.text)
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.remEnabled })
+          .selectedColor(Theme.accent)
+          .onChange((isOn: boolean) => {
+            this.remEnabled = isOn;
+            this.saveReminder();
+          })
+      }
+      .width('100%')
+
+      Text('额度快用完或即将恢复时发送系统通知（应用运行期间有效）')
+        .fontSize(11)
+        .fontColor(Theme.textDim)
+        .width('100%')
+
+      if (this.remEnabled) {
+        // 额度快用完：用量阈值
+        Column({ space: 8 }) {
+          Row() {
+            Text('额度快用完')
+              .fontSize(13)
+              .fontColor(Theme.text)
+            Blank()
+            Text(this.remThreshold > 0 ? `任一窗口用量 ≥ ${this.remThreshold}%` : '已关闭')
+              .fontSize(12)
+              .fontColor(Theme.textDim)
+          }
+          .width('100%')
+          Slider({ value: this.remThreshold, min: 50, max: 95, step: 5 })
+            .selectedColor(Theme.accent)
+            .trackColor(Theme.stroke)
+            .blockColor(Theme.text)
+            .width('100%')
+            .onChange((value: number, mode: SliderChangeMode) => {
+              this.remThreshold = Math.round(value);
+              if (mode === SliderChangeMode.End) {
+                this.saveReminder();
+              }
+            })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+
+        // 即将恢复：提前量档位
+        Column({ space: 8 }) {
+          Row() {
+            Text('即将恢复')
+              .fontSize(13)
+              .fontColor(Theme.text)
+            Blank()
+            Text(leadPhrase(this.remLead))
+              .fontSize(12)
+              .fontColor(Theme.textDim)
+          }
+          .width('100%')
+          Row({ space: 8 }) {
+            ForEach(LEAD_OPTIONS, (m: number) => {
+              Text(leadLabel(m))
+                .fontSize(12)
+                .fontColor(this.remLead === m ? Theme.bg : Theme.textDim)
+                .backgroundColor(this.remLead === m ? Theme.accent : Theme.input)
+                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+                .borderRadius(10)
+                .onClick(() => {
+                  this.remLead = m;
+                  this.saveReminder();
+                })
+            }, (m: number) => `${m}_${this.remLead === m}`)
+          }
+          .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .padding(Theme.cardPad)
+    .borderRadius(Theme.radius)
+    .backgroundColor(Theme.card)
+    .border({ width: 1, color: this.remEnabled ? Theme.accent : Theme.stroke })
   }
 }

@@ -7,6 +7,7 @@ import { AuthKind, ProviderState, ProviderSetting, UsageSnapshot } from '../mode
 import { ProviderRegistry } from '../providers/ProviderRegistry';
 import { UsageProvider } from '../providers/ProviderBase';
 import { Settings } from './Settings';
+import { Reminders } from './Reminders';
 
 export class AppStore {
   private static instance: AppStore | null = null;
@@ -46,6 +47,7 @@ export class AppStore {
     }
     this.states = list;
     this.bump();
+    Reminders.startLoop();
   }
 
   bump(): void {
@@ -98,6 +100,7 @@ export class AppStore {
       state.lastSuccessAt = Date.now();
       Settings.setLastSuccess(providerId, state.lastSuccessAt);
       Settings.setCache(providerId, JSON.stringify(snap));
+      Reminders.checkState(state);
     }
     this.bump();
   }

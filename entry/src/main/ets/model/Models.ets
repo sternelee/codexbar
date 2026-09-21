@@ -172,6 +172,23 @@ export interface HistoryDay {
   b: number;
 }
 
+/** 需要第二凭证输入框的服务商（组织 / 账号 ID / Secret Access Key 等） */
+export function needsSecondCredential(providerId: string): boolean {
+  return providerId === 'claude' || providerId === 'codex' || providerId === 'kilo' ||
+    providerId === 'xai' || providerId === 'litellm' || providerId === 'llmproxy' ||
+    providerId === 'sub2api' || providerId === 'devin' ||
+    providerId === 'opencode' || providerId === 'opencodego' || providerId === 'groq' ||
+    providerId === 'doubao';
+}
+
+/** 第二凭证输入框提示文案 */
+export function secondCredentialHint(providerId: string): string {
+  if (providerId === 'doubao') {
+    return 'Secret Access Key（AK/SK 模式必填）';
+  }
+  return '可选：组织 / 账号 ID';
+}
+
 /** ReminderConfig 默认值（配置缺省/解析失败时） */
 export function defaultReminder(): ReminderConfig {
   return { enabled: false, usageThreshold: 90, resetLeadMinutes: 15 };

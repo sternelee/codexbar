@@ -63,6 +63,7 @@ import {
   createZoomMateProvider
 } from './MoreProviders4';
 import { createAlibabaCodingPlanProvider, createFactoryProvider } from './MoreProviders6';
+import { createDoubaoProvider } from './DoubaoProvider';
 import {
   createGroqProvider,
   createHuggingFaceProvider,
@@ -131,6 +132,7 @@ export class ProviderRegistry {
         createGroqProvider(),
         createAlibabaCodingPlanProvider(),
         createFactoryProvider(),
+        createDoubaoProvider(),
         createDemoProvider(),
       ];
     }

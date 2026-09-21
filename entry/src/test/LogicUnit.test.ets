@@ -42,7 +42,31 @@ import {
   parseCallbackUrl,
   sha256Base64Url,
   sha256Bytes,
+  utf8Bytes,
 } from '../main/ets/common/OAuth';
+import {
+  hmacSha256Hex,
+  sha256Hex,
+  signVolcRequest,
+  volcCanonicalQuery,
+  volcCanonicalUri,
+  volcDateStamp,
+  volcHostOf,
+  volcPercentEncode,
+  volcTimestamp,
+  VolcCredentials,
+} from '../main/ets/common/VolcSign';
+import {
+  DoubaoPlanMeta,
+  DoubaoQuota,
+  doubaoCodingPlanMeta,
+  doubaoEpochMs,
+  doubaoParseProbe,
+  doubaoParseResetHeader,
+  doubaoQuotasFromAgentPlan,
+  doubaoQuotasFromCodingPlan,
+  doubaoSignedSnapshot,
+} from '../main/ets/providers/DoubaoProvider';
 
 /** 构造只带一个主窗口的服务商状态（提醒测试用） */
 function stateWith(primary: RateWindow, title: string = '演示', enabled: boolean = true): ProviderState {
@@ -567,6 +591,226 @@ export default function logicUnitTest() {
       expect(t[1]).assertEqual(4);
       expect(yAxisTicks(1.5, false).length).assertEqual(2);
       expect(yAxisTicks(2.5, false).length).assertEqual(3);
+    });
+
+    it('VolcSign_sha256_hmac', 0, () => {
+      // FIPS 180-4 空串与 abc 向量
+      expect(sha256Hex('')).assertEqual('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      expect(sha256Hex('abc')).assertEqual('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+      // RFC 4231 Test Case 2：key="Jefe"，data="what do ya want for nothing?"
+      expect(hmacSha256Hex(utf8Bytes('Jefe'), 'what do ya want for nothing?'))
+        .assertEqual('5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843');
+      // RFC 4231 Test Case 1：20 字节 0x0b 密钥
+      const zerosKey: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        zerosKey.push(0x0b);
+      }
+      expect(hmacSha256Hex(zerosKey, 'Hi There'))
+        .assertEqual('b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7');
+      // 超过分组长度（64B）的密钥先做一次 SHA-256
+      const longKey: number[] = [];
+      for (let i = 0; i < 131; i++) {
+        longKey.push(0xaa);
+      }
+      expect(hmacSha256Hex(longKey, 'Test Using Larger Than Block-Size Key - Hash Key First'))
+        .assertEqual('60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54');
+    });
+
+    it('VolcSign_canonical_and_sign', 0, () => {
+      const url = 'https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01';
+      expect(volcHostOf(url)).assertEqual('open.volcengineapi.com');
+      expect(volcCanonicalUri(url)).assertEqual('/');
+      expect(volcCanonicalQuery(url)).assertEqual('Action=GetCodingPlanUsage&Version=2024-01-01');
+      // 查询串乱序输入 → 规范化后按 key 字典序
+      expect(volcCanonicalQuery('https://x.test/?Version=2024-01-01&Action=GetAFPUsage'))
+        .assertEqual('Action=GetAFPUsage&Version=2024-01-01');
+      expect(volcCanonicalQuery('https://x.test/')).assertEqual('');
+      expect(volcCanonicalUri('https://x.test/a/b')).assertEqual('/a/b');
+
+      // UTC 时间戳
+      const ms = Date.UTC(2026, 8, 21, 3, 4, 5);
+      expect(volcTimestamp(ms)).assertEqual('20260921T030405Z');
+      expect(volcDateStamp(ms)).assertEqual('20260921');
+
+      // percent-encode：斜杠按需保留，其余大写十六进制
+      expect(volcPercentEncode('a b/c', true)).assertEqual('a%20b%2Fc');
+      expect(volcPercentEncode('a b/c', false)).assertEqual('a%20b/c');
+      expect(volcPercentEncode('-_.~', true)).assertEqual('-_.~');
+
+      const creds: VolcCredentials = {
+        accessKeyId: 'AKLTtest', secretAccessKey: 'sk-test', region: 'cn-beijing',
+      };
+      const contentType = 'application/x-www-form-urlencoded; charset=utf-8';
+      const sig = signVolcRequest('POST', url, contentType, '', creds, ms);
+      expect(sig.headers['x-date']).assertEqual('20260921T030405Z');
+      expect(sig.headers['x-content-sha256']).assertEqual(
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+      expect(sig.signature.length).assertEqual(64);
+      expect(sig.headers['authorization'].indexOf(
+        'Credential=AKLTtest/20260921/cn-beijing/ark/request') >= 0).assertTrue();
+      expect(sig.headers['authorization'].indexOf(
+        'SignedHeaders=content-type;host;x-content-sha256;x-date') >= 0).assertTrue();
+      expect(sig.headers['authorization'].indexOf(`Signature=${sig.signature}`) >= 0).assertTrue();
+      // 规范化请求的空行分隔与签名头顺序（与服务端重算一致）
+      expect(sig.canonicalRequest.indexOf(
+        'x-date:20260921T030405Z\n\ncontent-type;host;x-content-sha256;x-date\n') >= 0).assertTrue();
+      expect(sig.stringToSign.indexOf('HMAC-SHA256\n20260921T030405Z\n') >= 0).assertTrue();
+      // 相同输入 → 稳定签名；Action 变化 → 签名变化
+      const again = signVolcRequest('POST', url, contentType, '', creds, ms);
+      expect(again.signature).assertEqual(sig.signature);
+      const afp = signVolcRequest('POST', 'https://open.volcengineapi.com/?Action=GetAFPUsage&Version=2024-01-01',
+        contentType, '', creds, ms);
+      expect(afp.signature === sig.signature).assertFalse();
+    });
+
+    it('Doubao_quota_parsing', 0, () => {
+      // 秒 / 毫秒自适应与无效值
+      expect(doubaoEpochMs(1758000000)).assertEqual(1758000000000);
+      expect(doubaoEpochMs(1758000000000)).assertEqual(1758000000000);
+      expect(doubaoEpochMs(0)).assertEqual(0);
+      expect(doubaoEpochMs(-1)).assertEqual(0);
+      expect(doubaoEpochMs(null)).assertEqual(0);
+
+      // 编码计划：Level 统一小写、Percent 钳制到 [0,100]、ResetTimestamp 为秒
+      const coding: Record<string, Object> = JSON.parse(
+        '{"Result":{"Status":"Active","UpdateTimestamp":1758000000,"QuotaUsage":[' +
+        '{"Level":"Session","Percent":42.5,"ResetTimestamp":1758003600},' +
+        '{"Level":"weekly","Percent":150},' +
+        '{"Level":"month","Percent":-3}]}}') as Record<string, Object>;
+      const meta = doubaoCodingPlanMeta(coding);
+      expect(meta.status).assertEqual('Active');
+      expect(meta.updatedAt).assertEqual(1758000000000);
+      const quotas = doubaoQuotasFromCodingPlan(coding);
+      expect(quotas.length).assertEqual(3);
+      expect(quotas[0].level).assertEqual('session');
+      expect(quotas[0].percent).assertEqual(42.5);
+      expect(quotas[0].resetAt).assertEqual(1758003600000);
+      expect(quotas[1].percent).assertEqual(100);
+      expect(quotas[2].percent).assertEqual(0);
+      // 缺少 QuotaUsage（计划被回收）→ 空数组，不抛异常
+      expect(doubaoQuotasFromCodingPlan(JSON.parse('{"Result":{"Status":"Expired"}}')).length)
+        .assertEqual(0);
+      expect(doubaoQuotasFromCodingPlan(null).length).assertEqual(0);
+
+      // Agent 计划（AFP）：used/quota 推算百分比；quota<=0 跳过
+      const agent: Record<string, Object> = JSON.parse(
+        '{"Result":{"AFPFiveHour":{"Quota":100,"Used":25,"ResetTime":1758000000000},' +
+        '"AFPWeekly":{"Quota":0,"Used":10},' +
+        '"AFPMonthly":{"Quota":200,"Used":50}}}') as Record<string, Object>;
+      const aq = doubaoQuotasFromAgentPlan(agent);
+      expect(aq.length).assertEqual(2);
+      expect(aq[0].level).assertEqual('agent_5h');
+      expect(aq[0].percent).assertEqual(25);
+      expect(aq[0].resetAt).assertEqual(1758000000000);
+      expect(aq[1].level).assertEqual('agent_monthly');
+      expect(aq[1].percent).assertEqual(25);
+    });
+
+    it('Doubao_signed_snapshot', 0, () => {
+      const meta: DoubaoPlanMeta = { status: 'Active', updatedAt: 1758000000000 };
+      const mixed: DoubaoQuota[] = [
+        { level: 'session', percent: 42, resetAt: 1000 },
+        { level: 'weekly', percent: 10, resetAt: 2000 },
+        { level: 'monthly', percent: 5, resetAt: 3000 },
+        { level: 'agent_5h', percent: 60, resetAt: 4000 },
+        { level: 'agent_weekly', percent: 20, resetAt: 5000 },
+      ];
+      const snap = doubaoSignedSnapshot(mixed, meta);
+      expect(snap.primary != null).assertTrue();
+      expect(snap.primary!.usedPercent).assertEqual(42);
+      expect(snap.primary!.resetsAt).assertEqual(1000);
+      expect(snap.secondary!.usedPercent).assertEqual(10);
+      expect(snap.tertiary!.usedPercent).assertEqual(5);
+      // Agent 计划窗口未被主/次档占用 → 进附加窗口
+      expect(snap.extraRateWindows.length).assertEqual(2);
+      expect(snap.extraRateWindows[0].id).assertEqual('doubao-agent-session');
+      expect(snap.extraRateWindows[0].title).assertEqual('Agent 计划 5 小时');
+      expect(snap.extraRateWindows[1].id).assertEqual('doubao-agent-weekly');
+      expect(snap.updatedAt).assertEqual(1758000000000);
+      expect(snap.identity!.loginMethod).assertEqual('Active');
+
+      // 仅 Agent 计划：补位主/次/第三窗口，且不在附加窗口重复展示
+      const agentOnly: DoubaoQuota[] = [
+        { level: 'agent_5h', percent: 60, resetAt: 4000 },
+        { level: 'agent_weekly', percent: 20, resetAt: 5000 },
+        { level: 'agent_monthly', percent: 8, resetAt: 6000 },
+      ];
+      const only = doubaoSignedSnapshot(agentOnly, meta);
+      expect(only.primary!.usedPercent).assertEqual(60);
+      expect(only.secondary!.usedPercent).assertEqual(20);
+      expect(only.tertiary!.usedPercent).assertEqual(8);
+      expect(only.extraRateWindows.length).assertEqual(0);
+
+      // 团队计划：前缀隔离，不与个人计划串档
+      const team: DoubaoQuota[] = [
+        { level: 'session', percent: 42, resetAt: 1000 },
+        { level: 'coding_team_session', percent: 90, resetAt: 9000 },
+        { level: 'agent_team_monthly', percent: 33, resetAt: 8000 },
+      ];
+      const teamSnap = doubaoSignedSnapshot(team, meta);
+      // 编码计划个人 session 占主窗口；coding_team_session 不串档
+      expect(teamSnap.primary!.usedPercent).assertEqual(42);
+      // 月度档缺失 → agent_team_monthly 补位第三窗口（不出现在附加窗口）
+      expect(teamSnap.tertiary!.usedPercent).assertEqual(33);
+      expect(teamSnap.extraRateWindows.length).assertEqual(1);
+      expect(teamSnap.extraRateWindows[0].id).assertEqual('doubao-coding-team-session');
+      expect(teamSnap.extraRateWindows[0].title).assertEqual('编码团队 5 小时');
+      expect(teamSnap.extraRateWindows[0].window.usedPercent).assertEqual(90);
+    });
+
+    it('Doubao_probe_headers', 0, () => {
+      const now = 1758000000000;
+      // 200 + 完整限额头：按已用比例生成主窗口，重置时长按秒累加
+      const full: Record<string, string> = {
+        'x-ratelimit-limit-requests': '100',
+        'x-ratelimit-remaining-requests': '30',
+        'x-ratelimit-reset-requests': '2m30s',
+      };
+      const ok = doubaoParseProbe(200, full, now);
+      expect(ok.window != null).assertTrue();
+      expect(ok.window!.usedPercent).assertEqual(70);
+      expect(ok.window!.resetsAt).assertEqual(now + 150000);
+      expect(ok.window!.usageKnown).assertTrue();
+      expect(ok.keyValid).assertTrue();
+      expect(ok.limitsReliable).assertTrue();
+      expect(ok.ambiguousZero).assertFalse();
+
+      // 200 + 剩余 0：歧义态，需二次探测确认
+      const zeroHeaders: Record<string, string> = {
+        'x-ratelimit-limit-requests': '100',
+        'x-ratelimit-remaining-requests': '0',
+      };
+      const zero = doubaoParseProbe(200, zeroHeaders, now);
+      expect(zero.ambiguousZero).assertTrue();
+      expect(zero.window!.usedPercent).assertEqual(100);
+
+      // 429 且带 limit（无 remaining）：请求桶耗尽，可靠
+      const limitedHeaders: Record<string, string> = { 'x-ratelimit-limit-requests': '100' };
+      const limited = doubaoParseProbe(429, limitedHeaders, now);
+      expect(limited.keyValid).assertTrue();
+      expect(limited.limitsReliable).assertTrue();
+      expect(limited.window!.usedPercent).assertEqual(100);
+      expect(limited.ambiguousZero).assertFalse();
+      // 429 且无 limit：限流原因不明，窗口不可得
+      const bareThrottle = doubaoParseProbe(429, {}, now);
+      expect(bareThrottle.keyValid).assertTrue();
+      expect(bareThrottle.limitsReliable).assertFalse();
+      expect(bareThrottle.window).assertEqual(null);
+
+      // 200 但缺限额头：Key 有效、窗口不可得（不用 100% 冒充）
+      const noHeaders = doubaoParseProbe(200, {}, now);
+      expect(noHeaders.keyValid).assertTrue();
+      expect(noHeaders.limitsReliable).assertFalse();
+      expect(noHeaders.window).assertEqual(null);
+      // 401：Key 无效
+      expect(doubaoParseProbe(401, {}, now).keyValid).assertFalse();
+
+      // 重置头解析：空串 / ISO8601 / 时长
+      expect(doubaoParseResetHeader('', now)).assertEqual(0);
+      expect(doubaoParseResetHeader('2026-09-21T03:04:05Z', now))
+        .assertEqual(Date.UTC(2026, 8, 21, 3, 4, 5));
+      expect(doubaoParseResetHeader('30s', now)).assertEqual(now + 30000);
+      expect(doubaoParseResetHeader('1h', now)).assertEqual(now + 3600000);
     });
   });
 }

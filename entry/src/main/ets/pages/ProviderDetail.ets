@@ -3,7 +3,16 @@
  * 展示全部用量窗口、余额、账号身份、明细与错误信息。
  */
 
-import { AuthKind, NamedRateWindow, ProviderDetailRow, ProviderDetailSection, ProviderState, ReminderConfig } from '../model/Models';
+import {
+  AuthKind,
+  NamedRateWindow,
+  needsSecondCredential,
+  ProviderDetailRow,
+  ProviderDetailSection,
+  ProviderState,
+  ReminderConfig,
+  secondCredentialHint
+} from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Reminders } from '../store/Reminders';
 import { Settings } from '../store/Settings';
@@ -87,10 +96,12 @@ struct ProviderDetail {
 
   /** 是否需要第二凭证（与设置页一致） */
   needSecond(pid: string): boolean {
-    return pid === 'claude' || pid === 'codex' || pid === 'kilo' ||
-      pid === 'xai' || pid === 'litellm' || pid === 'llmproxy' ||
-      pid === 'sub2api' || pid === 'devin' ||
-      pid === 'opencode' || pid === 'opencodego' || pid === 'groq';
+    return needsSecondCredential(pid);
+  }
+
+  /** 第二凭证输入框提示（与设置页一致） */
+  secondHint(pid: string): string {
+    return secondCredentialHint(pid);
   }
 
   /** 凭证缺失或已失效（401/403）时显示配置卡片 */
@@ -443,7 +454,7 @@ struct ProviderDetail {
                 this.credInput = v;
               })
             if (this.needSecond(this.providerId)) {
-              TextInput({ placeholder: '可选：组织 / 账号 ID', text: this.cred2Input })
+              TextInput({ placeholder: this.secondHint(this.providerId), text: this.cred2Input })
                 .fontSize(13)
                 .fontColor(Theme.text)
                 .placeholderColor(Theme.textDim)

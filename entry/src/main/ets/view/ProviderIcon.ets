@@ -79,6 +79,8 @@ export function iconFileFor(providerId: string): string | null {
     case 'opencode':
     case 'opencodego':
       return 'opencode.svg';
+    case 'doubao':
+      return 'doubao-color.svg';
     default:
       return null;
   }

@@ -9,6 +9,8 @@ import { parseJson, Json } from './Json';
 export class HttpResult {
   code: number = 0;
   body: string = '';
+  /** 响应头（键统一小写），供读取 x-ratelimit-* 等头部使用 */
+  headers: Record<string, string> = {};
 
   get ok(): boolean {
     return this.code >= 200 && this.code < 300;
@@ -63,6 +65,15 @@ export class Http {
       result.code = resp.responseCode;
       const raw = resp.result;
       result.body = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      const hdr = resp.header;
+      if (hdr != null) {
+        const rec = hdr as Record<string, Object>;
+        const hkeys = Object.keys(rec);
+        for (let i = 0; i < hkeys.length; i++) {
+          const hv = rec[hkeys[i]];
+          result.headers[hkeys[i].toLowerCase()] = typeof hv === 'string' ? hv as string : `${hv}`;
+        }
+      }
     } catch (e) {
       result.code = 0;
       result.body = e instanceof Error ? e.message : `${e}`;

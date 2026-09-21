@@ -4,7 +4,13 @@
  */
 
 import { promptAction } from '@kit.ArkUI';
-import { AuthKind, ProviderAccount, ProviderDescriptor } from '../model/Models';
+import {
+  AuthKind,
+  needsSecondCredential,
+  ProviderAccount,
+  ProviderDescriptor,
+  secondCredentialHint
+} from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
 import { Theme } from '../common/Theme';
@@ -26,6 +32,7 @@ struct ProviderSettingCard {
   @State renameText: string = '';
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
+  private secondHint: string = '可选：组织 / 账号 ID';
   private canWebLogin: boolean = false;
   /** 请求父页面弹确认框（卡片内不放弹窗，保证覆盖全屏与主题一致） */
   onAsk: (title: string, message: string, confirmText: string, action: () => void) => void =
@@ -46,10 +53,8 @@ struct ProviderSettingCard {
         this.credential = s.setting.credential;
         this.credential2 = s.setting.credential2;
         const pid = s.descriptor.id;
-        this.needSecond = pid === 'claude' || pid === 'codex' || pid === 'kilo' ||
-          pid === 'xai' || pid === 'litellm' || pid === 'llmproxy' ||
-          pid === 'sub2api' || pid === 'devin' ||
-          pid === 'opencode' || pid === 'opencodego' || pid === 'groq';
+        this.needSecond = needsSecondCredential(pid);
+        this.secondHint = secondCredentialHint(pid);
         this.canWebLogin = pid === 'claude' || pid === 'codex';
         break;
       }
@@ -241,7 +246,7 @@ struct ProviderSettingCard {
             })
 
           if (this.needSecond) {
-            TextInput({ text: this.credential2, placeholder: '可选：组织 / 账号 ID' })
+            TextInput({ text: this.credential2, placeholder: this.secondHint })
               .fontSize(13)
               .fontColor(Theme.text)
               .placeholderColor(Theme.textDim)

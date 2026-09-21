@@ -85,9 +85,8 @@ export function base64UrlDecode(text: string): string {
   }
 }
 
-/** 纯 TS SHA-256（FIPS 180-4），返回 32 字节 */
-export function sha256Bytes(input: string): number[] {
-  // UTF-8 编码
+/** 字符串 → UTF-8 字节数组 */
+export function utf8Bytes(input: string): number[] {
   const bytes: number[] = [];
   const utf8 = encodeURIComponent(input);
   for (let i = 0; i < utf8.length; i++) {
@@ -98,6 +97,21 @@ export function sha256Bytes(input: string): number[] {
       bytes.push(utf8.charCodeAt(i));
     }
   }
+  return bytes;
+}
+
+/** 字节数组 → 小写十六进制字符串 */
+export function hexFromBytes(bytes: number[]): string {
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) {
+    out += bytes[i].toString(16).padStart(2, '0');
+  }
+  return out;
+}
+
+/** 纯 TS SHA-256（FIPS 180-4）：字节数组 → 32 字节 */
+export function sha256Digest(input: number[]): number[] {
+  const bytes: number[] = input.slice();
   const bitLen = bytes.length * 8;
   bytes.push(0x80);
   while (bytes.length % 64 !== 56) {
@@ -173,6 +187,11 @@ export function sha256Bytes(input: string): number[] {
     out.push((h[i] >>> 24) & 0xff, (h[i] >>> 16) & 0xff, (h[i] >>> 8) & 0xff, h[i] & 0xff);
   }
   return out;
+}
+
+/** 纯 TS SHA-256（FIPS 180-4）：字符串 → 32 字节 */
+export function sha256Bytes(input: string): number[] {
+  return sha256Digest(utf8Bytes(input));
 }
 
 /** SHA-256 → Base64URL（PKCE S256 challenge 即此值） */

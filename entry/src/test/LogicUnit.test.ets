@@ -15,6 +15,7 @@ import {
   parseAccounts,
   pickAccount,
   removeAccountFromList,
+  renameAccountInList,
 } from '../main/ets/store/Settings';
 import {
   base64UrlDecode,
@@ -420,6 +421,24 @@ export default function logicUnitTest() {
       expect(s3.account.aid === s1.account.aid).assertFalse();
       expect(s3.account.aid === s2.account.aid).assertFalse();
       expect(s3.list.length).assertEqual(3);
+    });
+
+    it('Accounts_rename', 0, () => {
+      const list = parseAccounts(
+        '[{"aid":"a1","name":"账号 1","credential":"c1","credential2":"","refreshToken":""},' +
+        '{"aid":"a2","name":"账号 2","credential":"c2","credential2":"","refreshToken":""}]');
+      // 重命名只改目标账号名称，其余字段不变
+      const renamed = renameAccountInList(list, 'a2', '工作号');
+      expect(renamed.length).assertEqual(2);
+      expect(renamed[1].name).assertEqual('工作号');
+      expect(renamed[1].credential).assertEqual('c2');
+      expect(renamed[1].aid).assertEqual('a2');
+      expect(renamed[0].name).assertEqual('账号 1');
+      // 不存在的 aid：原样返回
+      const same = renameAccountInList(list, 'zz', 'x');
+      expect(same.length).assertEqual(2);
+      expect(same[0].name).assertEqual('账号 1');
+      expect(same[1].name).assertEqual('账号 2');
     });
   });
 }

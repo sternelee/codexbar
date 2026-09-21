@@ -116,6 +116,25 @@ export function addAccountToList(
   return { list: merged, account: fresh, deduped: false };
 }
 
+/** 重命名账号（返回新列表；aid 不存在时原样返回） */
+export function renameAccountInList(list: ProviderAccount[], aid: string, name: string): ProviderAccount[] {
+  const out: ProviderAccount[] = [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].aid === aid) {
+      out.push({
+        aid: list[i].aid,
+        name: name,
+        credential: list[i].credential,
+        credential2: list[i].credential2,
+        refreshToken: list[i].refreshToken,
+      });
+    } else {
+      out.push(list[i]);
+    }
+  }
+  return out;
+}
+
 /** 移除账号的结果：新列表与建议的新激活 ID（删的是激活账号时取第一个剩余，否则原激活） */
 export interface RemoveAccountResult {
   list: ProviderAccount[];
@@ -367,6 +386,11 @@ export class Settings {
     Settings.saveAccounts(providerId, res.list);
     Settings.setActiveAccountId(providerId, res.newActive);
     return res.newActive;
+  }
+
+  static renameAccount(providerId: string, aid: string, name: string): void {
+    const list = Settings.accounts(providerId);
+    Settings.saveAccounts(providerId, renameAccountInList(list, aid, name.trim()));
   }
 
   static accountCount(providerId: string): number {

@@ -3,6 +3,7 @@
  * 逐个服务商：开关、凭证输入、保存；凭证仅保存在本机 Preferences。
  */
 
+import { promptAction } from '@kit.ArkUI';
 import { AuthKind, ProviderAccount, ProviderDescriptor } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
@@ -20,6 +21,9 @@ struct ProviderSettingCard {
   @Prop @Watch('reloadFromStore') rev: number = 0;
   /** 卡片内账号操作计数：添加/切换/删除后 +1 立即重渲染 */
   @State accRev: number = 0;
+  /** 正在重命名的账号 ID 与输入内容（内联编辑行） */
+  @State renamingAid: string = '';
+  @State renameText: string = '';
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
   private canWebLogin: boolean = false;
@@ -61,7 +65,7 @@ struct ProviderSettingCard {
     Nav.toast('已保存');
   }
 
-  /** 删除账号（长按 chip 触发，确认后执行） */
+  /** 删除账号（长按菜单触发，确认后执行） */
   confirmDeleteAccount(a: ProviderAccount): void {
     AlertDialog.show({
       title: '删除账号',
@@ -80,6 +84,42 @@ struct ProviderSettingCard {
         }
       },
     });
+  }
+
+  /** 长按账号 chip：重命名 / 删除 动作菜单 */
+  showAccountActions(a: ProviderAccount): void {
+    promptAction.showActionMenu({
+      title: a.name,
+      buttons: [
+        { text: '重命名', color: Theme.text },
+        { text: '删除', color: Theme.danger },
+      ]
+    }).then((res: promptAction.ActionMenuSuccessResponse) => {
+      if (res.index === 0) {
+        this.renamingAid = a.aid;
+        this.renameText = a.name;
+        this.accRev += 1;
+      } else if (res.index === 1) {
+        this.confirmDeleteAccount(a);
+      }
+    }).catch(() => {});
+  }
+
+  submitRename(): void {
+    const name = this.renameText.trim();
+    if (this.renamingAid.length > 0 && name.length > 0) {
+      Settings.renameAccount(this.pid, this.renamingAid, name);
+      Nav.toast('已重命名');
+    }
+    this.renamingAid = '';
+    this.renameText = '';
+    this.accRev += 1;
+  }
+
+  cancelRename(): void {
+    this.renamingAid = '';
+    this.renameText = '';
+    this.accRev += 1;
   }
 
   /** 账号条：chip 切换激活、＋ 添加、长按删除。所有非演示服务商可用；
@@ -108,7 +148,7 @@ struct ProviderSettingCard {
               }
             })
             .gesture(LongPressGesture().onAction(() => {
-              this.confirmDeleteAccount(a);
+              this.showAccountActions(a);
             }))
         }, (a: ProviderAccount) => `${a.aid}_${Settings.activeAccountId(this.pid) === a.aid}_${this.rev}_${this.accRev}`)
         Text('＋')
@@ -122,6 +162,38 @@ struct ProviderSettingCard {
           })
       }
       .width('100%')
+
+      // 内联重命名行
+      if (this.renamingAid.length > 0) {
+        Row({ space: 8 }) {
+          TextInput({ text: this.renameText, placeholder: '账号名称' })
+            .fontSize(13)
+            .fontColor(Theme.text)
+            .placeholderColor(Theme.textDim)
+            .backgroundColor(Theme.input)
+            .borderRadius(9)
+            .height(34)
+            .layoutWeight(1)
+            .onChange((v: string) => {
+              this.renameText = v;
+            })
+          Text('✓')
+            .fontSize(15)
+            .fontColor(Theme.accent)
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .onClick(() => {
+              this.submitRename();
+            })
+          Text('✕')
+            .fontSize(14)
+            .fontColor(Theme.textDim)
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .onClick(() => {
+              this.cancelRename();
+            })
+        }
+        .width('100%')
+      }
     }
   }
 

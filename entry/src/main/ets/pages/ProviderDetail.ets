@@ -74,6 +74,18 @@ struct ProviderDetail {
     return AppStore.get().find(this.providerId);
   }
 
+  /** 激活账号显示名（无账号或未命中返回空串） */
+  activeAccountName(): string {
+    const accounts = Settings.accounts(this.providerId);
+    const activeAid = Settings.activeAccountId(this.providerId);
+    for (let i = 0; i < accounts.length; i++) {
+      if (accounts[i].aid === activeAid) {
+        return accounts[i].name;
+      }
+    }
+    return '';
+  }
+
   /** 持久化提醒配置；开启时顺带请求通知授权 */
   saveReminder(): void {
     const cfg: ReminderConfig = {
@@ -190,6 +202,12 @@ struct ProviderDetail {
             .fontSize(12)
             .fontColor(Theme.textDim)
             .maxLines(2)
+        }
+        // 多账号：显示当前激活账号
+        if (Settings.accountCount(this.providerId) > 0 && this.activeAccountName().length > 0) {
+          Text(`当前账号：${this.activeAccountName()}`)
+            .fontSize(12)
+            .fontColor(Theme.accent)
         }
         if (s.snapshot != null && !s.snapshot.ok) {
           Row({ space: 6 }) {

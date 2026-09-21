@@ -3,8 +3,9 @@
  * 逐个服务商：开关、凭证输入、保存；凭证仅保存在本机 Preferences。
  */
 
-import { AuthKind, ProviderDescriptor, ProviderState } from '../model/Models';
+import { AuthKind, ProviderAccount, ProviderDescriptor } from '../model/Models';
 import { AppStore } from '../store/AppStore';
+import { Settings } from '../store/Settings';
 import { Theme } from '../common/Theme';
 import { Nav } from '../common/Nav';
 import { ProviderIcon } from '../view/ProviderIcon';
@@ -15,12 +16,20 @@ struct ProviderSettingCard {
   @State isEnabled: boolean = false;
   @State credential: string = '';
   @State credential2: string = '';
+  /** 父页面版本号；返回本页/切换账号后 +1 触发重读 */
+  @Prop @Watch('reloadFromStore') rev: number = 0;
+  /** 卡片内账号操作计数：添加/切换/删除后 +1 立即重渲染 */
+  @State accRev: number = 0;
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
   private canWebLogin: boolean = false;
   pid: string = '';
 
   aboutToAppear(): void {
+    this.reloadFromStore();
+  }
+
+  reloadFromStore(): void {
     const store = AppStore.get();
     for (let i = 0; i < store.states.length; i++) {
       const s = store.states[i];
@@ -52,6 +61,83 @@ struct ProviderSettingCard {
     Nav.toast('已保存');
   }
 
+  /** 删除账号（长按 chip 触发，确认后执行） */
+  confirmDeleteAccount(a: ProviderAccount): void {
+    AlertDialog.show({
+      title: '删除账号',
+      message: `确定删除「${a.name}」？`,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '删除',
+        fontColor: Theme.danger,
+        action: () => {
+          Settings.removeAccount(this.pid, a.aid);
+          AppStore.get().reloadSetting(this.pid);
+          AppStore.get().refreshOne(this.pid);
+          this.reloadFromStore();
+          this.accRev += 1;
+          Nav.toast('已删除');
+        }
+      },
+    });
+  }
+
+  /** 账号条：chip 切换激活、＋ 添加、长按删除。所有非演示服务商可用；
+   *  Claude/Codex 的 ＋ 走网页登录，其余直接建空账号由用户填凭证 */
+  @Builder
+  accountBar() {
+    if (this.descriptor != null && this.descriptor.authKind !== AuthKind.DEMO) {
+      Row({ space: 8 }) {
+        Text('账号')
+          .fontSize(12)
+          .fontColor(Theme.textDim)
+        ForEach(Settings.accounts(this.pid), (a: ProviderAccount) => {
+          Text(a.name)
+            .fontSize(12)
+            .fontColor(Settings.activeAccountId(this.pid) === a.aid ? Theme.bg : Theme.textDim)
+            .backgroundColor(Settings.activeAccountId(this.pid) === a.aid ? Theme.accent : Theme.input)
+            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .borderRadius(9)
+            .maxLines(1)
+            .onClick(() => {
+              if (Settings.activeAccountId(this.pid) !== a.aid) {
+                AppStore.get().switchAccount(this.pid, a.aid);
+                this.reloadFromStore();
+                this.accRev += 1;
+                Nav.toast(`已切换到${a.name}`);
+              }
+            })
+            .gesture(LongPressGesture().onAction(() => {
+              this.confirmDeleteAccount(a);
+            }))
+        }, (a: ProviderAccount) => `${a.aid}_${Settings.activeAccountId(this.pid) === a.aid}_${this.rev}_${this.accRev}`)
+        Text('＋')
+          .fontSize(13)
+          .fontColor(Theme.accent)
+          .backgroundColor(Theme.input)
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .borderRadius(9)
+          .onClick(() => {
+            this.addAccount();
+          })
+      }
+      .width('100%')
+    }
+  }
+
+  /** ＋ 按钮：Claude/Codex 走网页登录加号；其他服务商建空账号待填凭证 */
+  addAccount(): void {
+    if (this.canWebLogin) {
+      Nav.toOAuthLogin(this.pid, true);
+      return;
+    }
+    const res = Settings.addAccount(this.pid, '', '', '');
+    AppStore.get().reloadSetting(this.pid);
+    this.reloadFromStore();
+    this.accRev += 1;
+    Nav.toast(`已添加${res.account.name}，填写凭证后保存`);
+  }
+
   build() {
     if (this.descriptor != null) {
       Column({ space: 10 }) {
@@ -70,6 +156,9 @@ struct ProviderSettingCard {
             })
         }
         .width('100%')
+
+        // 多账号条（Claude/Codex）
+        this.accountBar()
 
         if (this.descriptor.authKind !== AuthKind.DEMO) {
           TextInput({ text: this.credential, placeholder: this.descriptor.authHint })
@@ -157,6 +246,11 @@ struct SettingsPage {
     this.ver = AppStore.get().version;
   }
 
+  /** 从 OAuthLogin 等页面返回时刷新账号条 */
+  onPageShow(): void {
+    this.ver += 1;
+  }
+
   ids(v: number): string[] {
     const list: string[] = [];
     const states = AppStore.get().states;
@@ -204,7 +298,7 @@ struct SettingsPage {
 
         ForEach(this.ids(this.ver), (id: string) => {
           ListItem() {
-            ProviderSettingCard({ pid: id })
+            ProviderSettingCard({ pid: id, rev: this.ver })
           }
         }, (id: string) => id)
       }

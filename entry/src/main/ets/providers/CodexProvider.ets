@@ -75,12 +75,9 @@ class CodexProvider implements UsageProvider {
     return codexRefreshToken(rt);
   }
 
-  /** 续期后的令牌写回存储与状态中心，下次查询/展示直接用新值 */
+  /** 续期后的令牌写回存储（激活账号或旧键）与状态中心，下次查询/展示直接用新值 */
   private static persistTokens(set: CodexTokenSet): void {
-    Settings.setString('k_codex_c1', set.accessToken);
-    if (set.refreshToken.length > 0) {
-      Settings.setOauthRefreshToken('codex', set.refreshToken);
-    }
+    Settings.applyRefreshedTokens('codex', set.accessToken, set.refreshToken);
     const state = AppStore.get().find('codex');
     if (state != null) {
       state.setting.credential = set.accessToken;

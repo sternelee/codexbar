@@ -77,6 +77,29 @@ export class AppStore {
     }
   }
 
+  /** 切换激活账号：重读凭证并立即刷新该服务商 */
+  switchAccount(providerId: string, aid: string): void {
+    Settings.setActiveAccountId(providerId, aid);
+    const state = this.find(providerId);
+    if (state != null) {
+      state.setting = Settings.provider(providerId);
+      if (state.setting.credential.length > 0) {
+        this.refreshOne(providerId);
+      } else {
+        this.bump();
+      }
+    }
+  }
+
+  /** 设置变更后重读存储（如登录页新增账号返回时） */
+  reloadSetting(providerId: string): void {
+    const state = this.find(providerId);
+    if (state != null) {
+      state.setting = Settings.provider(providerId);
+    }
+    this.bump();
+  }
+
   async refreshOne(providerId: string): Promise<void> {
     const state = this.find(providerId);
     if (state == null || state.loading) {

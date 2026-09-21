@@ -10,6 +10,13 @@ import { zaiLimitWindow, t3chatFindCustomerData } from '../main/ets/providers/Mo
 import { evaluateReminder, ReminderHit } from '../main/ets/store/Reminders';
 import { Settings } from '../main/ets/store/Settings';
 import {
+  addAccountToList,
+  nextAccountName,
+  parseAccounts,
+  pickAccount,
+  removeAccountFromList,
+} from '../main/ets/store/Settings';
+import {
   base64UrlDecode,
   base64UrlEncode,
   codexAuthorizeUrl,
@@ -341,6 +348,78 @@ export default function logicUnitTest() {
       expect(extractSessionKey('sessionKey=sk-ant-sid01-abc; other=1')).assertEqual('sk-ant-sid01-abc');
       expect(extractSessionKey('other=1')).assertEqual('');
       expect(extractSessionKey('')).assertEqual('');
+    });
+
+    it('Accounts_parse_roundtrip', 0, () => {
+      const json = '[{"aid":"a1","name":"账号 1","credential":"sk-1","credential2":"org1","refreshToken":"rt1"},' +
+        '{"aid":"a2","name":"账号 2","credential":"sk-2","credential2":"","refreshToken":""}]';
+      const list = parseAccounts(json);
+      expect(list.length).assertEqual(2);
+      expect(list[0].aid).assertEqual('a1');
+      expect(list[0].name).assertEqual('账号 1');
+      expect(list[0].credential).assertEqual('sk-1');
+      expect(list[0].credential2).assertEqual('org1');
+      expect(list[0].refreshToken).assertEqual('rt1');
+      // 激活查找
+      expect(pickAccount(list, 'a2') != null).assertTrue();
+      if (pickAccount(list, 'a2') != null) {
+        expect(pickAccount(list, 'a2')!.credential).assertEqual('sk-2');
+      }
+      expect(pickAccount(list, '')).assertEqual(null);
+      expect(pickAccount(list, 'missing')).assertEqual(null);
+      // 损坏输入
+      expect(parseAccounts('').length).assertEqual(0);
+      expect(parseAccounts('not json').length).assertEqual(0);
+      expect(parseAccounts('[1,2,3]').length).assertEqual(0);
+      expect(parseAccounts('[{"name":"缺 aid"}]').length).assertEqual(0);
+    });
+
+    it('Accounts_add_dedupe_remove', 0, () => {
+      expect(nextAccountName([])).assertEqual('账号 1');
+      // 新增
+      const r1 = addAccountToList([], 'cred-1', '', 'rt-1', 1000);
+      expect(r1.deduped).assertFalse();
+      expect(r1.list.length).assertEqual(1);
+      expect(r1.account.name).assertEqual('账号 1');
+      expect(r1.account.aid).assertEqual('a1000');
+      // 同凭证去重：仅刷新辅助字段并复用
+      const r2 = addAccountToList(r1.list, 'cred-1', 'org-x', 'rt-2', 2000);
+      expect(r2.deduped).assertTrue();
+      expect(r2.list.length).assertEqual(1);
+      expect(r2.account.credential2).assertEqual('org-x');
+      expect(r2.account.refreshToken).assertEqual('rt-2');
+      // 不同凭证：新增为 账号 2
+      const r3 = addAccountToList(r2.list, 'cred-2', '', '', 3000);
+      expect(r3.deduped).assertFalse();
+      expect(r3.list.length).assertEqual(2);
+      expect(r3.account.name).assertEqual('账号 2');
+      // 删除激活账号 → 激活转移到第一个剩余
+      const rm1 = removeAccountFromList(r3.list, 'a1000', 'a1000');
+      expect(rm1.list.length).assertEqual(1);
+      expect(rm1.newActive).assertEqual('a3000');
+      // 删除非激活账号 → 激活不变
+      const rm2 = removeAccountFromList(r3.list, 'a3000', 'a1000');
+      expect(rm2.list.length).assertEqual(1);
+      expect(rm2.newActive).assertEqual('a1000');
+      // 删空
+      const rm3 = removeAccountFromList([{ aid: 'a1', name: 'n', credential: 'c', credential2: '', refreshToken: '' }], 'a1', 'a1');
+      expect(rm3.list.length).assertEqual(0);
+      expect(rm3.newActive).assertEqual('');
+      // 空凭证（待填账号）不去重：连续添加各自成账号
+      const e1 = addAccountToList([], '', '', '', 1000);
+      const e2 = addAccountToList(e1.list, '', '', '', 2000);
+      expect(e1.deduped).assertFalse();
+      expect(e2.deduped).assertFalse();
+      expect(e2.list.length).assertEqual(2);
+      expect(e2.account.name).assertEqual('账号 2');
+      // 同毫秒连续添加：aid 必须唯一
+      const s1 = addAccountToList([], 'x1', '', '', 5000);
+      const s2 = addAccountToList(s1.list, 'x2', '', '', 5000);
+      expect(s1.account.aid === s2.account.aid).assertFalse();
+      const s3 = addAccountToList(s2.list, 'x3', '', '', 5000);
+      expect(s3.account.aid === s1.account.aid).assertFalse();
+      expect(s3.account.aid === s2.account.aid).assertFalse();
+      expect(s3.list.length).assertEqual(3);
     });
   });
 }

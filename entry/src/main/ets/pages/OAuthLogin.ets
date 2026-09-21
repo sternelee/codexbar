@@ -14,7 +14,7 @@ import { ProviderSetting } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
 import { Theme } from '../common/Theme';
-import { Nav, parseDetailParam } from '../common/Nav';
+import { Nav, parseDetailMode, parseDetailParam } from '../common/Nav';
 import {
   CallbackCode,
   codexAuthorizeUrl,
@@ -39,17 +39,21 @@ struct OAuthLogin {
   private controller: web_webview.WebviewController = new web_webview.WebviewController();
   private pkce: PkcePair | null = null;
   private done: boolean = false;
+  private addMode: boolean = false;
   private timerId: number = -1;
 
   aboutToAppear(): void {
-    this.providerId = parseDetailParam(router.getParams() as Object | null);
+    const params = router.getParams() as Object | null;
+    this.providerId = parseDetailParam(params);
+    this.addMode = parseDetailMode(params) === 'add';
+    const addSuffix = this.addMode ? '（将添加为新账号）' : '';
     if (this.providerId === 'codex') {
       this.pkce = makePkce(Date.now());
       this.startUrl = codexAuthorizeUrl(this.pkce);
-      this.status = '在下方完成 ChatGPT 登录，授权后自动返回';
+      this.status = `在下方完成 ChatGPT 登录，授权后自动返回${addSuffix}`;
     } else if (this.providerId === 'claude') {
       this.startUrl = 'https://claude.ai/login';
-      this.status = '在下方登录 claude.ai，成功后自动返回';
+      this.status = `在下方登录 claude.ai，成功后自动返回${addSuffix}`;
       this.timerId = setInterval(() => {
         this.pollClaudeCookie();
       }, 2000);
@@ -122,7 +126,7 @@ struct OAuthLogin {
     await this.saveAndBack(set.accessToken, set.refreshToken, set.accountId);
   }
 
-  /** 保存凭证并返回（codex 可带 refreshToken/accountId） */
+  /** 保存凭证并返回：账号体系已存在或添加模式 → 账号入库；否则旧单凭证路径 */
   async saveAndBack(credential: string, refreshToken: string, accountId?: string): Promise<void> {
     const store = AppStore.get();
     const state = store.find(this.providerId);
@@ -131,13 +135,20 @@ struct OAuthLogin {
       : { enabled: true, credential: '', credential2: '' };
     let cred2 = current.credential2.trim();
     if (this.providerId === 'codex') {
-      // 用户已填账号 ID 则保留；否则用 JWT 里的
       if (cred2.length === 0 && accountId != null && accountId.length > 0) {
         cred2 = accountId;
       }
-      if (refreshToken.length > 0) {
-        Settings.setOauthRefreshToken(this.providerId, refreshToken);
-      }
+    }
+    if (this.addMode || Settings.accountCount(this.providerId) > 0) {
+      const res = Settings.addAccount(this.providerId, credential, cred2, refreshToken);
+      store.reloadSetting(this.providerId);
+      store.refreshOne(this.providerId);
+      Nav.toast(res.deduped ? `已切换到${res.account.name}` : `已添加${res.account.name}`);
+      Nav.back();
+      return;
+    }
+    if (this.providerId === 'codex' && refreshToken.length > 0) {
+      Settings.setOauthRefreshToken(this.providerId, refreshToken);
     }
     store.applySetting(this.providerId, {
       enabled: true,

@@ -6,7 +6,137 @@
 
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
-import { defaultReminder, ProviderSetting, ReminderConfig } from '../model/Models';
+import { defaultReminder, ProviderAccount, ProviderSetting, ReminderConfig } from '../model/Models';
+
+// ---------------- 账号列表纯函数（本地单元测试覆盖） ----------------
+
+/** 解析账号列表 JSON；损坏输入返回空数组 */
+export function parseAccounts(text: string): ProviderAccount[] {
+  if (text == null || text.length === 0) {
+    return [];
+  }
+  try {
+    const arr = JSON.parse(text) as ProviderAccount[];
+    if (!Array.isArray(arr)) {
+      return [];
+    }
+    const out: ProviderAccount[] = [];
+    for (let i = 0; i < arr.length; i++) {
+      const a = arr[i];
+      if (a != null && typeof a.aid === 'string' && (a.aid as string).length > 0) {
+        out.push({
+          aid: a.aid as string,
+          name: typeof a.name === 'string' ? a.name as string : '',
+          credential: typeof a.credential === 'string' ? a.credential as string : '',
+          credential2: typeof a.credential2 === 'string' ? a.credential2 as string : '',
+          refreshToken: typeof a.refreshToken === 'string' ? a.refreshToken as string : '',
+        });
+      }
+    }
+    return out;
+  } catch (e) {
+    return [];
+  }
+}
+
+export function accountsToJson(list: ProviderAccount[]): string {
+  return JSON.stringify(list);
+}
+
+/** 取激活账号；aid 为空或不存在时返回 null */
+export function pickAccount(list: ProviderAccount[], aid: string): ProviderAccount | null {
+  if (aid == null || aid.length === 0) {
+    return null;
+  }
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].aid === aid) {
+      return list[i];
+    }
+  }
+  return null;
+}
+
+/** 下一个自动账号名（"账号 N"，N = 现有数量 + 1） */
+export function nextAccountName(list: ProviderAccount[]): string {
+  return `账号 ${list.length + 1}`;
+}
+
+export interface AddAccountResult {
+  list: ProviderAccount[];
+  /** 实际生效（新建或去重命中）的账号 */
+  account: ProviderAccount;
+  /** true 表示凭证已存在，仅激活了既有账号 */
+  deduped: boolean;
+}
+
+/** 生成不与现有列表冲突的账号 ID（同毫秒连续添加时追加随机后缀） */
+export function makeAccountAid(now: number, list: ProviderAccount[]): string {
+  let aid = `a${now}`;
+  let salt = 0;
+  while (true) {
+    let exists = false;
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].aid === aid) {
+        exists = true;
+        break;
+      }
+    }
+    if (!exists) {
+      return aid;
+    }
+    salt += 1;
+    aid = `a${now}_${salt}_${Math.floor(Math.random() * 100000)}`;
+  }
+}
+
+/** 向列表添加账号：同凭证去重（仅激活既有），新账号自动命名并置为最后 */
+export function addAccountToList(
+  list: ProviderAccount[],
+  credential: string,
+  credential2: string,
+  refreshToken: string,
+  now: number
+): AddAccountResult {
+  for (let i = 0; i < list.length; i++) {
+    if (credential.length > 0 && list[i].credential === credential) {
+      // 同凭证：刷新辅助字段并复用
+      list[i].credential2 = credential2.length > 0 ? credential2 : list[i].credential2;
+      list[i].refreshToken = refreshToken.length > 0 ? refreshToken : list[i].refreshToken;
+      return { list: list, account: list[i], deduped: true };
+    }
+  }
+  const fresh: ProviderAccount = {
+    aid: makeAccountAid(now, list),
+    name: nextAccountName(list),
+    credential: credential,
+    credential2: credential2,
+    refreshToken: refreshToken,
+  };
+  const merged = list.concat([fresh]);
+  return { list: merged, account: fresh, deduped: false };
+}
+
+/** 移除账号的结果：新列表与建议的新激活 ID（删的是激活账号时取第一个剩余，否则原激活） */
+export interface RemoveAccountResult {
+  list: ProviderAccount[];
+  newActive: string;
+}
+
+export function removeAccountFromList(
+  list: ProviderAccount[],
+  aid: string,
+  activeAid: string
+): RemoveAccountResult {
+  const rest: ProviderAccount[] = [];
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].aid !== aid) {
+      rest.push(list[i]);
+    }
+  }
+  const newActive = activeAid === aid ? (rest.length > 0 ? rest[0].aid : '') : activeAid;
+  const res: RemoveAccountResult = { list: rest, newActive: newActive };
+  return res;
+}
 
 const STORE_NAME = 'codexbar_settings';
 const PREFIX = 'p_';
@@ -65,9 +195,19 @@ export class Settings {
     p.flush();
   }
 
-  /** 读取某服务商配置 */
+  /** 读取某服务商配置：激活账号优先，回退旧单凭证键 */
   static provider(providerId: string): ProviderSetting {
+    const accounts = Settings.accounts(providerId);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
     const enabledRaw = Settings.getString(`${PREFIX}${providerId}`, '');
+    if (active != null) {
+      const s: ProviderSetting = {
+        enabled: enabledRaw === '1' || (enabledRaw === '' && active.credential.length > 0),
+        credential: active.credential,
+        credential2: active.credential2,
+      };
+      return s;
+    }
     const cred = Settings.getString(`${KEY_PREFIX}${providerId}_c1`, '');
     const cred2 = Settings.getString(`${KEY_PREFIX}${providerId}_c2`, '');
     const s: ProviderSetting = {
@@ -76,13 +216,6 @@ export class Settings {
       credential2: cred2,
     };
     return s;
-  }
-
-  /** 保存某服务商配置 */
-  static saveProvider(providerId: string, setting: ProviderSetting): void {
-    Settings.setString(`${PREFIX}${providerId}`, setting.enabled ? '1' : '0');
-    Settings.setString(`${KEY_PREFIX}${providerId}_c1`, setting.credential);
-    Settings.setString(`${KEY_PREFIX}${providerId}_c2`, setting.credential2);
   }
 
   /** 上次成功刷新时间（毫秒） */
@@ -138,12 +271,105 @@ export class Settings {
     Settings.setString(`f_${kind}_${providerId}`, key);
   }
 
-  /** OAuth refresh token（Codex 网页登录后保存，用于 access token 过期时静默续期） */
+  /** OAuth refresh token（Codex）：激活账号优先，回退旧键 */
   static oauthRefreshToken(providerId: string): string {
+    const accounts = Settings.accounts(providerId);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
+    if (active != null) {
+      return active.refreshToken;
+    }
     return Settings.getString(`rt_${providerId}`, '');
   }
 
   static setOauthRefreshToken(providerId: string, token: string): void {
+    const accounts = Settings.accounts(providerId);
+    const activeAid = Settings.activeAccountId(providerId);
+    const active = pickAccount(accounts, activeAid);
+    if (active != null) {
+      active.refreshToken = token;
+      Settings.saveAccounts(providerId, accounts);
+      return;
+    }
     Settings.setString(`rt_${providerId}`, token);
+  }
+
+  /** 登录后写入令牌：有账号体系时更新激活账号，否则写旧键 */
+  static applyRefreshedTokens(providerId: string, accessToken: string, refreshToken: string): void {
+    const accounts = Settings.accounts(providerId);
+    const activeAid = Settings.activeAccountId(providerId);
+    const active = pickAccount(accounts, activeAid);
+    if (active != null) {
+      active.credential = accessToken;
+      if (refreshToken.length > 0) {
+        active.refreshToken = refreshToken;
+      }
+      Settings.saveAccounts(providerId, accounts);
+      return;
+    }
+    Settings.setString(`${KEY_PREFIX}${providerId}_c1`, accessToken);
+    if (refreshToken.length > 0) {
+      Settings.setString(`rt_${providerId}`, refreshToken);
+    }
+  }
+
+  /** 手工编辑凭证：有账号体系时写入激活账号，否则走旧键 */
+  static saveProvider(providerId: string, setting: ProviderSetting): void {
+    const accounts = Settings.accounts(providerId);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
+    if (active != null) {
+      active.credential = setting.credential;
+      active.credential2 = setting.credential2;
+      Settings.saveAccounts(providerId, accounts);
+      Settings.setString(`${PREFIX}${providerId}`, setting.enabled ? '1' : '0');
+      return;
+    }
+    Settings.setString(`${PREFIX}${providerId}`, setting.enabled ? '1' : '0');
+    Settings.setString(`${KEY_PREFIX}${providerId}_c1`, setting.credential);
+    Settings.setString(`${KEY_PREFIX}${providerId}_c2`, setting.credential2);
+  }
+
+  // ---------------- 多账号（Claude/Codex 会话型） ----------------
+
+  static accounts(providerId: string): ProviderAccount[] {
+    return parseAccounts(Settings.getString(`acc_${providerId}`, ''));
+  }
+
+  static saveAccounts(providerId: string, list: ProviderAccount[]): void {
+    Settings.setString(`acc_${providerId}`, accountsToJson(list));
+  }
+
+  static activeAccountId(providerId: string): string {
+    return Settings.getString(`act_${providerId}`, '');
+  }
+
+  static setActiveAccountId(providerId: string, aid: string): void {
+    Settings.setString(`act_${providerId}`, aid);
+  }
+
+  /** 登录结果入库：添加（或去重激活）账号并设为激活；返回生效账号与是否去重命中 */
+  static addAccount(
+    providerId: string,
+    credential: string,
+    credential2: string,
+    refreshToken: string
+  ): AddAccountResult {
+    const list = Settings.accounts(providerId);
+    const res = addAccountToList(list, credential, credential2, refreshToken, Date.now());
+    Settings.saveAccounts(providerId, res.list);
+    Settings.setActiveAccountId(providerId, res.account.aid);
+    return res;
+  }
+
+  static removeAccount(providerId: string, aid: string): string {
+    const list = Settings.accounts(providerId);
+    const activeAid = Settings.activeAccountId(providerId);
+    const res = removeAccountFromList(list, aid, activeAid);
+    Settings.saveAccounts(providerId, res.list);
+    Settings.setActiveAccountId(providerId, res.newActive);
+    return res.newActive;
+  }
+
+  static accountCount(providerId: string): number {
+    return Settings.accounts(providerId).length;
   }
 }

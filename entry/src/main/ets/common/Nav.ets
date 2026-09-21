@@ -6,6 +6,8 @@ import { router, promptAction } from '@kit.ArkUI';
 
 export class DetailRouteParam {
   id: string = '';
+  /** 可选：'add' 表示网页登录用于新增账号（多账号） */
+  mode: string = '';
 }
 
 /**
@@ -24,6 +26,18 @@ export function parseDetailParam(raw: Object | null): string {
   return '';
 }
 
+/** 解析路由附加模式（跨端序列化后退化为普通对象，按属性读取） */
+export function parseDetailMode(raw: Object | null): string {
+  if (raw == null) {
+    return '';
+  }
+  const p = raw as DetailRouteParam;
+  if (p.mode != null && typeof p.mode === 'string') {
+    return p.mode as string;
+  }
+  return '';
+}
+
 export class Nav {
   static toDetail(providerId: string): void {
     const p = new DetailRouteParam();
@@ -35,9 +49,10 @@ export class Nav {
     router.pushUrl({ url: 'pages/SettingsPage' });
   }
 
-  static toOAuthLogin(providerId: string): void {
+  static toOAuthLogin(providerId: string, addMode: boolean = false): void {
     const p = new DetailRouteParam();
     p.id = providerId;
+    p.mode = addMode ? 'add' : '';
     router.pushUrl({ url: 'pages/OAuthLogin', params: p });
   }
 

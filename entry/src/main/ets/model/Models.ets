@@ -148,6 +148,20 @@ export interface ReminderConfig {
   resetLeadMinutes: number;
 }
 
+/** 服务商的一个账号（多账号切换；Claude/Codex 等会话型服务商） */
+export interface ProviderAccount {
+  /** 账号 ID（登录时间戳生成，稳定） */
+  aid: string;
+  /** 显示名（自动编号"账号 N"） */
+  name: string;
+  /** API Key / sessionKey / access token */
+  credential: string;
+  /** 可选第二凭证（如 Codex 账号 ID） */
+  credential2: string;
+  /** OAuth refresh token（Codex 专用，其余为空） */
+  refreshToken: string;
+}
+
 /** ReminderConfig 默认值（配置缺省/解析失败时） */
 export function defaultReminder(): ReminderConfig {
   return { enabled: false, usageThreshold: 90, resetLeadMinutes: 15 };

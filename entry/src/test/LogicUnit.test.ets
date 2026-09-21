@@ -9,6 +9,18 @@ import { chutesWindow } from '../main/ets/providers/MoreProviders';
 import { zaiLimitWindow, t3chatFindCustomerData } from '../main/ets/providers/MoreProviders2';
 import { evaluateReminder, ReminderHit } from '../main/ets/store/Reminders';
 import { Settings } from '../main/ets/store/Settings';
+import {
+  base64UrlDecode,
+  base64UrlEncode,
+  codexAuthorizeUrl,
+  decodeJwtPayload,
+  extractChatgptAccountId,
+  extractSessionKey,
+  makePkce,
+  parseCallbackUrl,
+  sha256Base64Url,
+  sha256Bytes,
+} from '../main/ets/common/OAuth';
 
 /** 构造只带一个主窗口的服务商状态（提醒测试用） */
 function stateWith(primary: RateWindow): ProviderState {
@@ -263,6 +275,72 @@ export default function logicUnitTest() {
       Settings.saveReminder('y', { enabled: true, usageThreshold: 80, resetLeadMinutes: 5 });
       expect(Settings.reminder('y').usageThreshold).assertEqual(dflt.usageThreshold);
       expect(Settings.reminderFiredKey('x', 'usage')).assertEqual('');
+    });
+
+    it('OAuth_sha256_base64url', 0, () => {
+      // FIPS 180-4 测试向量
+      const abc = sha256Bytes('abc');
+      expect(abc.length).assertEqual(32);
+      expect(abc[0]).assertEqual(0xba);
+      expect(abc[1]).assertEqual(0x78);
+      expect(abc[31]).assertEqual(0xad);
+      // Base64URL（无填充）
+      expect(sha256Base64Url('abc')).assertEqual('ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0');
+      expect(sha256Base64Url('')).assertEqual('47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU');
+      expect(sha256Base64Url('hello world')).assertEqual('uU0nuZNNPgilLlLX2n2r-sSE7-N6U4DukIj3rOLvzek');
+      // 编解码回环（ASCII）
+      const round = base64UrlDecode(base64UrlEncode([104, 105, 33]));
+      expect(round).assertEqual('hi!');
+    });
+
+    it('OAuth_pkce_and_authorize_url', 0, () => {
+      const pkce = makePkce(1758000000000);
+      expect(pkce.verifier.length >= 43).assertTrue();
+      expect(pkce.verifier.length <= 128).assertTrue();
+      expect(pkce.challenge).assertEqual(sha256Base64Url(pkce.verifier));
+      expect(pkce.state.length > 0).assertTrue();
+      // 不同 seed 生成不同 verifier（随机性）
+      const other = makePkce(1758000000001);
+      expect(other.verifier === pkce.verifier).assertFalse();
+
+      const url = codexAuthorizeUrl(pkce);
+      expect(url.startsWith('https://auth.openai.com/oauth/authorize?')).assertTrue();
+      expect(url.indexOf('client_id=app_EMoamEEZ73f0CkXaXp7hrann') >= 0).assertTrue();
+      expect(url.indexOf('response_type=code') >= 0).assertTrue();
+      expect(url.indexOf('code_challenge_method=S256') >= 0).assertTrue();
+      expect(url.indexOf('redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback') >= 0).assertTrue();
+      expect(url.indexOf(`state=${pkce.state}`) >= 0).assertTrue();
+    });
+
+    it('OAuth_parse_callback_and_jwt', 0, () => {
+      // 回调解析
+      const cb = parseCallbackUrl('http://localhost:1455/auth/callback?code=abc123&state=xyz');
+      expect(cb != null).assertTrue();
+      if (cb != null) {
+        expect(cb.code).assertEqual('abc123');
+        expect(cb.state).assertEqual('xyz');
+      }
+      expect(parseCallbackUrl('http://localhost:1455/auth/callback')).assertEqual(null);
+      expect(parseCallbackUrl('')).assertEqual(null);
+      const enc = parseCallbackUrl('http://localhost:1455/auth/callback?code=a%2Fb&state=s');
+      if (enc != null) {
+        expect(enc.code).assertEqual('a/b');
+      }
+
+      // JWT payload（根声明）
+      const jwt = `header.${'eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2NfMTIzIn0'}.sig`;
+      expect(extractChatgptAccountId(jwt)).assertEqual('acc_123');
+      // 嵌套 auth 声明
+      const jwt2 = `header.${'eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjXzQ1NiJ9fQ'}.sig`;
+      expect(extractChatgptAccountId(jwt2)).assertEqual('acc_456');
+      // 非 JWT
+      expect(extractChatgptAccountId('not-a-jwt')).assertEqual('');
+      expect(decodeJwtPayload('a.b.c')).assertEqual(null);
+
+      // Claude sessionKey 提取
+      expect(extractSessionKey('sessionKey=sk-ant-sid01-abc; other=1')).assertEqual('sk-ant-sid01-abc');
+      expect(extractSessionKey('other=1')).assertEqual('');
+      expect(extractSessionKey('')).assertEqual('');
     });
   });
 }

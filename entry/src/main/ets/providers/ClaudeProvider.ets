@@ -18,7 +18,7 @@ class ClaudeWebProvider implements UsageProvider {
     title: 'Claude',
     authKind: AuthKind.SESSION,
     accentColor: '#D97757',
-    authHint: '粘贴 claude.ai 的 sessionKey（浏览器 Cookie，sk-ant-sid01-… 开头）',
+    authHint: '粘贴 claude.ai 的 sessionKey（sk-ant-sid01-… 开头），或在设置页「网页登录」直接登录',
     authUrl: 'https://claude.ai/settings/billing',
   };
 

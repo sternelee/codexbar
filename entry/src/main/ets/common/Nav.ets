@@ -35,6 +35,12 @@ export class Nav {
     router.pushUrl({ url: 'pages/SettingsPage' });
   }
 
+  static toOAuthLogin(providerId: string): void {
+    const p = new DetailRouteParam();
+    p.id = providerId;
+    router.pushUrl({ url: 'pages/OAuthLogin', params: p });
+  }
+
   static back(): void {
     router.back();
   }

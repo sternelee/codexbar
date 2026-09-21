@@ -43,6 +43,8 @@
 		8BE015E910D546ABB57BAB80 /* libarkui_slider.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4C4E6C43B7354429B648B41B /* libarkui_slider.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F33CE403C1BE48D9A923DC9F /* libnotificationmanager.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9F511F27C37D4C5EA7826B9E /* libnotificationmanager.xcframework */; };
 		142FCED9E942427C8654FA0B /* libnotificationmanager.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9F511F27C37D4C5EA7826B9E /* libnotificationmanager.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B065018F45824DE489D66C4C /* libweb_webview.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFA34DFC1A3F4AAB8B787C9E /* libweb_webview.xcframework */; };
+		D20969D8B1294045B2DA23E6 /* libweb_webview.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AFA34DFC1A3F4AAB8B787C9E /* libweb_webview.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -67,6 +69,7 @@
 		54E1AE9FF6CE45399C292231 /* libcrypto_openssl.xcframework in Embed Frameworks */,
 		8BE015E910D546ABB57BAB80 /* libarkui_slider.xcframework in Embed Frameworks */,
 		142FCED9E942427C8654FA0B /* libnotificationmanager.xcframework in Embed Frameworks */,
+		D20969D8B1294045B2DA23E6 /* libweb_webview.xcframework in Embed Frameworks */,
 );
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -99,6 +102,7 @@
 		8D887D0C23FA4A4D9F059EE7 /* libcrypto_openssl.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libcrypto_openssl.xcframework; path = frameworks/libcrypto_openssl.xcframework; sourceTree = "<group>"; };
 		4C4E6C43B7354429B648B41B /* libarkui_slider.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libarkui_slider.xcframework; path = frameworks/libarkui_slider.xcframework; sourceTree = "<group>"; };
 		9F511F27C37D4C5EA7826B9E /* libnotificationmanager.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libnotificationmanager.xcframework; path = frameworks/libnotificationmanager.xcframework; sourceTree = "<group>"; };
+		AFA34DFC1A3F4AAB8B787C9E /* libweb_webview.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = libweb_webview.xcframework; path = frameworks/libweb_webview.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +125,7 @@
 		810E29BC8BA74A7DB88F666D /* libcrypto_openssl.xcframework in Frameworks */,
 		6C0627ACE39A448C98A7987B /* libarkui_slider.xcframework in Frameworks */,
 		F33CE403C1BE48D9A923DC9F /* libnotificationmanager.xcframework in Frameworks */,
+		B065018F45824DE489D66C4C /* libweb_webview.xcframework in Frameworks */,
 );
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,6 +183,7 @@
 		8D887D0C23FA4A4D9F059EE7 /* libcrypto_openssl.xcframework */,
 		4C4E6C43B7354429B648B41B /* libarkui_slider.xcframework */,
 		9F511F27C37D4C5EA7826B9E /* libnotificationmanager.xcframework */,
+		AFA34DFC1A3F4AAB8B787C9E /* libweb_webview.xcframework */,
 );
 			name = Frameworks;
 			sourceTree = "<group>";

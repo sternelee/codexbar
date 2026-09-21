@@ -2,6 +2,7 @@
   "src": [
     "pages/Index",
     "pages/ProviderDetail",
-    "pages/SettingsPage"
+    "pages/SettingsPage",
+    "pages/OAuthLogin"
   ]
 }

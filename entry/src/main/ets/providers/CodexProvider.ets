@@ -7,12 +7,18 @@
  * → { "rate_limit": { "primary_window": {used_percent, reset_at(unix秒), limit_window_seconds},
  *                      "secondary_window": {...} },
  *     "additional_rate_limits": [{limit_name, rate_limit:{...}}] }
+ *
+ * 令牌来源：设置页「网页登录」PKCE 授权（OAuthLogin）或手工粘贴；
+ * 401/403 时用存储的 refresh token 静默续期并重试一次。
  */
 
-import { Http } from '../net/Http';
-import { asArray, asObj, Json, num, optNum, str } from '../net/Json';
+import { Http, HttpResult } from '../net/Http';
+import { asArray, asObj, Json, optNum, str } from '../net/Json';
 import { makeWindow, NamedRateWindow, ProviderDescriptor, ProviderSetting, RateWindow, UsageSnapshot, AuthKind } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
+import { Settings } from '../store/Settings';
+import { AppStore } from '../store/AppStore';
+import { codexRefreshToken, CodexTokenSet } from '../common/OAuth';
 
 class CodexProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
@@ -20,29 +26,68 @@ class CodexProvider implements UsageProvider {
     title: 'Codex (ChatGPT)',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#10A37F',
-    authHint: '粘贴 ChatGPT OAuth access token；可选第二栏填组织/账号 ID（ChatGPT-Account-Id）',
+    authHint: '粘贴 ChatGPT OAuth access token，或在设置页「网页登录」直接授权；可选第二栏填账号 ID',
     authUrl: 'https://chatgpt.com/codex',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
-    const token = setting.credential.trim();
+    let token = setting.credential.trim();
     if (token.length === 0) {
       return UsageSnapshot.failure('未配置 access token');
     }
+    const accountId = setting.credential2.trim();
+
+    let resp = await CodexProvider.fetchUsage(token, accountId);
+    if (resp.code === 401 || resp.code === 403) {
+      // 令牌过期：refresh token 静默续期后重试一次
+      const refreshed = await CodexProvider.tryRefresh();
+      if (refreshed.error.length === 0) {
+        token = refreshed.accessToken;
+        CodexProvider.persistTokens(refreshed);
+        resp = await CodexProvider.fetchUsage(token, accountId);
+      }
+    }
+    if (!resp.ok) {
+      return UsageSnapshot.failure(resp.errorText());
+    }
+    return CodexProvider.parseUsage(resp);
+  }
+
+  private static async fetchUsage(token: string, accountId: string): Promise<HttpResult> {
     const headers: Record<string, string> = {
       'authorization': `Bearer ${token}`,
       'accept': 'application/json',
       'user-agent': 'CodexBar',
     };
-    const accountId = setting.credential2.trim();
     if (accountId.length > 0) {
       headers['chatgpt-account-id'] = accountId;
     }
+    return Http.get('https://chatgpt.com/backend-api/wham/usage', headers);
+  }
 
-    const resp = await Http.get('https://chatgpt.com/backend-api/wham/usage', headers);
-    if (!resp.ok) {
-      return UsageSnapshot.failure(resp.errorText());
+  /** 尝试 refresh token 换新 access token；无存储或换发失败返回 error 非空 */
+  private static async tryRefresh(): Promise<CodexTokenSet> {
+    const rt = Settings.oauthRefreshToken('codex');
+    if (rt.length === 0) {
+      const none: CodexTokenSet = { accessToken: '', refreshToken: '', accountId: '', error: 'no_refresh_token' };
+      return none;
     }
+    return codexRefreshToken(rt);
+  }
+
+  /** 续期后的令牌写回存储与状态中心，下次查询/展示直接用新值 */
+  private static persistTokens(set: CodexTokenSet): void {
+    Settings.setString('k_codex_c1', set.accessToken);
+    if (set.refreshToken.length > 0) {
+      Settings.setOauthRefreshToken('codex', set.refreshToken);
+    }
+    const state = AppStore.get().find('codex');
+    if (state != null) {
+      state.setting.credential = set.accessToken;
+    }
+  }
+
+  private static parseUsage(resp: HttpResult): UsageSnapshot {
     const root = asObj(resp.json());
     if (root == null) {
       return UsageSnapshot.failure('响应解析失败');

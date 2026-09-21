@@ -137,4 +137,13 @@ export class Settings {
   static setReminderFiredKey(providerId: string, kind: string, key: string): void {
     Settings.setString(`f_${kind}_${providerId}`, key);
   }
+
+  /** OAuth refresh token（Codex 网页登录后保存，用于 access token 过期时静默续期） */
+  static oauthRefreshToken(providerId: string): string {
+    return Settings.getString(`rt_${providerId}`, '');
+  }
+
+  static setOauthRefreshToken(providerId: string, token: string): void {
+    Settings.setString(`rt_${providerId}`, token);
+  }
 }

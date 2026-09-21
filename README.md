@@ -12,6 +12,7 @@
 - **仪表盘**：服务商卡片列表，用量进度条（会话 / 每周 / 每月窗口）、重置倒计时（秒级刷新）、余额展示、下拉刷新与一键全量刷新。
 - **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新。
 - **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效。
+- **网页登录**（Claude / Codex）：设置页点「网页登录」在应用内 Web 组件直接完成登录——Claude 登录 claude.ai 后自动捕获 `sessionKey` Cookie（`fetchCookie` 轮询）；Codex 走完整 PKCE 授权码流程（client_id/端点与 Codex CLI 一致，回调 `localhost:1455` 由 Web 组件拦截换取令牌，access token 自动解析 `chatgpt_account_id`），支持 refresh token 静默续期（401/403 自动换新重试）。
 - **设置页**：逐服务商开关 + 凭证录入，凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
@@ -89,7 +90,8 @@ entry/src/main/ets/
 │   ├── Theme.ets             ← 菜单栏弹层深色风格（docs/codexbar.png）
 │   ├── Format.ets            ← 倒计时/百分比/金额格式化
 │   ├── Nav.ets               ← 路由与 Toast
-│   └── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求）
+│   ├── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求）
+│   └── OAuth.ets             ← 纯 TS SHA-256/PKCE/JWT 解码 + Codex 授权码换令牌/刷新
 ├── net/
 │   ├── Http.ets              ← ProviderHTTPTransport（@ohos.net.http 封装，ArkUI-X 三端映射）
 │   └── Json.ets              ← JSONSerialization 解析辅助（ArkTS 严格模式）
@@ -115,7 +117,8 @@ entry/src/main/ets/
 ├── pages/
 │   ├── Index.ets             ← 菜单弹层 → 移动仪表盘
 │   ├── ProviderDetail.ets    ← 服务商详情
-│   └── SettingsPage.ets      ← Settings → Providers 设置
+│   ├── SettingsPage.ets      ← Settings → Providers 设置
+│   └── OAuthLogin.ets        ← 应用内网页登录（Web 组件 + 回调拦截 + Cookie 轮询）
 └── entryability/EntryAbility.ets
 ```
 
@@ -180,6 +183,5 @@ xcrun simctl launch <udid> com.example.codexbar
 ## 后续计划
 
 - 更多服务商（MiniMax、智谱 GLM、火山方舟/豆包、Groq、xAI 等）
-- Claude / Codex 移动端 OAuth 完整流程（替代手工粘贴 sessionKey/token）
 - 桌面小组件（对标 macOS WidgetExtension）与用量历史曲线
 - 多账号切换（对应 macOS 版 Managed Accounts）

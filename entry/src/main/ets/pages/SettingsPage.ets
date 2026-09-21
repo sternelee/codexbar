@@ -17,6 +17,7 @@ struct ProviderSettingCard {
   @State credential2: string = '';
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
+  private canWebLogin: boolean = false;
   pid: string = '';
 
   aboutToAppear(): void {
@@ -33,6 +34,7 @@ struct ProviderSettingCard {
           pid === 'xai' || pid === 'litellm' || pid === 'llmproxy' ||
           pid === 'sub2api' || pid === 'devin' ||
           pid === 'opencode' || pid === 'opencodego' || pid === 'groq';
+        this.canWebLogin = pid === 'claude' || pid === 'codex';
         break;
       }
     }
@@ -100,6 +102,18 @@ struct ProviderSettingCard {
         }
 
         Row({ space: 10 }) {
+          if (this.canWebLogin) {
+            Button('网页登录')
+              .fontSize(13)
+              .fontColor(Theme.accent)
+              .backgroundColor(Theme.input)
+              .border({ width: 1, color: Theme.accent })
+              .height(30)
+              .padding({ left: 14, right: 14 })
+              .onClick(() => {
+                Nav.toOAuthLogin(this.pid);
+              })
+          }
           if (this.descriptor.authUrl.length > 0) {
             Text(`获取凭证 ↗`)
               .fontSize(12)

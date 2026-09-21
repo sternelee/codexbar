@@ -19,13 +19,16 @@ export class Format {
     return `${symbol}${amount.toFixed(2)}`;
   }
 
-  /** 剩余毫秒 → "3天4小时" / "2小时15分" / "45分钟" / "30秒" */
+  /** 剩余毫秒 → "3天4小时" / "2小时15分" / "45分钟" / "30秒"；超过 99 天按绝对时间显示 */
   static countdown(msUntil: number): string {
     if (msUntil <= 0) {
       return '已重置';
     }
     const totalSec = Math.floor(msUntil / 1000);
     const days = Math.floor(totalSec / 86400);
+    if (days > 99) {
+      return `重置于 ${Format.dateTime(Date.now() + msUntil)}`;
+    }
     const hours = Math.floor((totalSec % 86400) / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
     const seconds = totalSec % 60;

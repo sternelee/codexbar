@@ -74,6 +74,66 @@ struct ProviderDetail {
     return AppStore.get().find(this.providerId);
   }
 
+  /** 内联凭证编辑状态（未配置时在详情页直接填写） */
+  @State editingCred: boolean = false;
+  @State credInput: string = '';
+  @State cred2Input: string = '';
+
+  /** 是否需要第二凭证（与设置页一致） */
+  needSecond(pid: string): boolean {
+    return pid === 'claude' || pid === 'codex' || pid === 'kilo' ||
+      pid === 'xai' || pid === 'litellm' || pid === 'llmproxy' ||
+      pid === 'sub2api' || pid === 'devin' ||
+      pid === 'opencode' || pid === 'opencodego' || pid === 'groq';
+  }
+
+  /** 凭证缺失或已失效（401/403）时显示配置卡片 */
+  needsCredentialCard(s: ProviderState): boolean {
+    if (s.descriptor.authKind === AuthKind.DEMO) {
+      return false;
+    }
+    if (s.setting.credential.length === 0) {
+      return true;
+    }
+    return s.snapshot != null && !s.snapshot.ok && s.snapshot.error.indexOf('凭证无效') >= 0;
+  }
+
+  /** 配置卡片标题：区分未配置与已失效 */
+  credCardTitle(s: ProviderState): string {
+    return s.setting.credential.length > 0 ? '凭证无效或已过期' : '尚未配置凭证';
+  }
+
+  /** 配置卡片图标 */
+  credCardIcon(s: ProviderState): string {
+    return s.setting.credential.length > 0 ? '⚠️' : '🔑';
+  }
+
+  /** 配置卡片提示 */
+  credCardHint(s: ProviderState): string {
+    return s.setting.credential.length > 0 ? '重新填写凭证并保存后，将自动重新查询' : s.descriptor.authHint;
+  }
+
+  saveInlineCredential(): void {
+    const cred = this.credInput.trim();
+    if (cred.length === 0) {
+      Nav.toast('请输入凭证');
+      return;
+    }
+    // 用户未重填第二凭证时保留现值（如 Codex 账号 ID）
+    const existing = AppStore.get().find(this.providerId);
+    const prevCred2 = existing != null ? existing.setting.credential2.trim() : '';
+    const cred2 = this.cred2Input.trim().length > 0 ? this.cred2Input.trim() : prevCred2;
+    AppStore.get().applySetting(this.providerId, {
+      enabled: true,
+      credential: cred,
+      credential2: cred2,
+    });
+    this.editingCred = false;
+    this.credInput = '';
+    this.cred2Input = '';
+    Nav.toast('已保存，正在查询');
+  }
+
   /** 激活账号显示名（无账号或未命中返回空串） */
   activeAccountName(): string {
     const accounts = Settings.accounts(this.providerId);
@@ -129,9 +189,16 @@ struct ProviderDetail {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
 
         Button() {
-          Text('↻')
-            .fontSize(18)
-            .fontColor(Theme.accent)
+          if (this.state(this.ver, this.tick) != null && this.state(this.ver, this.tick)!.loading) {
+            LoadingProgress()
+              .width(16)
+              .height(16)
+              .color(Theme.accent)
+          } else {
+            Text('↻')
+              .fontSize(18)
+              .fontColor(Theme.accent)
+          }
         }
         .backgroundColor(Theme.card)
         .width(36)
@@ -230,34 +297,100 @@ struct ProviderDetail {
       .backgroundColor(Theme.card)
       .border({ width: 1, color: Theme.stroke })
 
-      // 未配置凭证提示
-      if (s.setting.credential.length === 0 && s.descriptor.authKind !== AuthKind.DEMO) {
+      // 未配置 / 凭证失效：当前页内直接配置
+      if (this.needsCredentialCard(s)) {
         Column({ space: 10 }) {
-          Text('🔑')
-            .fontSize(22)
-          Text('尚未配置凭证')
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Theme.text)
-          Text(s.descriptor.authHint)
-            .fontSize(12)
-            .fontColor(Theme.textDim)
-            .textAlign(TextAlign.Center)
-          Button('去设置页添加')
-            .fontSize(13)
-            .fontColor(Theme.bg)
-            .backgroundColor(Theme.accent)
-            .height(34)
-            .padding({ left: 18, right: 18 })
-            .onClick(() => {
-              Nav.toSettings();
-            })
+          if (!this.editingCred) {
+            Text(this.credCardIcon(s))
+              .fontSize(22)
+            Text(this.credCardTitle(s))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.credCardTitle(s) === '尚未配置凭证' ? Theme.text : Theme.danger)
+            Text(this.credCardHint(s))
+              .fontSize(12)
+              .fontColor(Theme.textDim)
+              .textAlign(TextAlign.Center)
+            Row({ space: 10 }) {
+              if (s.descriptor.id === 'claude' || s.descriptor.id === 'codex') {
+                Button('网页登录')
+                  .fontSize(13)
+                  .fontColor(Theme.accent)
+                  .backgroundColor(Theme.input)
+                  .border({ width: 1, color: Theme.accent })
+                  .height(34)
+                  .padding({ left: 16, right: 16 })
+                  .onClick(() => {
+                    Nav.toOAuthLogin(s.descriptor.id);
+                  })
+              }
+              Button('配置凭证')
+                .fontSize(13)
+                .fontColor(Theme.bg)
+                .backgroundColor(Theme.accent)
+                .height(34)
+                .padding({ left: 18, right: 18 })
+                .onClick(() => {
+                  this.editingCred = true;
+                })
+            }
+          } else {
+            TextInput({ placeholder: s.descriptor.authHint, text: this.credInput })
+              .fontSize(13)
+              .fontColor(Theme.text)
+              .placeholderColor(Theme.textDim)
+              .placeholderFont({ size: 12 })
+              .backgroundColor(Theme.input)
+              .borderRadius(10)
+              .height(42)
+              .width('100%')
+              .onChange((v: string) => {
+                this.credInput = v;
+              })
+            if (this.needSecond(this.providerId)) {
+              TextInput({ placeholder: '可选：组织 / 账号 ID', text: this.cred2Input })
+                .fontSize(13)
+                .fontColor(Theme.text)
+                .placeholderColor(Theme.textDim)
+                .placeholderFont({ size: 12 })
+                .backgroundColor(Theme.input)
+                .borderRadius(10)
+                .height(42)
+                .width('100%')
+                .onChange((v: string) => {
+                  this.cred2Input = v;
+                })
+            }
+            Row({ space: 10 }) {
+              Button('取消')
+                .fontSize(13)
+                .fontColor(Theme.textDim)
+                .backgroundColor(Theme.input)
+                .height(34)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.editingCred = false;
+                  this.credInput = '';
+                  this.cred2Input = '';
+                })
+              Button('保存并查询')
+                .fontSize(13)
+                .fontColor(Theme.bg)
+                .backgroundColor(Theme.accent)
+                .height(34)
+                .layoutWeight(1)
+                .onClick(() => {
+                  this.saveInlineCredential();
+                })
+            }
+            .width('100%')
+          }
         }
         .width('100%')
         .padding(20)
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
-        .border({ width: 1, color: Theme.stroke })
+        .border({ width: 1, color: this.editingCred ? Theme.accent : Theme.stroke })
         .alignItems(HorizontalAlign.Center)
       }
 

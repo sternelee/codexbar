@@ -79,6 +79,14 @@ export default function logicUnitTest() {
       expect(Format.countdown((4 * 86400 + 7 * 3600) * 1000)).assertEqual('4天7小时');
     });
 
+    it('Format_countdown_cap', 0, () => {
+      // 超过 99 天：按绝对时间显示，避免"20713302天"这类异常输出
+      const capped = Format.countdown(20713302 * 86400 * 1000 + 15 * 3600 * 1000);
+      expect(capped.indexOf('重置于') >= 0).assertTrue();
+      // 99 天内：保持相对时长
+      expect(Format.countdown(30 * 86400 * 1000)).assertEqual('30天');
+    });
+
     it('Format_ago_compact', 0, () => {
       expect(Format.ago(0)).assertEqual('从未');
       expect(Format.ago(Date.now() - 30 * 1000)).assertEqual('刚刚');

@@ -8,6 +8,7 @@
  * buildWidgetItems 为纯函数（本地单元测试覆盖）。
  */
 
+import common from '@ohos.app.ability.common';
 import { ProviderState, RateWindow, UsageSnapshot } from '../model/Models';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
@@ -82,6 +83,23 @@ function firstWindow(snapshot: UsageSnapshot): RateWindow | null {
 }
 
 export class WidgetDataStore {
+  /** 应用沙箱 files 目录（EntryAbility.onCreate 时记录，供跨端组件文件桥使用） */
+  private static dir: string = '';
+
+  /** 在 EntryAbility.onCreate 中调用一次；取不到目录时静默降级（仅影响原生组件） */
+  static init(ctx: common.Context): void {
+    try {
+      WidgetDataStore.dir = ctx.filesDir;
+    } catch (e) {
+      WidgetDataStore.dir = '';
+    }
+  }
+
+  /** 沙箱目录；为空表示尚未初始化 */
+  static sandboxDir(): string {
+    return WidgetDataStore.dir;
+  }
+
   /** 构建当前数据并写入 Preferences；返回 JSON 文本（失败返回空串） */
   static update(states: ProviderState[]): string {
     const data: WidgetData = {

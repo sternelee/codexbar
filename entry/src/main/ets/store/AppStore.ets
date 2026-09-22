@@ -188,7 +188,10 @@ export class AppStore {
     this.bump();
   }
 
-  /** 刷新成功后更新桌面卡片数据；鸿蒙上动态加载 FormPush 即时推送（跨端导入失败自动跳过） */
+  /**
+   * 刷新成功后更新桌面组件数据：
+   * 鸿蒙走 Form Kit 即时推送，各端再把同一份 JSON 落到沙箱文件（原生组件读取）。
+   */
   private async updateWidgets(): Promise<void> {
     const json = WidgetDataStore.update(this.states);
     if (json.length === 0) {
@@ -200,6 +203,17 @@ export class AppStore {
     } catch (e) {
       // 非鸿蒙平台（Android/iOS）无 Form Kit：跳过即时推送，
       // 数据已写入 Preferences，由卡片定时更新兜底
+    }
+    // Android/iOS 的原生桌面组件读不了 FormBindingData，另落一份文件到沙箱；
+    // 动态导入 + try/catch：平台没有文件能力时静默跳过。
+    const dir = WidgetDataStore.sandboxDir();
+    if (dir.length > 0) {
+      try {
+        const fileMod = await import('./WidgetFile');
+        fileMod.writeWidgetJson(dir, json);
+      } catch (e) {
+        // 忽略：鸿蒙有自己的推送通道，其余平台无桌面组件
+      }
     }
   }
 

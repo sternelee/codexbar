@@ -15,7 +15,7 @@
 - **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新；未配置或凭证失效时可在页内直接配置，保存后立即清除旧的失败提示并以新凭证重新查询。
 - **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效；点击通知可跳回应用（HarmonyOS 经 wantAgent 拉起 EntryAbility，Android/iOS 无该模块时走系统默认行为）。
 - **用量统计**（仪表盘 📊 进入，对标 macOS CostHistoryChartMenuView）：按服务商的每日柱形图——「用量增量（百分点）」与「消费（余额降幅估算）」双指标、近7天/近30天范围切换；峰值日黄色帽、[0, 中点, 最大] 刻度、首末日期轴；今日/近7天/近30天合计。数据为本地刷新采样估算（每日最后样本，保留 62 天），与源工程扫描 CLI 会话的精确统计存在差异。
-- **桌面卡片**（HarmonyOS 服务卡片，对标 macOS WidgetExtension）：2x2 速览卡（最紧急 2 家）与 2x4 列表卡（4 家），显示用量条 + 重置倒计时，点击进应用。应用每次刷新成功即写入摘要数据并即时推送已添加的卡片，另有 30 分钟定时更新兜底。
+- **桌面组件**（对标 macOS WidgetExtension）：HarmonyOS 服务卡片与 **Android 原生 AppWidget** 各两枚——2x2 速览（最紧急 2 家）与 2x4 列表（4 家），显示用量条 + 重置倒计时，点击进应用，配色随系统深浅色切换。应用每次刷新成功即落盘摘要数据：鸿蒙经 Form Kit 即时推送已添加卡片，安卓侧由组件进程内的 FileObserver 监听摘要文件变化后重渲染，两端均有 30 分钟定时更新兜底。
 - **多账号**（全部服务商）：设置卡片「账号」条——点 chip 切换激活账号（立即刷新）、「＋」添加、长按弹出重命名/删除菜单（内联输入行改名，删除带确认框）；详情页显示当前激活账号名。Claude / Codex 的「＋」直接进入网页登录流程，其他服务商建空账号、填凭证保存即生效。同凭证自动去重（并补齐 refresh token / 额外字段），删除激活账号时自动转移到第一个剩余账号；凭证解析顺序为激活账号 → 旧单凭证键（完全向后兼容）。
 - **应用内网页登录**（Claude / Codex / DeepSeek）：设置页或详情页点「网页登录」进入内嵌网页——Claude 自动从登录会话中捕获 `sessionKey`，DeepSeek 从 `platform.deepseek.com` 的 `localStorage.userToken` 捕获平台会话（与 macOS 读浏览器数据同一个键，所以用户只需填 API Key），Codex 走 PKCE 授权（本地回调解析 + JWT 提取账号 ID）；刷新返回 401/403 时用保存的 refresh token 静默续期并重试一次，无需重新登录。
 - **额外配置字段**（`extraConfig`）：需要 3 个以上输入的服务商在设置页/详情页动态渲染字段——Azure OpenAI 的 Endpoint / Deployment / API 版本、Bedrock 的 Region / Session Token / 预算、v0 的 Scope、Copilot 的 Enterprise 域名。
@@ -120,7 +120,8 @@ entry/src/main/ets/
 │   ├── Settings.ets          ← resolved config（~/.config/codexbar/config.json）→ Preferences
 │   ├── Reminders.ets         ← 额度提醒引擎（阈值/提前量判定 + 30s 周期检查 + 周期去重）
 │   ├── UsageHistory.ets      ← 用量历史采样与统计派生（统计页数据源）
-│   ├── WidgetData.ets        ← 桌面卡片摘要数据
+│   ├── WidgetData.ets        ← 桌面组件摘要数据（构建 + 沙箱目录记录）
+│   ├── WidgetFile.ets        ← 跨端组件数据桥：摘要 JSON 落盘供安卓原生组件读取
 │   └── AppStore.ets          ← 用量状态中心 + 并发刷新编排
 ├── providers/
 │   ├── ProviderBase.ets      ← UsageFetcher 协议 → UsageProvider 接口
@@ -181,7 +182,7 @@ devecocli run
 #   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 #   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 51, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 52, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -203,14 +204,31 @@ xcrun simctl install <udid> .arkui-x/ios/build/outputs/app/app.app
 xcrun simctl launch <udid> com.example.codexbar
 ```
 
+### Android 桌面组件（原生 AppWidget）
+
+ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 form/formProvider 模块，生成的 AndroidManifest 也没有组件宿主），APK 里携带的 `form_config.json` / `EntryFormAbility` / `widgets.abc` 在安卓侧没有任何代码消费。因此安卓端的桌面组件是按平台原生方式另写的：
+
+| 位置 | 作用 |
+|---|---|
+| `entry/src/main/ets/store/WidgetFile.ets` | ArkTS 侧数据桥：把与鸿蒙卡片同一份摘要 JSON 写到沙箱（动态 import + try/catch，无文件能力的平台自动跳过） |
+| `.arkui-x/android/app/src/main/java/com/example/codexbar/widget/WidgetFiles.java` | 定位摘要文件（ArkUI-X 安卓沙箱会多叠一层 `files/files/`，故按候选目录 + 有界递归查找，命中后缓存） |
+| `…/widget/WidgetData.java` | 解析 JSON（org.json，缺字段/损坏一律回落空态） |
+| `…/widget/WidgetRenderer.java` | 渲染 RemoteViews：标题 + 更新时间、逐行「服务商 / 百分比 / 用量条 / 重置倒计时」，百分比按用量等级换色 |
+| `…/widget/WidgetUpdater.java` | 刷新全部实例，并用 FileObserver 监听摘要文件——应用刷新完卡片跟着变 |
+| `…/widget/WidgetQuickProvider.java` / `WidgetListProvider.java` | 2x2 速览 / 2x4 列表两个组件（行数不同，共用同一套布局与数据） |
+| `app/src/release/AndroidManifest.xml` | 两个 receiver 的声明放在 release 源集：`src/main` 的清单由 `ace` 依据鸿蒙 `module.json5` 维护，重建可能被覆盖 |
+| `res/layout/widget_codexbar.xml`、`widget_row.xml`、`res/xml/widget_*_info.xml`、`res/values(-night)/colors.xml` | 组件布局与元数据；配色取应用 `resources/base`/`dark` 同一套色值，`values-night` 实现深色跟随 |
+
+数据链路：ArkTS 刷新成功 → `WidgetDataStore.update()` → 沙箱 `widget_data.json` → 组件进程内 FileObserver 收到写事件 → 重渲染全部实例；另有 `updatePeriodMillis = 30 分钟` 兜底。
+
 > `ace` CLI 位于 ArkUI-X SDK（`~/Library/ArkUI-X/Sdk/<ver>/arkui-x/toolchains/bin/ace`），环境配置用 `ace config`（android-sdk / harmonyos-sdk / java-sdk 等）。iOS 首次构建如遇 `IPHONEOS_DEPLOYMENT_TARGET` 过旧告警，已在工程中修正为 15.0；真机发行版用 `ace build ios -r` 并配置签名团队。
 
 ### 三端验证记录
 
 | 平台 | 产物 | 验证 |
 |---|---|---|
-| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 51/51 + hvigor BUILD SUCCESSFUL |
-| Android（arm64-v8a / armeabi-v7a） | `app-release.apk`（76.9 MB） | 本轮重验：`ace build apk` BUILD SUCCESSFUL，ArkTS 资产（`modules.abc` / `widgets.abc` / `resources.index`）重新生成，包内含明亮 `#0A8471` 与暗色 `#16D3B4` 两套调色板；上一版本为真机 MEY-AN00 安装、启动与交互正常 |
+| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 52/52 + hvigor BUILD SUCCESSFUL；卡片的 `module.json5` 扩展、`$profile:form_config`（含 `colorMode`/`isDynamic`）与 `ets/widgets.abc` 内的两条卡片页记录已逐项核对，配置与 DevEco 自带卡片模板一致 |
+| Android（arm64-v8a / armeabi-v7a） | `app-release.apk`（73.8 MB） | 本轮在 Android 12（arm64）模拟器上实测：`dumpsys appwidget` 可见两个 provider（2x2 min 110dp / 2x4 min 250dp、30 分钟定时），系统组件选择器列出「CodexBar / 2 widgets」，添加后 `uiautomator` 可读到 `widget_title` / `row_name` / `row_pct` / `row_cd` 等节点，像素采样命中主色 `#0A8471`（用量条与标题）与等级色 `#C08A00`（83% 行）；外部改写摘要文件时 FileObserver 立刻重渲染（日志 `widget data changed` → `updated 1 x WidgetQuickProvider`），无异常；应用启动/交互无回归 |
 | iOS（Simulator arm64） | `app.app` | 上一版本产物（iPhone 16 模拟器渲染正常）；本轮需 `ace build ios` 重建 |
 
 ## 图标
@@ -224,6 +242,15 @@ xcrun simctl launch <udid> com.example.codexbar
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（安卓原生桌面组件补齐 + 鸿蒙卡片配置核对）：查清了「装完没有可选桌面组件」的两侧原因并补齐了安卓端。
+
+- **安卓侧根因是平台能力**：ArkUI-X 只在 Activity ↔ UIAbility 这层做跨端，没有 form/卡片通道——SDK 插件清单里查不到任何 form 模块，生成的 `AndroidManifest.xml` 也没有组件宿主，APK 里的 `form_config.json` / `EntryFormAbility` / `widgets.abc` 只是被当资产原样拷入，没有任何代码消费。所以安卓端的桌面组件改为按平台原生方式实现（AppWidgetProvider + RemoteViews），与鸿蒙卡片共用同一份摘要数据。
+- **跨端数据桥**：新增 `store/WidgetFile.ets`，在应用刷新成功时把卡片摘要 JSON 一并落到沙箱；`AppStore.updateWidgets()` 里动态 import + try/catch，没有文件能力的平台静默跳过（不影响鸿蒙的 Form Kit 推送）。实测 ArkUI-X 安卓会把沙箱虚拟路径再叠一层，文件落在 `<dataDir>/files/files/`，因此安卓侧定位文件时按「候选目录 → 有界递归查找」逐级尝试并缓存。
+- **安卓组件本体**：2x2 速览（2 行）与 2x4 列表（4 行）两个 provider，共用一套骨架布局 + 行布局；用量条走 `ProgressBar`（RemoteViews 无法在运行时改视图尺寸，占比用 progress 表达），百分比按等级 `setTextColor` 换色，空数据回落「打开应用刷新数据」。配色直接取应用同一套色值并配 `values-night`，与鸿蒙卡片观感一致。
+- **即时刷新**：组件进程内用 `FileObserver` 监听摘要文件（ArkUI-X 沙箱目录也一并监听），应用刷新写完文件即重渲染已添加的组件；另有 30 分钟定时更新兜底。receiver 声明放在 `src/release/AndroidManifest.xml`，避免被 `ace` 重新生成的 `src/main/AndroidManifest.xml` 覆盖。
+- **鸿蒙侧**：完整核对了卡片配置（`extensionAbilities(type=form)` + `$profile:form_config` + `widgets.abc` 内的两条卡片页记录），并按 DevEco 自带卡片模板补齐 `colorMode: auto` / `isDynamic: true`；卡片入口是「长按应用图标 → 卡片」或「桌面双指捏合 → 卡片」。若该列表里看不到本应用，先重装当前 HAP 再重启桌面（系统会缓存已安装应用的卡片信息）。
+- **测试**：新增 `Widget_cross_platform_contract`——断言摘要 JSON 的字段名（`updatedAt` / `items[].{name,pct,barPct,level,cd}`）、`barPct` 落在 0-100、`level` 取值落在安卓侧 `levelColor` 映射的集合内（83→warn / 95→danger / 10→ok），以及未初始化时 `sandboxDir()` 为空串（调用方据此跳过落盘）；共 52 条全绿。
 
 本轮已完成（主题层次感 + 字号/间距刻度统一）：把「颜色跟着主题变」推进到「层次也跟着主题变」，并把散落各页的字号与留白收进 `Theme` 刻度。
 
@@ -306,6 +333,7 @@ xcrun simctl launch <udid> com.example.codexbar
    - `supportsCredits: true`（Codex / OpenRouter / MiMo / CommandCode / ZoomMate / Amp / Codebuff）对应源工程的 Credits 泳道与 `creditsHint`，我们只在 `providerCost` 存在时展示费用。
    - **明细行剩余项**：Venice 的网页版 `Credits` 六行（`Bank cap`/`Next refill`）与其 `Used this cycle` 进度条——需要平台网页会话而非 API Key（源工程的 `progress` 只来自 VeniceWebUsageFetcher 与 Copilot，Copilot 已接）；HuggingFace 的 `Credits` 分组（Billing 页 HTML 抓余额）；Poe 的 `Daily points` 图表（源工程也未给 Poe 配 chart，其“每日点数”只在用量项里展示）；IBMBob 的 `teams/{id}/users/{userID}` 逐人预算端点；MiniMax 的平台网页版配额（HTML 抓取，我们仍用 API Token）（DeepSeek 未带平台令牌时已按 macOS 的 `webSessionRequired` 提示处理）；`costSummaryTitles` 目前只作为策略表保留（源工程用它把分组从“用量项选择器”里排除，我们没有该选择器）。图表已覆盖源工程全部 5 处 `makeChart`（Claude Admin / Groq / MiniMax / DeepSeek / ZoomMate），其余服务商源工程本就不画图。
 2. **Bedrock 成本日线**：源工程 `fetchDailyReport`（Cost Explorer DAILY 粒度）用于成本历史曲线，当前仅取本月汇总，统计页暂无 Bedrock 成本曲线。
-3. **iOS 重验证**：Android 已用 `ace build apk` 重建（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商。
+3. **iOS 重验证**：Android 已用 `ace build apk` 重建并在模拟器上实测桌面组件（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商（iOS 侧同样没有 Form Kit，桌面组件需按 WidgetKit 另写）。
+4. **鸿蒙真机再验一次卡片入口**：配置与产物已核对无误，但还没有在真机上走完「长按应用图标 → 卡片 → 添加」；若列表里看不到本应用，按本轮小节里的方法重装 + 重启桌面再试。
 
 仍明确不迁移（桌面专属 / CLI 探测 / HTML 抓取）：Windsurf、Sakana、Replicate、TypeSafe、Helmcode、StepFun、QwenCloud、Alibaba Token Plan、Cursor、Augment、JetBrains、Antigravity、Vertex AI / Gemini、Copilot 预算页抓取、Bedrock Profile 模式、Kiro、Ollama 本地、Pi、CodeRabbit、Wayfinder、Zed。

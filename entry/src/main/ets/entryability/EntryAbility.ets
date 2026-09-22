@@ -3,6 +3,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
 import { Settings } from '../store/Settings';
+import { WidgetDataStore } from '../store/WidgetData';
 import { Notify } from '../common/Notify';
 import { Theme } from '../common/Theme';
 
@@ -12,6 +13,8 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
     Settings.init(this.context);
+    // 记下沙箱目录：Android 端的原生桌面组件从该目录读取同一个摘要文件
+    WidgetDataStore.init(this.context);
     Notify.init(this.context);
     this.applyColorMode();
   }

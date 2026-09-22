@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  桌面组件（AppWidget）声明。
+
+  为什么单独放在 release 源集而不是 src/main/AndroidManifest.xml：
+  .arkui-x/android 是由 `ace` 依据鸿蒙侧 module.json5 生成/维护的安卓工程，
+  src/main/AndroidManifest.xml 可能被重新生成；放在 release 源集里由 AGP 的
+  manifest 合并（main 优先级更高，但两者都会进最终清单）带进产物，重建不会丢。
+
+  android:exported="true"：系统的 APPWIDGET_UPDATE 广播需要能送达本接收器。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <receiver
+            android:name="com.example.codexbar.widget.WidgetQuickProvider"
+            android:exported="true"
+            android:label="@string/widget_quick_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quick_info" />
+        </receiver>
+
+        <receiver
+            android:name="com.example.codexbar.widget.WidgetListProvider"
+            android:exported="true"
+            android:label="@string/widget_list_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_list_info" />
+        </receiver>
+
+    </application>
+</manifest>

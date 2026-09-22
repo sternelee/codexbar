@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">CodexBar</string>
+    <string name="widget_quick_label">CodexBar 额度速览</string>
+    <string name="widget_quick_desc">最紧急 2 家服务商的用量与重置倒计时</string>
+    <string name="widget_list_label">CodexBar 额度列表</string>
+    <string name="widget_list_desc">用量最高的 4 家服务商与重置倒计时</string>
 </resources>

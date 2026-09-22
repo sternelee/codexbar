@@ -52,7 +52,7 @@ import {
   removeAccountFromList,
   renameAccountInList,
 } from '../main/ets/store/Settings';
-import { buildWidgetItems } from '../main/ets/store/WidgetData';
+import { buildWidgetItems, WidgetDataStore } from '../main/ets/store/WidgetData';
 import { HistoryDay, ProviderChartPoint } from '../main/ets/model/Models';
 import { ChartPoint } from '../main/ets/store/UsageHistory';
 import {
@@ -640,6 +640,47 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(rows4[0].pct).assertEqual('55%');
       expect(rows4[0].level).assertEqual('unknown');
       expect(rows4[0].cd).assertEqual('');
+    });
+
+    it('Widget_cross_platform_contract', 0, () => {
+      // 安卓原生桌面组件（widget/WidgetData.java + WidgetRenderer.java）读的是同一个 JSON，
+      // 这里守住跨端契约：字段名、数值范围、等级取值三者任一漂移，组件就会静默显示空态。
+      // WidgetDataStore.update 内部取 Date.now()，因此这里用真实时钟构造重置时间
+      const now = Date.now();
+      const text = WidgetDataStore.update([stateWith(makeWindow(83, now + 7200000, true), 'Claude')]);
+      expect(text.length > 0).assertTrue();
+      const root = asObj(parseJson(text));
+      expect(root != null).assertTrue();
+      expect(typeof str(root, 'updatedAt')).assertEqual('string');
+      expect(str(root, 'updatedAt').length > 0).assertTrue();
+
+      const items = asArray(root!.items);
+      expect(items != null).assertTrue();
+      expect(items!.length).assertEqual(1);
+      const row = asObj(items![0]);
+      expect(row != null).assertTrue();
+      // Java 侧读取的五个键：name / pct / barPct / level / cd
+      expect(str(row, 'name')).assertEqual('Claude');
+      expect(str(row, 'pct')).assertEqual('83%');
+      expect(num(row, 'barPct')).assertEqual(83);
+      expect(str(row, 'level')).assertEqual('warn');
+      expect(str(row, 'cd').length > 0).assertTrue();
+      // barPct 落在 0-100（Java 侧还会 clamp，但源头就该是合法的）
+      const bar = num(row, 'barPct');
+      expect(bar >= 0 && bar <= 100).assertTrue();
+      // level 取值必须是 Java 侧 levelColor 映射覆盖的集合，否则组件会掉到默认灰
+      const levels: string[] = ['ok', 'warn', 'danger', 'unknown'];
+      expect(levels.indexOf(str(row, 'level')) >= 0).assertTrue();
+      // 等级阈值同样要对得上（83 → warn / 95 → danger / 10 → ok）
+      const dangerRow = asObj(asArray(asObj(parseJson(
+        WidgetDataStore.update([stateWith(makeWindow(95, now, true), 'A')])))!.items)![0]);
+      expect(str(dangerRow, 'level')).assertEqual('danger');
+      const okRow = asObj(asArray(asObj(parseJson(
+        WidgetDataStore.update([stateWith(makeWindow(10, now, true), 'B')])))!.items)![0]);
+      expect(str(okRow, 'level')).assertEqual('ok');
+
+      // 跨端文件桥：未初始化沙箱目录时返回空串，调用方据此跳过落盘
+      expect(WidgetDataStore.sandboxDir()).assertEqual('');
     });
 
     it('UsageHistory_date_and_deltas', 0, () => {

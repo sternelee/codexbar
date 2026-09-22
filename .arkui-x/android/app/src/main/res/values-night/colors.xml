@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 暗色模式组件配色：与 entry/src/main/resources/dark/element/color.json 同一套值 -->
+<resources>
+    <color name="widget_bg">#17171E</color>
+    <color name="widget_edge">#26262F</color>
+    <color name="widget_text">#F2F2F7</color>
+    <color name="widget_dim">#8E8E99</color>
+    <color name="widget_accent">#16D3B4</color>
+    <color name="widget_track">#3A3A44</color>
+    <color name="widget_ok">#16D3B4</color>
+    <color name="widget_warn">#FFD60A</color>
+    <color name="widget_danger">#FF453A</color>
+</resources>

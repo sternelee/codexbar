@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 明亮模式组件配色：与 entry/src/main/resources/base/element/color.json 同一套值 -->
+<resources>
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_edge">#E5E5EB</color>
+    <color name="widget_text">#111114</color>
+    <color name="widget_dim">#6C6C78</color>
+    <color name="widget_accent">#0A8471</color>
+    <color name="widget_track">#D9D9E0</color>
+    <color name="widget_ok">#0A8471</color>
+    <color name="widget_warn">#C08A00</color>
+    <color name="widget_danger">#D32F2F</color>
+</resources>

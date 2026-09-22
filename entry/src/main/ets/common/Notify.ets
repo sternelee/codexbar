@@ -18,8 +18,8 @@ export class Notify {
 
   /**
    * 构建“点击通知拉起应用”的 wantAgent。
-   * 动态加载 common/WantAgent：鸿蒙可用；Android/iOS（ArkUI-X）无
-   * @ohos.app.ability.wantAgent 时 import 失败，静默返回 null，
+   * 动态加载 common/WantAgent：鸿蒙可用；Android/iOS（ArkUI-X）上该模块
+   * 会解析成空值，由 WantAgent 内部的可用性判断拦下并返回 null，
    * 通知依旧发出但点击不额外跳转。
    */
   private static async buildWantAgent(): Promise<Object | null> {

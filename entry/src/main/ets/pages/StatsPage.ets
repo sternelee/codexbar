@@ -100,6 +100,7 @@ struct StatsPage {
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .width(36)
         .height(36)
         .borderRadius(12)

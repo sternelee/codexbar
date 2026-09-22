@@ -172,11 +172,27 @@ export default function logicUnitTest() {
       expect(Format.compact(1_500_000)).assertEqual('1.50M');
     });
 
+    // 颜色本身已是资源引用（无法在宿主单测里比较），因此断言分级与品牌色兜底这两层纯逻辑
     it('Theme_barColor_thresholds', 0, () => {
-      expect(Theme.barColor(10, true)).assertEqual(Theme.accent);
-      expect(Theme.barColor(75, true)).assertEqual(Theme.warn);
-      expect(Theme.barColor(95, true)).assertEqual(Theme.danger);
-      expect(Theme.barColor(95, false)).assertEqual('#3A3A44');
+      expect(Theme.barLevel(10, true)).assertEqual('ok');
+      expect(Theme.barLevel(69.9, true)).assertEqual('ok');
+      expect(Theme.barLevel(70, true)).assertEqual('warn');
+      expect(Theme.barLevel(89.9, true)).assertEqual('warn');
+      expect(Theme.barLevel(90, true)).assertEqual('danger');
+      expect(Theme.barLevel(95, false)).assertEqual('unknown');
+    });
+
+    it('Theme_brand_tint_fallback', 0, () => {
+      // 近白 / 近黑 / 非 hex 一律回落到当前模式的主色（AppStorage 缺失时按暗色）
+      const fallback = '#16D3B4';
+      expect(Theme.brandTint('#FFFFFF')).assertEqual(fallback);
+      expect(Theme.brandTint('#000000')).assertEqual(fallback);
+      expect(Theme.brandTint('accent')).assertEqual(fallback);
+      expect(Theme.brandTint('#FDFDFD')).assertEqual(fallback);
+      expect(Theme.brandTint('#0A0A0A')).assertEqual(fallback);
+      // 中间调品牌色原样保留
+      expect(Theme.brandTint('#6366F1')).assertEqual('#6366F1');
+      expect(Theme.brandTint('#0EA5E9')).assertEqual('#0EA5E9');
     });
 
     it('Json_helpers', 0, () => {
@@ -562,7 +578,7 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(rows[0].name).assertEqual('Alpha');
       expect(rows[0].pct).assertEqual('42%');
       expect(rows[0].barPct).assertEqual(42);
-      expect(rows[0].color).assertEqual(Theme.accent);
+      expect(rows[0].level).assertEqual('ok');
       expect(rows[0].cd.indexOf('2小时') >= 0).assertTrue();
       // 过滤：未启用 / 失败快照 / 无窗口
       const off = stateWith(makeWindow(10, 0, true), 'Off', false);
@@ -587,7 +603,7 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       const rows4 = buildWidgetItems([b], now);
       expect(rows4.length).assertEqual(1);
       expect(rows4[0].pct).assertEqual('55%');
-      expect(rows4[0].color).assertEqual('#3A3A44');
+      expect(rows4[0].level).assertEqual('unknown');
       expect(rows4[0].cd).assertEqual('');
     });
 

@@ -119,7 +119,7 @@ struct ProviderDetail {
     return visibleDetails(s.descriptor.id, s.snapshot.details, Settings.showOptionalDetails(), costVisible);
   }
 
-  /** 自绘确认弹窗（替代系统 AlertDialog，暗色模式下可读） */
+  /** 自绘确认弹窗（替代系统 AlertDialog，配色走主题资源，深浅色都可读） */
   @State askVisible: boolean = false;
   @State askTitle: string = '';
   @State askMessage: string = '';
@@ -259,6 +259,7 @@ struct ProviderDetail {
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .width(36)
         .height(36)
         .borderRadius(12)
@@ -287,6 +288,7 @@ struct ProviderDetail {
           }
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .width(36)
         .height(36)
         .borderRadius(12)
@@ -326,7 +328,7 @@ struct ProviderDetail {
       .scrollBar(BarState.Off)
       }
 
-      // 自绘确认弹窗（暗色模式可读，不依赖系统主题）
+      // 自绘确认弹窗（配色走主题资源，不受系统 AlertDialog 主题影响）
       if (this.askVisible) {
         Column() {
           Column({ space: 14 }) {
@@ -435,7 +437,7 @@ struct ProviderDetail {
           }
           .padding(10)
           .borderRadius(10)
-          .backgroundColor('#2A1518')
+          .backgroundColor(Theme.dangerTint)
           .width('100%')
         }
       }
@@ -698,7 +700,7 @@ struct ProviderDetail {
                 if (r.progress != null) {
                   RowProgressBar({
                     percent: progressPercent(r.progress!),
-                    tint: s.descriptor.accentColor,
+                    tint: Theme.brandTint(s.descriptor.accentColor),
                   })
                 }
               }

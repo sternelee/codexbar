@@ -21,8 +21,12 @@ export interface WidgetItem {
   pct: string;
   /** 进度条宽度 0-100 */
   barPct: number;
-  /** 进度条颜色（hex） */
-  color: string;
+  /**
+   * 用量等级（ok / warn / danger / unknown）。
+   * 卡片数据要经 FormBindingData 序列化成 JSON，塞不进资源引用，
+   * 因此这里传等级、由卡片页映射到 `$r('app.color.bar_*')`，随系统深浅色自动换值。
+   */
+  level: string;
   /** 重置倒计时文本，如 "2小时后重置"；未知为空 */
   cd: string;
 }
@@ -57,7 +61,7 @@ export function buildWidgetItems(states: ProviderState[], now: number): WidgetIt
       name: s.descriptor.title,
       pct: Format.percent(win.usedPercent),
       barPct: Math.max(0, Math.min(100, win.usedPercent)),
-      color: Theme.barColor(win.usedPercent, win.usageKnown),
+      level: Theme.barLevel(win.usedPercent, win.usageKnown),
       cd: cd,
     };
     rows.push(item);

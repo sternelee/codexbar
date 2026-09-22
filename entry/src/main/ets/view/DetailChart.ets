@@ -92,8 +92,8 @@ export struct DetailChart {
     const max = this.maximum(pts);
     const baseY = height - 0.5;
 
-    // 基线（源工程 overlay 的 1px 线）
-    this.ctx.strokeStyle = Theme.stroke;
+    // 基线（源工程 overlay 的 1px 线）。Canvas 2D 只认字面色值，故走 Theme.chart*()。
+    this.ctx.strokeStyle = Theme.chartStroke();
     this.ctx.lineWidth = 1;
     this.ctx.beginPath();
     this.ctx.moveTo(0, baseY);
@@ -129,7 +129,7 @@ export struct DetailChart {
   private drawLine(pts: ProviderChartPoint[], max: number, width: number, height: number): void {
     const step = pts.length === 1 ? 0 : width / (pts.length - 1);
     const usable = height - 1;
-    this.ctx.strokeStyle = Theme.accent;
+    this.ctx.strokeStyle = Theme.chartAccent();
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
     for (let i = 0; i < pts.length; i++) {
@@ -143,7 +143,7 @@ export struct DetailChart {
       }
     }
     this.ctx.stroke();
-    this.ctx.fillStyle = Theme.accent;
+    this.ctx.fillStyle = Theme.chartAccent();
     for (let i = 0; i < pts.length; i++) {
       const x = pts.length === 1 ? width / 2 : step * i;
       const ratio = pts[i].value > 0 && isFinite(pts[i].value) ? Math.min(pts[i].value / max, 1) : 0;
@@ -161,7 +161,7 @@ export struct DetailChart {
   private barFill(ratio: number): string {
     const clamped = Math.max(0.18, ratio);
     const alpha = 0.42 + clamped * 0.58;
-    return this.withAlpha(Theme.accent, alpha);
+    return this.withAlpha(Theme.chartAccent(), alpha);
   }
 
   /** #RRGGBB + alpha → rgba(...) */

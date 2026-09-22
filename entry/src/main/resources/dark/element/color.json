@@ -2,63 +2,63 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#F2F2F7"
+      "value": "#0B0B0F"
     },
     {
       "name": "bg",
-      "value": "#F2F2F7"
+      "value": "#0B0B0F"
     },
     {
       "name": "card",
-      "value": "#FFFFFF"
+      "value": "#17171E"
     },
     {
       "name": "stroke",
-      "value": "#E5E5EB"
+      "value": "#26262F"
     },
     {
       "name": "text",
-      "value": "#111114"
+      "value": "#F2F2F7"
     },
     {
       "name": "text_dim",
-      "value": "#6C6C78"
+      "value": "#8E8E99"
     },
     {
       "name": "accent",
-      "value": "#0A8471"
+      "value": "#16D3B4"
     },
     {
       "name": "ok",
-      "value": "#1E8E3E"
+      "value": "#30D158"
     },
     {
       "name": "warn",
-      "value": "#C08A00"
+      "value": "#FFD60A"
     },
     {
       "name": "danger",
-      "value": "#D32F2F"
+      "value": "#FF453A"
     },
     {
       "name": "input",
-      "value": "#EDEDF2"
+      "value": "#1F1F28"
     },
     {
       "name": "bar_track",
-      "value": "#D9D9E0"
+      "value": "#3A3A44"
     },
     {
       "name": "bar_ok",
-      "value": "#0A8471"
+      "value": "#16D3B4"
     },
     {
       "name": "bar_warn",
-      "value": "#C08A00"
+      "value": "#FFD60A"
     },
     {
       "name": "bar_danger",
-      "value": "#D32F2F"
+      "value": "#FF453A"
     },
     {
       "name": "icon_plate",
@@ -66,11 +66,11 @@
     },
     {
       "name": "icon_plate_edge",
-      "value": "#E5E5EB"
+      "value": "#FFFFFF"
     },
     {
       "name": "danger_tint",
-      "value": "#FDECEA"
+      "value": "#2A1518"
     }
   ]
 }

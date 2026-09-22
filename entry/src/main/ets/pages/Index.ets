@@ -108,6 +108,7 @@ struct Index {
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .height(32)
         .width(36)
         .borderRadius(10)
@@ -121,6 +122,7 @@ struct Index {
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .height(32)
         .width(36)
         .borderRadius(10)

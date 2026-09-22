@@ -3,6 +3,9 @@
  * 彩色 SVG 来源：lobehub/lobe-icons（MIT）。图标渲染在白色圆角衬底上，
  * 保证深色主题下单色品牌标（OpenAI/xAI 等）的可见性；
  * 无对应品牌图的服务商回退为强调色圆点。
+ *
+ * 衬底在明亮/暗色下都保持白色（白底才能托住 OpenAI、Bedrock 这类白/黑单一色的标），
+ * 明亮模式下靠一圈 `icon_plate_edge` 描边与白色卡片区分。
  */
 
 import { Theme } from '../common/Theme';
@@ -133,7 +136,8 @@ export function iconFileFor(providerId: string): string | null {
 @Component
 export struct ProviderIcon {
   providerId: string = '';
-  accentColor: string = Theme.accent;
+  /** 品牌强调色（hex）；极端色值由 Theme.brandTint 回落到应用主色 */
+  accentColor: string = '';
   /** 图标尺寸（衬底边长） */
   iconSize: number = 32;
 
@@ -151,13 +155,14 @@ export struct ProviderIcon {
       .width(this.iconSize)
       .height(this.iconSize)
       .borderRadius(this.iconSize * 0.3)
-      .backgroundColor('#FFFFFF')
+      .backgroundColor(Theme.iconPlate)
+      .border({ width: 1, color: Theme.iconPlateEdge })
     } else {
       Row()
         .width(this.iconSize * 0.38)
         .height(this.iconSize * 0.38)
         .borderRadius(this.iconSize * 0.19)
-        .backgroundColor(this.accentColor)
+        .backgroundColor(Theme.brandTint(this.accentColor))
     }
   }
 }

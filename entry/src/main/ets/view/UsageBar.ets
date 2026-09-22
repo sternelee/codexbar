@@ -35,7 +35,8 @@ export struct UsageBar {
 @Component
 export struct RowProgressBar {
   @Prop percent: number = 0;
-  @Prop tint: string = Theme.accent;
+  /** 服务商主色（hex 或资源引用；调用方经 Theme.brandTint 处理极端色值） */
+  @Prop tint: ResourceColor = Theme.accent;
 
   build() {
     Stack({ alignContent: Alignment.Start }) {

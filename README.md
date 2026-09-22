@@ -20,6 +20,7 @@
 - **应用内网页登录**（Claude / Codex / DeepSeek）：设置页或详情页点「网页登录」进入内嵌网页——Claude 自动从登录会话中捕获 `sessionKey`，DeepSeek 从 `platform.deepseek.com` 的 `localStorage.userToken` 捕获平台会话（与 macOS 读浏览器数据同一个键，所以用户只需填 API Key），Codex 走 PKCE 授权（本地回调解析 + JWT 提取账号 ID）；刷新返回 401/403 时用保存的 refresh token 静默续期并重试一次，无需重新登录。
 - **额外配置字段**（`extraConfig`）：需要 3 个以上输入的服务商在设置页/详情页动态渲染字段——Azure OpenAI 的 Endpoint / Deployment / API 版本、Bedrock 的 Region / Session Token / 预算、v0 的 Scope、Copilot 的 Enterprise 域名。
 - **设置页**：逐服务商开关 + 凭证录入（含额外字段），凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
+- **明亮 / 暗色自适配**：配色全部走资源引用，`resources/base/element/color.json`（明亮）与 `resources/dark/element/color.json`（暗色）各一套，跟随系统深浅色即时切换，无需手工监听；启动窗口背景、服务卡片、明细图表与品牌图标衬底一并适配（卡片数据只能传 JSON，所以传的是用量「等级」而不是色值）。
 - **演示模式**：无需任何凭证即可体验全部 UI。
 
 ## 支持的服务商（61 家 + 演示模式）
@@ -103,7 +104,7 @@
 entry/src/main/ets/
 ├── model/Models.ets          ← UsageFetcher.swift (UsageSnapshot/RateWindow/NamedRateWindow/ProviderDescriptor…)
 ├── common/
-│   ├── Theme.ets             ← 菜单栏弹层深色风格（docs/codexbar.png）
+│   ├── Theme.ets             ← 主题取色器（资源引用 + 尺度 + Canvas/品牌色适配）
 │   ├── Format.ets            ← 倒计时/百分比/金额格式化
 │   ├── Nav.ets               ← 路由与 Toast
 │   ├── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求 + 点击拉起应用）
@@ -149,8 +150,14 @@ entry/src/main/ets/
 │   └── StatsPage.ets         ← 用量统计（柱形图 + 周/月合计）
 ├── form/FormPush.ets         ← 鸿蒙专属卡片推送（动态加载）
 ├── entryformability/EntryFormAbility.ets ← 服务卡片 FormExtensionAbility（添加/定时更新/移除）
-├── widget/pages/            ← 卡片页：WidgetCard(2x2)、WidgetListCard(2x4)
-└── entryability/EntryAbility.ets
+├── widget/pages/            ← 卡片页：WidgetCard(2x2)、WidgetListCard(2x4)、WidgetTheme(等级→资源色)
+└── entryability/EntryAbility.ets     ← 启动时把系统色彩模式写入 AppStorage（供 Canvas 取用）
+```
+
+```
+entry/src/main/resources/
+├── base/element/color.json   ← 明亮模式调色板（bg/card/stroke/text/accent/条形色…）
+└── dark/element/color.json   ← 暗色模式同名调色板（限定词目录，系统切换时自动生效）
 ```
 
 ## 构建与运行（HarmonyOS）
@@ -174,7 +181,7 @@ devecocli run
 #   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 #   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 49, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 50, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -202,7 +209,7 @@ xcrun simctl launch <udid> com.example.codexbar
 
 | 平台 | 产物 | 验证 |
 |---|---|---|
-| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 49/49 + hvigor BUILD SUCCESSFUL |
+| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 50/50 + hvigor BUILD SUCCESSFUL |
 | Android（arm64-v8a / armeabi-v7a） | `app-release.apk` | 上一版本产物（真机 MEY-AN00 安装、启动与交互正常）；本轮需 `ace build apk` 重建 |
 | iOS（Simulator arm64） | `app.app` | 上一版本产物（iPhone 16 模拟器渲染正常）；本轮需 `ace build ios` 重建 |
 
@@ -217,6 +224,13 @@ xcrun simctl launch <udid> com.example.codexbar
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（明亮/暗色主题自适配 + UI 一致性）：把「深色单主题」改成跟随系统的双主题。
+
+- **颜色全部资源化**：新增 `resources/base/element/color.json`（明亮）与 `resources/dark/element/color.json`（暗色同名额），`common/Theme.ets` 由「静态 hex 常量」改为资源取色器（`static get bg(): Resource` → `$r('app.color.bg')`），因此 250 多处调用点一行未改就跟着系统切换；暗色值与原观感逐项对齐（`bg #0B0B0F` / `card #17171E` / `accent #16D3B4` …），明亮值另调一套（`bg #F2F2F7` / `card #FFFFFF` / `accent #0A8471` 等，主色加深以保证白底对比度）。启动窗口背景也从写死白改成双主题。
+- **两处必须字面色值的例外**：① Canvas 2D（`DetailChart.ets` 的 `fillStyle`/`strokeStyle`）走 `Theme.chartAccent()/chartStroke()`，由 `Theme.isDark()` 决定，而该标记由 `EntryAbility.applyColorMode()` 从 `resourceManager.getConfigurationSync().colorMode` 写入 AppStorage（`onConfigurationUpdate` 时刷新）；② 服务卡片数据是 FormBindingData 的 JSON，塞不进资源引用，因此 `WidgetItem.color` 改为 `level`（ok/warn/danger/unknown），由新增的 `widget/pages/WidgetTheme.ets` 映射到 `$r('app.color.bar_*)`，卡片随手系统深浅色换色。
+- **UI 一致性微调**：7 个圆角图标按钮（返回/刷新/统计/设置等）补一圈 `Theme.stroke` 描边，白色按钮在明亮模式的浅灰底上仍有边界；服务商图标衬底保持白色（白底才托得住 OpenAI、Bedrock 这类单色标）但新增 `icon_plate_edge` 描边（暗色下与衬底同色即不可见）；错误提示条的 `#2A1518` 与品牌图标回退点的极端色值（Warp 的 `#FFFFFF`、ElevenLabs 的 `#000000`）统一走 `Theme.dangerTint` / `Theme.brandTint()`；新增 `Theme.gap`/`rowGap` 间距常量。
+- **测试**：`Theme.barColor` 这类「返回资源引用」的 API 无法在宿主单测里比较，改为断言纯逻辑层——`Theme.barLevel`（阈值分级）与 `Theme.brandTint`（近白/近黑/非 hex 回落主色、中间调原样保留）；卡片用例同步改断言 `level`。
 
 本轮已完成（DeepSeek 明细逐条对账）：把 DeepSeek 详情页对着 `DeepSeekUsageFetcher` / `DeepSeekUsageCostParser` 逐行核了一遍。
 

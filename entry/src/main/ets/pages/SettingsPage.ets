@@ -407,6 +407,7 @@ struct SettingsPage {
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .width(36)
         .height(36)
         .borderRadius(12)
@@ -510,7 +511,7 @@ struct SettingsPage {
       .scrollBar(BarState.Off)
       }
 
-      // 自绘确认弹窗（暗色模式可读，不依赖系统主题）
+      // 自绘确认弹窗（配色走主题资源，不受系统 AlertDialog 主题影响）
       if (this.askVisible) {
         Column() {
           Column({ space: 14 }) {

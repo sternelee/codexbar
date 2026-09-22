@@ -79,62 +79,64 @@ struct Index {
   build() {
     Column() {
       // 顶栏
-      Row({ space: 10 }) {
-        Column({ space: 2 }) {
+      Row({ space: Theme.rowGap }) {
+        Column({ space: Theme.gapXxs }) {
           Text('CodexBar')
-            .fontSize(24)
+            .fontSize(Theme.fsTitle)
             .fontWeight(FontWeight.Bold)
             .fontColor(Theme.text)
           Text(`AI 额度速览 · ${AppStore.get().enabledCount()} 家已启用`)
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
         Button(this.isRefreshing ? '刷新中' : '刷新')
-          .fontSize(13)
+          .fontSize(Theme.fsBody)
           .fontColor(Theme.bg)
           .backgroundColor(Theme.accent)
           .height(32)
-          .padding({ left: 14, right: 14 })
+          .padding({ left: Theme.cardPad, right: Theme.cardPad })
           .onClick(() => {
             this.doRefresh();
           })
 
         Button() {
           Text('📊')
-            .fontSize(15)
+            .fontSize(Theme.fsName)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .height(32)
         .width(36)
-        .borderRadius(10)
+        .borderRadius(Theme.radiusInput)
         .onClick(() => {
           Nav.toStats('');
         })
 
         Button() {
           Text('⚙')
-            .fontSize(18)
+            .fontSize(Theme.fsHead)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .height(32)
         .width(36)
-        .borderRadius(10)
+        .borderRadius(Theme.radiusInput)
         .onClick(() => {
           Nav.toSettings();
         })
       }
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, top: 14, bottom: 10 })
+      .padding({ left: Theme.pad, right: Theme.pad, top: Theme.cardPad, bottom: Theme.rowGap })
 
       Refresh({ refreshing: this.isRefreshing }) {
-        List({ space: 12 }) {
+        List({ space: Theme.gap }) {
           ForEach(this.items(this.ver, this.tick), (s: ProviderState) => {
             ListItem() {
               this.providerCard(s)
@@ -143,7 +145,7 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
+        .padding({ left: Theme.pad, right: Theme.pad, bottom: Theme.padBottom })
         .scrollBar(BarState.Off)
       }
       .layoutWeight(1)
@@ -158,19 +160,19 @@ struct Index {
 
   @Builder
   providerCard(s: ProviderState) {
-    Column({ space: 10 }) {
+    Column({ space: Theme.rowGap }) {
       // 头部：名称 + 摘要
-      Row({ space: 10 }) {
+      Row({ space: Theme.rowGap }) {
         ProviderIcon({ providerId: s.descriptor.id, accentColor: s.descriptor.accentColor, iconSize: 32 })
         Text(s.descriptor.title)
-          .fontSize(15)
+          .fontSize(Theme.fsName)
           .fontWeight(FontWeight.Medium)
           .fontColor(Theme.text)
           .layoutWeight(1)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(this.summaryOf(s))
-          .fontSize(12)
+          .fontSize(Theme.fsCaption)
           .fontColor(s.snapshot != null && !s.snapshot.ok ? Theme.danger : Theme.textDim)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -196,12 +198,12 @@ struct Index {
         if (s.snapshot.providerCost != null && s.snapshot.primary == null) {
           Row() {
             Text(s.snapshot.providerCost.displayText)
-              .fontSize(20)
+              .fontSize(Theme.fsMetricSm)
               .fontWeight(FontWeight.Bold)
               .fontColor(Theme.text)
             Blank()
             Text(s.snapshot.providerCost.currency)
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
           .width('100%')
@@ -210,10 +212,10 @@ struct Index {
 
       // 加载中
       if (s.loading) {
-        Row({ space: 8 }) {
+        Row({ space: Theme.gapSm }) {
           LoadingProgress().width(14).height(14).color(Theme.accent)
           Text('正在获取用量…')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .width('100%')
@@ -221,11 +223,11 @@ struct Index {
 
       // 未配置提示
       if (!s.loading && s.setting.credential.length === 0 && s.descriptor.authKind !== AuthKind.DEMO) {
-        Row({ space: 6 }) {
+        Row({ space: Theme.gapXs }) {
           Text('🔑')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
           Text('点击去设置页添加凭证')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .width('100%')
@@ -236,6 +238,7 @@ struct Index {
     .borderRadius(Theme.radius)
     .backgroundColor(Theme.card)
     .border({ width: 1, color: Theme.stroke })
+    .shadow(Theme.cardShadow())
     .onClick(() => {
       Nav.toDetail(s.descriptor.id);
     })

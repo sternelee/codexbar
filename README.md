@@ -104,7 +104,7 @@
 entry/src/main/ets/
 ├── model/Models.ets          ← UsageFetcher.swift (UsageSnapshot/RateWindow/NamedRateWindow/ProviderDescriptor…)
 ├── common/
-│   ├── Theme.ets             ← 主题取色器（资源引用 + 尺度 + Canvas/品牌色适配）
+│   ├── Theme.ets             ← 主题取色器（资源引用 + 字号/间距/半径刻度 + 卡片阴影 + Canvas/品牌色适配）
 │   ├── Format.ets            ← 倒计时/百分比/金额格式化
 │   ├── Nav.ets               ← 路由与 Toast
 │   ├── Notify.ets            ← 本地通知封装（@ohos.notificationManager 三端插件 + 授权请求 + 点击拉起应用）
@@ -181,7 +181,7 @@ devecocli run
 #   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 #   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 50, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 51, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -191,7 +191,7 @@ hvigorw --mode module -p module=entry@default -p isLocalTest=true test
 ```bash
 # Android：编译 ArkTS → 拷贝引擎库/资产 → Gradle 打包，一条命令完成
 ace build apk
-# 产物：.arkui-x/android/app/build/outputs/apk/release/app-release.apk (~72MB)
+# 产物：.arkui-x/android/app/build/outputs/apk/release/app-release.apk (~73MB)
 # 安装/启动到连接的 Android 设备：
 ace install apk && ace launch apk
 
@@ -209,8 +209,8 @@ xcrun simctl launch <udid> com.example.codexbar
 
 | 平台 | 产物 | 验证 |
 |---|---|---|
-| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 50/50 + hvigor BUILD SUCCESSFUL |
-| Android（arm64-v8a / armeabi-v7a） | `app-release.apk` | 上一版本产物（真机 MEY-AN00 安装、启动与交互正常）；本轮需 `ace build apk` 重建 |
+| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 51/51 + hvigor BUILD SUCCESSFUL |
+| Android（arm64-v8a / armeabi-v7a） | `app-release.apk`（76.9 MB） | 本轮重验：`ace build apk` BUILD SUCCESSFUL，ArkTS 资产（`modules.abc` / `widgets.abc` / `resources.index`）重新生成，包内含明亮 `#0A8471` 与暗色 `#16D3B4` 两套调色板；上一版本为真机 MEY-AN00 安装、启动与交互正常 |
 | iOS（Simulator arm64） | `app.app` | 上一版本产物（iPhone 16 模拟器渲染正常）；本轮需 `ace build ios` 重建 |
 
 ## 图标
@@ -224,6 +224,14 @@ xcrun simctl launch <udid> com.example.codexbar
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（主题层次感 + 字号/间距刻度统一）：把「颜色跟着主题变」推进到「层次也跟着主题变」，并把散落各页的字号与留白收进 `Theme` 刻度。
+
+- **卡片阴影随模式切换**：`Theme.cardShadow()` 明亮模式给 16px 模糊、向下 3px 的柔和投影（`rgba(15,23,42,0.06)`），暗色模式半径归零——深底上的黑色投影既看不见又显脏，层级交回已有的 `Theme.stroke` 描边。首页卡片、详情页的全部卡片（账号/费用/窗口/明细/提醒/加载/空态）、设置页与统计页卡片、以及顶栏圆形按钮都走同一处。
+- **分组标题成为独立样式**：费用卡标题、明细分组标题、统计页「合计」、提醒卡标题统一为「小字号 + `fontWeight.Medium` + `letterSpacing(0.5)` + 一条 1px 分割线」，标题用主文字色、行标签用次级色，一行行数值不再和标题糊在一起。统计页原来三条裸行（今日/近7天/近30天）顺手收进一张卡，与仪表盘观感一致。
+- **字号刻度（9 档）**：`fsTitle 24 / fsHead 18 / fsHeading 16 / fsName 15 / fsLabel 14 / fsBody 13 / fsCaption 12 / fsMicro 11 / fsAxis 10`，另有金额位 `fsMetric 26 / fsMetricSm 20`、图标字形 `fsGlyph 22`、空态 `fsEmojiLg 30`；原先散落的 9/10/11/12/13/14/15/16/18/20/22/24/26/30 全部归到这组值（统计页 9px 刻度统一为 10px，其余为一对一映射）。
+- **间距与半径刻度**：间距 `gapXxs 4 / gapXs 6 / gapSm 8 / rowGap 10 / gap 12 / cardPad 14 / pad 16 / gapLg 20 / padBottom 24`，半径 `radius 16 / radiusBtn 12 / radiusInput 10 / radiusChip 9`；页面里不再出现裸数字（2px 的柱间距、Canvas 绘图常量这类纯几何值除外）。
+- **测试**：新增 `Theme_scale_ladder` 断言两条阶梯的单调性（字号、间距）、半径四档递减，以及 `cardShadow().radius === cardShadowRadius()`；本页外其余用例未动，共 51 条全绿。
 
 本轮已完成（明亮/暗色主题自适配 + UI 一致性）：把「深色单主题」改成跟随系统的双主题。
 
@@ -298,6 +306,6 @@ xcrun simctl launch <udid> com.example.codexbar
    - `supportsCredits: true`（Codex / OpenRouter / MiMo / CommandCode / ZoomMate / Amp / Codebuff）对应源工程的 Credits 泳道与 `creditsHint`，我们只在 `providerCost` 存在时展示费用。
    - **明细行剩余项**：Venice 的网页版 `Credits` 六行（`Bank cap`/`Next refill`）与其 `Used this cycle` 进度条——需要平台网页会话而非 API Key（源工程的 `progress` 只来自 VeniceWebUsageFetcher 与 Copilot，Copilot 已接）；HuggingFace 的 `Credits` 分组（Billing 页 HTML 抓余额）；Poe 的 `Daily points` 图表（源工程也未给 Poe 配 chart，其“每日点数”只在用量项里展示）；IBMBob 的 `teams/{id}/users/{userID}` 逐人预算端点；MiniMax 的平台网页版配额（HTML 抓取，我们仍用 API Token）（DeepSeek 未带平台令牌时已按 macOS 的 `webSessionRequired` 提示处理）；`costSummaryTitles` 目前只作为策略表保留（源工程用它把分组从“用量项选择器”里排除，我们没有该选择器）。图表已覆盖源工程全部 5 处 `makeChart`（Claude Admin / Groq / MiniMax / DeepSeek / ZoomMate），其余服务商源工程本就不画图。
 2. **Bedrock 成本日线**：源工程 `fetchDailyReport`（Cost Explorer DAILY 粒度）用于成本历史曲线，当前仅取本月汇总，统计页暂无 Bedrock 成本曲线。
-3. **三端重验证**：本轮仅重跑本地单测与 HarmonyOS HAP 构建；Android/iOS 产物为上一版本，需 `ace build apk` / `ace build ios` 重新构建并验证新增与恢复的服务商。
+3. **iOS 重验证**：Android 已用 `ace build apk` 重建（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商。
 
 仍明确不迁移（桌面专属 / CLI 探测 / HTML 抓取）：Windsurf、Sakana、Replicate、TypeSafe、Helmcode、StepFun、QwenCloud、Alibaba Token Plan、Cursor、Augment、JetBrains、Antigravity、Vertex AI / Gemini、Copilot 预算页抓取、Bedrock Profile 模式、Kiro、Ollama 本地、Pi、CodeRabbit、Wayfinder、Zed。

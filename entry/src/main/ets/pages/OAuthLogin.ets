@@ -230,28 +230,29 @@ struct OAuthLogin {
   build() {
     Column() {
       // 顶栏
-      Row({ space: 10 }) {
+      Row({ space: Theme.rowGap }) {
         Button() {
           Text('‹')
-            .fontSize(22)
+            .fontSize(Theme.fsGlyph)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .width(36)
         .height(36)
-        .borderRadius(12)
+        .borderRadius(Theme.radiusBtn)
         .onClick(() => {
           Nav.back();
         })
 
-        Column({ space: 2 }) {
+        Column({ space: Theme.gapXxs }) {
           Text(this.loginTitle())
-            .fontSize(16)
+            .fontSize(Theme.fsHeading)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
           Text(this.status)
-            .fontSize(11)
+            .fontSize(Theme.fsMicro)
             .fontColor(this.failed ? Theme.danger : Theme.textDim)
             .maxLines(2)
         }
@@ -259,7 +260,7 @@ struct OAuthLogin {
         .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, top: 12, bottom: 8 })
+      .padding({ left: Theme.pad, right: Theme.pad, top: Theme.gap, bottom: Theme.gapSm })
 
       if (this.startUrl.length > 0) {
         Web({ src: this.startUrl, controller: this.controller })
@@ -274,9 +275,9 @@ struct OAuthLogin {
             this.pollDeepSeekToken();
           })
       } else {
-        Column({ space: 8 }) {
+        Column({ space: Theme.gapSm }) {
           Text(this.status)
-            .fontSize(14)
+            .fontSize(Theme.fsLabel)
             .fontColor(this.failed ? Theme.danger : Theme.text)
         }
         .width('100%')

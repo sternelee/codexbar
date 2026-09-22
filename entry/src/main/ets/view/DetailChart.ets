@@ -45,19 +45,19 @@ export struct DetailChart {
   }
 
   build() {
-    Column({ space: 3 }) {
+    Column({ space: Theme.gapXxs }) {
       if (this.hasCaption()) {
-        Row({ space: 6 }) {
+        Row({ space: Theme.gapXs }) {
           if (this.chart.title != null && this.chart.title!.length > 0) {
             Text(this.chart.title!)
-              .fontSize(11)
+              .fontSize(Theme.fsMicro)
               .fontWeight(FontWeight.Medium)
               .fontColor(Theme.textDim)
           }
           Blank()
           if (this.chart.unit != null && this.chart.unit!.length > 0) {
             Text(this.chart.unit!)
-              .fontSize(11)
+              .fontSize(Theme.fsMicro)
               .fontColor(Theme.textDim)
           }
         }

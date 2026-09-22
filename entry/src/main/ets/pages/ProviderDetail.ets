@@ -252,23 +252,24 @@ struct ProviderDetail {
     Stack() {
     Column() {
       // 顶栏
-      Row({ space: 10 }) {
+      Row({ space: Theme.rowGap }) {
         Button() {
           Text('‹')
-            .fontSize(22)
+            .fontSize(Theme.fsGlyph)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .width(36)
         .height(36)
-        .borderRadius(12)
+        .borderRadius(Theme.radiusBtn)
         .onClick(() => {
           Nav.back();
         })
 
         Text(this.state(this.ver, this.tick) != null ? this.state(this.ver, this.tick)!.descriptor.title : '')
-          .fontSize(18)
+          .fontSize(Theme.fsHead)
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.text)
           .layoutWeight(1)
@@ -283,66 +284,68 @@ struct ProviderDetail {
               .color(Theme.accent)
           } else {
             Text('↻')
-              .fontSize(18)
+              .fontSize(Theme.fsHead)
               .fontColor(Theme.accent)
           }
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .width(36)
         .height(36)
-        .borderRadius(12)
+        .borderRadius(Theme.radiusBtn)
         .onClick(() => {
           AppStore.get().refreshOne(this.providerId);
         })
       }
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, top: 12, bottom: 8 })
+      .padding({ left: Theme.pad, right: Theme.pad, top: Theme.gap, bottom: Theme.gapSm })
 
-      List({ space: 12 }) {
+      List({ space: Theme.gap }) {
         if (this.state(this.ver, this.tick) != null) {
           ListItem() {
             this.body(this.state(this.ver, this.tick)!)
           }
         } else {
           ListItem() {
-            Column({ space: 10 }) {
+            Column({ space: Theme.rowGap }) {
               Text('未找到该服务商')
-                .fontSize(15)
+                .fontSize(Theme.fsName)
                 .fontColor(Theme.text)
               Text(`路由参数异常："${this.providerId}"，请返回列表重试`)
-                .fontSize(12)
+                .fontSize(Theme.fsCaption)
                 .fontColor(Theme.textDim)
             }
             .width('100%')
-            .padding(20)
+            .padding(Theme.gapLg)
             .borderRadius(Theme.radius)
             .backgroundColor(Theme.card)
             .border({ width: 1, color: Theme.stroke })
+            .shadow(Theme.cardShadow())
           }
         }
       }
       .layoutWeight(1)
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
+      .padding({ left: Theme.pad, right: Theme.pad, bottom: Theme.padBottom })
       .scrollBar(BarState.Off)
       }
 
       // 自绘确认弹窗（配色走主题资源，不受系统 AlertDialog 主题影响）
       if (this.askVisible) {
         Column() {
-          Column({ space: 14 }) {
+          Column({ space: Theme.cardPad }) {
             Text(this.askTitle)
-              .fontSize(16)
+              .fontSize(Theme.fsHeading)
               .fontWeight(FontWeight.Medium)
               .fontColor(Theme.text)
             Text(this.askMessage)
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.textDim)
               .width('100%')
-            Row({ space: 10 }) {
+            Row({ space: Theme.rowGap }) {
               Button('取消')
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)
                 .layoutWeight(1)
@@ -351,7 +354,7 @@ struct ProviderDetail {
                   this.onAskClose(false);
                 })
               Button(this.askConfirmText)
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.danger)
                 .layoutWeight(1)
@@ -363,10 +366,11 @@ struct ProviderDetail {
             .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
-          .padding(20)
+          .padding(Theme.gapLg)
           .borderRadius(Theme.radius)
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
           .width('86%')
         }
         .width('100%')
@@ -383,18 +387,18 @@ struct ProviderDetail {
 
   @Builder
   body(s: ProviderState) {
-    Column({ space: 12 }) {
+    Column({ space: Theme.gap }) {
       // 账号卡片
-      Column({ space: 6 }) {
-        Row({ space: 8 }) {
+      Column({ space: Theme.gapXs }) {
+        Row({ space: Theme.gapSm }) {
           ProviderIcon({ providerId: s.descriptor.id, accentColor: s.descriptor.accentColor, iconSize: 36 })
           Text(s.descriptor.title)
-            .fontSize(16)
+            .fontSize(Theme.fsHeading)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
           Blank()
           Text(s.loading ? '查询中…' : `更新于 ${Format.ago(s.lastSuccessAt)}`)
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .width('100%')
@@ -403,14 +407,14 @@ struct ProviderDetail {
           Text([s.snapshot.identity.accountOrganization, s.snapshot.identity.accountEmail]
             .filter(x => x.length > 0)
             .join(' · '))
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .maxLines(2)
         }
         // 多账号：显示当前激活账号
         if (Settings.accountCount(this.providerId) > 0 && this.activeAccountName().length > 0) {
           Text(`当前账号：${this.activeAccountName()}`)
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.accent)
         }
         // 清除凭证入口（已配置时显示）
@@ -418,7 +422,7 @@ struct ProviderDetail {
           Row() {
             Blank()
             Text('清除凭证')
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.danger)
               .onClick(() => {
                 this.confirmClearCredential(s);
@@ -427,16 +431,16 @@ struct ProviderDetail {
           .width('100%')
         }
         if (s.snapshot != null && !s.snapshot.ok) {
-          Row({ space: 6 }) {
+          Row({ space: Theme.gapXs }) {
             Text('⚠')
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
             Text(s.snapshot.error)
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.danger)
               .layoutWeight(1)
           }
-          .padding(10)
-          .borderRadius(10)
+          .padding(Theme.rowGap)
+          .borderRadius(Theme.radiusInput)
           .backgroundColor(Theme.dangerTint)
           .width('100%')
         }
@@ -446,52 +450,53 @@ struct ProviderDetail {
       .borderRadius(Theme.radius)
       .backgroundColor(Theme.card)
       .border({ width: 1, color: Theme.stroke })
+      .shadow(Theme.cardShadow())
 
       // 未配置 / 凭证失效：当前页内直接配置
       if (this.needsCredentialCard(s)) {
-        Column({ space: 10 }) {
+        Column({ space: Theme.rowGap }) {
           if (!this.editingCred) {
             Text(this.credCardIcon(s))
-              .fontSize(22)
+              .fontSize(Theme.fsGlyph)
             Text(this.credCardTitle(s))
-              .fontSize(15)
+              .fontSize(Theme.fsName)
               .fontWeight(FontWeight.Medium)
               .fontColor(this.credCardTitle(s) === '尚未配置凭证' ? Theme.text : Theme.danger)
             Text(this.credCardHint(s))
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
               .textAlign(TextAlign.Center)
-            Row({ space: 10 }) {
+            Row({ space: Theme.rowGap }) {
               if (s.descriptor.id === 'claude' || s.descriptor.id === 'codex') {
                 Button('网页登录')
-                  .fontSize(13)
+                  .fontSize(Theme.fsBody)
                   .fontColor(Theme.accent)
                   .backgroundColor(Theme.input)
                   .border({ width: 1, color: Theme.accent })
                   .height(34)
-                  .padding({ left: 16, right: 16 })
+                  .padding({ left: Theme.pad, right: Theme.pad })
                   .onClick(() => {
                     Nav.toOAuthLogin(s.descriptor.id);
                   })
               }
               Button('配置凭证')
-                .fontSize(13)
+                .fontSize(Theme.fsBody)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.accent)
                 .height(34)
-                .padding({ left: 18, right: 18 })
+                .padding({ left: Theme.gapLg, right: Theme.gapLg })
                 .onClick(() => {
                   this.editingCred = true;
                 })
             }
           } else {
             TextInput({ placeholder: s.descriptor.authHint, text: this.credInput })
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
               .placeholderColor(Theme.textDim)
-              .placeholderFont({ size: 12 })
+              .placeholderFont({ size: Theme.fsCaption })
               .backgroundColor(Theme.input)
-              .borderRadius(10)
+              .borderRadius(Theme.radiusInput)
               .height(42)
               .width('100%')
               .onChange((v: string) => {
@@ -499,12 +504,12 @@ struct ProviderDetail {
               })
             if (this.needSecond(this.providerId)) {
               TextInput({ placeholder: this.secondHint(this.providerId), text: this.cred2Input })
-                .fontSize(13)
+                .fontSize(Theme.fsBody)
                 .fontColor(Theme.text)
                 .placeholderColor(Theme.textDim)
-                .placeholderFont({ size: 12 })
+                .placeholderFont({ size: Theme.fsCaption })
                 .backgroundColor(Theme.input)
-                .borderRadius(10)
+                .borderRadius(Theme.radiusInput)
                 .height(42)
                 .width('100%')
                 .onChange((v: string) => {
@@ -513,21 +518,21 @@ struct ProviderDetail {
             }
             ForEach(this.extraFieldList(this.providerId), (f: ExtraField) => {
               TextInput({ placeholder: f.hint, text: extraValue(this.credExtraJson, f.key) })
-                .fontSize(13)
+                .fontSize(Theme.fsBody)
                 .fontColor(Theme.text)
                 .placeholderColor(Theme.textDim)
-                .placeholderFont({ size: 12 })
+                .placeholderFont({ size: Theme.fsCaption })
                 .backgroundColor(Theme.input)
-                .borderRadius(10)
+                .borderRadius(Theme.radiusInput)
                 .height(42)
                 .width('100%')
                 .onChange((v: string) => {
                   this.credExtraJson = setExtraValue(this.credExtraJson, f.key, v);
                 })
             }, (f: ExtraField) => `${this.providerId}_${f.key}`)
-            Row({ space: 10 }) {
+            Row({ space: Theme.rowGap }) {
               Button('取消')
-                .fontSize(13)
+                .fontSize(Theme.fsBody)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)
                 .height(34)
@@ -539,7 +544,7 @@ struct ProviderDetail {
                   this.credExtraJson = '';
                 })
               Button('保存并查询')
-                .fontSize(13)
+                .fontSize(Theme.fsBody)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.accent)
                 .height(34)
@@ -552,80 +557,84 @@ struct ProviderDetail {
           }
         }
         .width('100%')
-        .padding(20)
+        .padding(Theme.gapLg)
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: this.editingCred ? Theme.accent : Theme.stroke })
+        .shadow(Theme.cardShadow())
         .alignItems(HorizontalAlign.Center)
       }
 
       // DeepSeek：只差平台会话（API Key 已有）时，提供网页登录一键补全
       if (this.needsSessionLogin(s)) {
-        Column({ space: 8 }) {
+        Column({ space: Theme.gapSm }) {
           Text('平台会话未配置')
-            .fontSize(14)
+            .fontSize(Theme.fsLabel)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
           Text('近 30 天用量与花费需要 platform.deepseek.com 的会话；网页登录一次即可自动回填，不会改动已填的 API Key')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .textAlign(TextAlign.Center)
           Button('网页登录')
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.accent)
             .backgroundColor(Theme.input)
             .border({ width: 1, color: Theme.accent })
             .height(34)
-            .padding({ left: 16, right: 16 })
+            .padding({ left: Theme.pad, right: Theme.pad })
             .onClick(() => {
               Nav.toOAuthLogin(s.descriptor.id);
             })
         }
         .width('100%')
-        .padding(20)
+        .padding(Theme.gapLg)
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .alignItems(HorizontalAlign.Center)
       }
 
       // 加载中
       if (s.loading) {
-        Row({ space: 10 }) {
+        Row({ space: Theme.rowGap }) {
           LoadingProgress().width(18).height(18).color(Theme.accent)
           Text('正在获取用量…')
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.textDim)
         }
         .justifyContent(FlexAlign.Center)
         .width('100%')
-        .padding(18)
+        .padding(Theme.gapLg)
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
       }
 
       // 尚未刷新（已配置但没数据）
       if (!s.loading && s.snapshot == null && s.setting.credential.length > 0) {
-        Column({ space: 8 }) {
+        Column({ space: Theme.gapSm }) {
           Text('暂无数据')
-            .fontSize(15)
+            .fontSize(Theme.fsName)
             .fontColor(Theme.text)
           Text('点击右上角 ↻ 立即查询')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .width('100%')
-        .padding(20)
+        .padding(Theme.gapLg)
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
       }
 
       // 全部用量窗口
       if (s.snapshot != null && s.snapshot.ok) {
         ForEach(s.allWindows(), (w: NamedRateWindow) => {
-          Column({ space: 8 }) {
+          Column({ space: Theme.gapSm }) {
             WindowBlock({ title: w.title, win: w.window, compact: false })
           }
           .width('100%')
@@ -633,18 +642,26 @@ struct ProviderDetail {
           .borderRadius(Theme.radius)
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
         }, (w: NamedRateWindow) => `${w.id}_${w.window.usedPercent}_${Math.floor(this.tick / 30)}`)
       }
 
       // 余额（providerCost.period 非空时用它作标题，如 "Monthly cap" / "Extra usage"）
       if (s.snapshot != null && s.snapshot.ok && s.snapshot.providerCost != null) {
-        Column({ space: 6 }) {
+        Column({ space: Theme.gapSm }) {
+          // 分组标题（小字号 + 字距 + 一条分割线，与下行数值拉开层次）
           Text(this.costTitle(s.snapshot.providerCost))
-            .fontSize(12)
-            .fontColor(Theme.textDim)
+            .fontSize(Theme.fsCaption)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Theme.text)
+            .letterSpacing(Theme.tracking)
+          Divider()
+            .width('100%')
+            .strokeWidth(1)
+            .color(Theme.stroke)
           Row() {
             Text(s.snapshot.providerCost.displayText)
-              .fontSize(26)
+              .fontSize(Theme.fsMetric)
               .fontWeight(FontWeight.Bold)
               .fontColor(Theme.text)
           }
@@ -653,13 +670,13 @@ struct ProviderDetail {
           if (s.snapshot.providerCost.detailText != null &&
             s.snapshot.providerCost.detailText!.length > 0) {
             Text(s.snapshot.providerCost.detailText!)
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
           // 有周期上限时补一行「已用 / 上限」（对照源工程费用卡的 used/limit）
           if (s.snapshot.providerCost.limit != null && s.snapshot.providerCost.limit! > 0) {
             Text(`已用 ${Format.money(s.snapshot.providerCost.used, s.snapshot.providerCost.currency)} / 上限 ${Format.money(s.snapshot.providerCost.limit!, s.snapshot.providerCost.currency)}`)
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
         }
@@ -669,29 +686,36 @@ struct ProviderDetail {
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
       }
 
       // 明细分组（按 ProviderOptionalDetailsPresentation 与费用卡占位过滤）
       if (s.snapshot != null && s.snapshot.ok) {
         ForEach(this.sections(s), (sec: ProviderDetailSection) => {
-          Column({ space: 8 }) {
+          Column({ space: Theme.gapSm }) {
+            // 分组标题：小字号 + 字距，下接一条分割线，和明细行拉开层次
             Text(sec.title)
-              .fontSize(13)
+              .fontSize(Theme.fsCaption)
               .fontWeight(FontWeight.Medium)
               .fontColor(Theme.text)
+              .letterSpacing(Theme.tracking)
+            Divider()
+              .width('100%')
+              .strokeWidth(1)
+              .color(Theme.stroke)
             ForEach(sec.rows, (r: ProviderDetailRow) => {
-              Column({ space: 6 }) {
-                Row({ space: 8 }) {
+              Column({ space: Theme.gapXs }) {
+                Row({ space: Theme.gapSm }) {
                   Text(r.label)
-                    .fontSize(13)
+                    .fontSize(Theme.fsBody)
                     .fontColor(Theme.textDim)
                   Blank()
                   Text(r.value)
-                    .fontSize(13)
+                    .fontSize(Theme.fsBody)
                     .fontColor(Theme.text)
                   if (r.secondary != null && r.secondary!.length > 0) {
                     Text(r.secondary!)
-                      .fontSize(12)
+                      .fontSize(Theme.fsCaption)
                       .fontColor(Theme.textDim)
                   }
                 }
@@ -717,6 +741,7 @@ struct ProviderDetail {
           .borderRadius(Theme.radius)
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
         }, (sec: ProviderDetailSection) => sec.title)
       }
 
@@ -726,10 +751,10 @@ struct ProviderDetail {
       // 认证说明
       if (s.descriptor.authKind !== AuthKind.DEMO && s.descriptor.authUrl.length > 0) {
         Text(`凭证获取：${s.descriptor.authUrl}`)
-          .fontSize(11)
+          .fontSize(Theme.fsMicro)
           .fontColor(Theme.textDim)
           .width('100%')
-          .padding({ left: 4 })
+          .padding({ left: Theme.gapXxs })
       }
     }
     .width('100%')
@@ -737,14 +762,15 @@ struct ProviderDetail {
 
   @Builder
   reminderCard(s: ProviderState) {
-    Column({ space: 12 }) {
-      Row({ space: 8 }) {
+    Column({ space: Theme.gapSm }) {
+      Row({ space: Theme.gapSm }) {
         Text('🔔')
-          .fontSize(14)
+          .fontSize(Theme.fsLabel)
         Text('提醒设置')
-          .fontSize(13)
+          .fontSize(Theme.fsLabel)
           .fontWeight(FontWeight.Medium)
           .fontColor(Theme.text)
+          .letterSpacing(Theme.tracking)
           .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.remEnabled })
           .selectedColor(Theme.accent)
@@ -755,21 +781,26 @@ struct ProviderDetail {
       }
       .width('100%')
 
+      Divider()
+        .width('100%')
+        .strokeWidth(1)
+        .color(Theme.stroke)
+
       Text('额度快用完或即将恢复时发送系统通知（应用运行期间有效）')
-        .fontSize(11)
+        .fontSize(Theme.fsMicro)
         .fontColor(Theme.textDim)
         .width('100%')
 
       if (this.remEnabled) {
         // 额度快用完：用量阈值
-        Column({ space: 8 }) {
+        Column({ space: Theme.gapSm }) {
           Row() {
             Text('额度快用完')
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
             Blank()
             Text(this.remThreshold > 0 ? `任一窗口用量 ≥ ${this.remThreshold}%` : '已关闭')
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
           .width('100%')
@@ -789,25 +820,25 @@ struct ProviderDetail {
         .width('100%')
 
         // 即将恢复：提前量档位
-        Column({ space: 8 }) {
+        Column({ space: Theme.gapSm }) {
           Row() {
             Text('即将恢复')
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
             Blank()
             Text(leadPhrase(this.remLead))
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
           .width('100%')
-          Row({ space: 8 }) {
+          Row({ space: Theme.gapSm }) {
             ForEach(LEAD_OPTIONS, (m: number) => {
               Text(leadLabel(m))
-                .fontSize(12)
+                .fontSize(Theme.fsCaption)
                 .fontColor(this.remLead === m ? Theme.bg : Theme.textDim)
                 .backgroundColor(this.remLead === m ? Theme.accent : Theme.input)
-                .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                .borderRadius(10)
+                .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
+                .borderRadius(Theme.radiusInput)
                 .onClick(() => {
                   this.remLead = m;
                   this.saveReminder();
@@ -825,5 +856,6 @@ struct ProviderDetail {
     .borderRadius(Theme.radius)
     .backgroundColor(Theme.card)
     .border({ width: 1, color: this.remEnabled ? Theme.accent : Theme.stroke })
+    .shadow(Theme.cardShadow())
   }
 }

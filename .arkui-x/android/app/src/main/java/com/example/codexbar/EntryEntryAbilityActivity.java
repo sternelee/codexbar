@@ -18,7 +18,10 @@ public class EntryEntryAbilityActivity extends StageActivity {
     protected void onCreate(Bundle savedInstanceState) {
         Log.e("HiHelloWorld", "EntryEntryAbilityActivity");
         
-        setInstanceName("com.example.codexbar:entry:EntryAbility:");
+        // 实例名格式：<HarmonyOS bundleName>:<moduleName>:<abilityName>:<instanceName>
+        // 必须与 AppScope/app.json5 的 bundleName 一致，否则 ArkTS 找不到
+        // `@bundle:<bundleName>/entry/ets/...` 的模块记录，启动后只显示白屏。
+        setInstanceName("com.sternelee.codexbar:entry:EntryAbility:");
         super.onCreate(savedInstanceState);
     }
 }

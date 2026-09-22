@@ -93,39 +93,40 @@ struct StatsPage {
   build() {
     Column() {
       // 顶栏
-      Row({ space: 10 }) {
+      Row({ space: Theme.rowGap }) {
         Button() {
           Text('‹')
-            .fontSize(22)
+            .fontSize(Theme.fsGlyph)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .width(36)
         .height(36)
-        .borderRadius(12)
+        .borderRadius(Theme.radiusBtn)
         .onClick(() => {
           Nav.back();
         })
 
         Text('用量统计')
-          .fontSize(18)
+          .fontSize(Theme.fsHead)
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.text)
           .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, top: 12, bottom: 8 })
+      .padding({ left: Theme.pad, right: Theme.pad, top: Theme.gap, bottom: Theme.gapSm })
 
       if (this.historyProviders(this.ver).length === 0) {
-        Column({ space: 10 }) {
+        Column({ space: Theme.rowGap }) {
           Text('📊')
-            .fontSize(30)
+            .fontSize(Theme.fsEmojiLg)
           Text('暂无统计数据')
-            .fontSize(15)
+            .fontSize(Theme.fsName)
             .fontColor(Theme.text)
           Text('回仪表盘点「刷新」积累数据（演示模式立即生效）')
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .textAlign(TextAlign.Center)
         }
@@ -133,18 +134,18 @@ struct StatsPage {
         .layoutWeight(1)
         .justifyContent(FlexAlign.Center)
       } else {
-        List({ space: 12 }) {
+        List({ space: Theme.gap }) {
           // 服务商 chips
           ListItem() {
             Scroll() {
-              Row({ space: 8 }) {
+              Row({ space: Theme.gapSm }) {
                 ForEach(this.historyProviders(this.ver), (s: ProviderState) => {
                   Text(s.descriptor.title)
-                    .fontSize(12)
+                    .fontSize(Theme.fsCaption)
                     .fontColor(this.providerId === s.descriptor.id ? Theme.bg : Theme.textDim)
                     .backgroundColor(this.providerId === s.descriptor.id ? Theme.accent : Theme.input)
-                    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                    .borderRadius(10)
+                    .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
+                    .borderRadius(Theme.radiusInput)
                     .maxLines(1)
                     .onClick(() => {
                       this.providerId = s.descriptor.id;
@@ -161,24 +162,24 @@ struct StatsPage {
 
           // 指标 + 范围
           ListItem() {
-            Row({ space: 8 }) {
-              Row({ space: 6 }) {
+            Row({ space: Theme.rowGap }) {
+              Row({ space: Theme.gapXs }) {
                 Text('用量')
-                  .fontSize(12)
+                  .fontSize(Theme.fsCaption)
                   .fontColor(this.metric === 'usage' ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.metric === 'usage' ? Theme.accent : Theme.input)
-                  .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                  .borderRadius(10)
+                  .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
+                  .borderRadius(Theme.radiusInput)
                   .onClick(() => {
                     this.metric = 'usage';
                   })
                 if (this.hasBalanceHistory(this.providerId)) {
                   Text('消费')
-                    .fontSize(12)
+                    .fontSize(Theme.fsCaption)
                     .fontColor(this.metric === 'cost' ? Theme.bg : Theme.textDim)
                     .backgroundColor(this.metric === 'cost' ? Theme.accent : Theme.input)
-                    .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-                    .borderRadius(10)
+                    .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
+                    .borderRadius(Theme.radiusInput)
                     .onClick(() => {
                       this.metric = 'cost';
                     })
@@ -187,22 +188,22 @@ struct StatsPage {
 
               Blank()
 
-              Row({ space: 6 }) {
+              Row({ space: Theme.gapXs }) {
                 Text('近7天')
-                  .fontSize(12)
+                  .fontSize(Theme.fsCaption)
                   .fontColor(this.range === 7 ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.range === 7 ? Theme.accent : Theme.input)
-                  .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                  .borderRadius(10)
+                  .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXs, bottom: Theme.gapXs })
+                  .borderRadius(Theme.radiusInput)
                   .onClick(() => {
                     this.range = 7;
                   })
                 Text('近30天')
-                  .fontSize(12)
+                  .fontSize(Theme.fsCaption)
                   .fontColor(this.range === 30 ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.range === 30 ? Theme.accent : Theme.input)
-                  .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-                  .borderRadius(10)
+                  .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXs, bottom: Theme.gapXs })
+                  .borderRadius(Theme.radiusInput)
                   .onClick(() => {
                     this.range = 30;
                   })
@@ -216,57 +217,71 @@ struct StatsPage {
             this.chartCard()
           }
 
-          // 合计
+          // 合计：三个区间收进同一张卡，标题 + 分割线与数值行分层
           ListItem() {
-            Row() {
-              Text('今日')
-                .fontSize(13)
-                .fontColor(Theme.textDim)
-              Blank()
-              Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 1)))
-                .fontSize(13)
+            Column({ space: Theme.gapSm }) {
+              Text('合计')
+                .fontSize(Theme.fsCaption)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(Theme.text)
+                .letterSpacing(Theme.tracking)
+              Divider()
+                .width('100%')
+                .strokeWidth(1)
+                .color(Theme.stroke)
+              Row() {
+                Text('今日')
+                  .fontSize(Theme.fsBody)
+                  .fontColor(Theme.textDim)
+                Blank()
+                Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 1)))
+                  .fontSize(Theme.fsBody)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(Theme.text)
+              }
+              .width('100%')
+              Row() {
+                Text('近7天')
+                  .fontSize(Theme.fsBody)
+                  .fontColor(Theme.textDim)
+                Blank()
+                Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 7)))
+                  .fontSize(Theme.fsBody)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(Theme.text)
+              }
+              .width('100%')
+              Row() {
+                Text('近30天')
+                  .fontSize(Theme.fsBody)
+                  .fontColor(Theme.textDim)
+                Blank()
+                Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 30)))
+                  .fontSize(Theme.fsBody)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(Theme.text)
+              }
+              .width('100%')
             }
+            .alignItems(HorizontalAlign.Start)
             .width('100%')
-          }
-          ListItem() {
-            Row() {
-              Text('近7天')
-                .fontSize(13)
-                .fontColor(Theme.textDim)
-              Blank()
-              Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 7)))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(Theme.text)
-            }
-            .width('100%')
-          }
-          ListItem() {
-            Row() {
-              Text('近30天')
-                .fontSize(13)
-                .fontColor(Theme.textDim)
-              Blank()
-              Text(this.fmtValue(sumLast(this.points(this.ver), localDateKey(Date.now()), 30)))
-                .fontSize(13)
-                .fontWeight(FontWeight.Medium)
-                .fontColor(Theme.text)
-            }
-            .width('100%')
+            .padding(Theme.cardPad)
+            .borderRadius(Theme.radius)
+            .backgroundColor(Theme.card)
+            .border({ width: 1, color: Theme.stroke })
+            .shadow(Theme.cardShadow())
           }
 
           ListItem() {
             Text('基于刷新采样估算：每日取最后一次成功查询的用量/余额推算增量，与真实计费存在差异。')
-              .fontSize(11)
+              .fontSize(Theme.fsMicro)
               .fontColor(Theme.textDim)
               .width('100%')
           }
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
+        .padding({ left: Theme.pad, right: Theme.pad, bottom: Theme.padBottom })
         .scrollBar(BarState.Off)
       }
     }
@@ -277,7 +292,7 @@ struct StatsPage {
 
   @Builder
   chartCard() {
-    Column({ space: 10 }) {
+    Column({ space: Theme.rowGap }) {
       this.chartBody()
     }
     .width('100%')
@@ -285,23 +300,24 @@ struct StatsPage {
     .borderRadius(Theme.radius)
     .backgroundColor(Theme.card)
     .border({ width: 1, color: Theme.stroke })
+    .shadow(Theme.cardShadow())
   }
 
   @Builder
   chartBody() {
-    Row({ space: 6 }) {
+    Row({ space: Theme.gapXs }) {
       // Y 轴标签
       Column({ space: 0 }) {
         Text(this.yLabel(1))
-          .fontSize(9)
+          .fontSize(Theme.fsAxis)
           .fontColor(Theme.textDim)
         Blank()
         Text(this.yLabel(0.5))
-          .fontSize(9)
+          .fontSize(Theme.fsAxis)
           .fontColor(Theme.textDim)
         Blank()
         Text('0')
-          .fontSize(9)
+          .fontSize(Theme.fsAxis)
           .fontColor(Theme.textDim)
       }
       .height(130)
@@ -341,15 +357,15 @@ struct StatsPage {
     // X 轴：首/末日期
     Row() {
       Text(this.firstLabel())
-        .fontSize(9)
+        .fontSize(Theme.fsAxis)
         .fontColor(Theme.textDim)
       Blank()
       Text(this.selectedSummary())
-        .fontSize(10)
+        .fontSize(Theme.fsAxis)
         .fontColor(Theme.text)
       Blank()
       Text(this.lastLabel())
-        .fontSize(9)
+        .fontSize(Theme.fsAxis)
         .fontColor(Theme.textDim)
     }
     .width('100%')

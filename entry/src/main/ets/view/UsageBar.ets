@@ -63,14 +63,14 @@ export struct WindowBlock {
   @Prop compact: boolean = false;
 
   build() {
-    Column({ space: 6 }) {
+    Column({ space: Theme.gapXs }) {
       Row() {
         Text(this.title)
-          .fontSize(this.compact ? 12 : 13)
+          .fontSize(this.compact ? Theme.fsCaption : Theme.fsBody)
           .fontColor(Theme.textDim)
         Blank()
         Text(Format.percent(this.win.usedPercent))
-          .fontSize(this.compact ? 12 : 13)
+          .fontSize(this.compact ? Theme.fsCaption : Theme.fsBody)
           .fontWeight(FontWeight.Medium)
           .fontColor(Theme.barColor(this.win.usedPercent, this.win.usageKnown))
       }
@@ -80,9 +80,9 @@ export struct WindowBlock {
 
       if (this.win.resetsAt > 0) {
         Text(` ${Format.resetIn(this.win.resetsAt - Date.now())}`)
-          .fontSize(11)
+          .fontSize(Theme.fsMicro)
           .fontColor(Theme.textDim)
-          .margin({ top: 2 })
+          .margin({ top: Theme.gapXxs })
       }
     }
     .width('100%')

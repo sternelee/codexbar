@@ -98,8 +98,18 @@ export class Theme {
 
   // ------------------------------------------------------------------ 尺度
 
-  /** 半径 */
+  // 刻度约定：页面里不再写裸数字，一律引用下面这组值，
+  // 这样改一处就能统一全应用的字号与留白，也顺手保证了两端（详情/首页）观感一致。
+
+  /** 半径：卡片 */
   static readonly radius: number = 16;
+  /** 半径：图标按钮 / 弹窗 */
+  static readonly radiusBtn: number = 12;
+  /** 半径：输入框 / 分段控件 */
+  static readonly radiusInput: number = 10;
+  /** 半径：标签 chip（比输入框更紧凑） */
+  static readonly radiusChip: number = 9;
+
   /** 页面左右边距 */
   static readonly pad: number = 16;
   /** 卡片内边距 */
@@ -108,6 +118,68 @@ export class Theme {
   static readonly gap: number = 12;
   /** 控件行内间距 */
   static readonly rowGap: number = 10;
+  /** 紧凑间距（同一行内的相邻元素） */
+  static readonly gapSm: number = 8;
+  /** 极小间距（标题与其说明） */
+  static readonly gapXs: number = 6;
+  /** 贴紧间距（成对文字的基线对齐量） */
+  static readonly gapXxs: number = 4;
+  /** 区块间距（弹窗内边距 / 空态留白） */
+  static readonly gapLg: number = 20;
+  /** 页面底部留白 */
+  static readonly padBottom: number = 24;
+
+  // 字号刻度（从大到小，恰好够用一层不多）：
+  // 24 页面大标题 → 18 顶栏标题 → 16 卡片主标题/弹窗标题 → 15 服务商名 →
+  // 14 开关行标题/按钮 → 13 正文与明细行 → 12 说明与行标签 → 11 页脚注释 → 10 图表刻度
+
+  /** 24 页面大标题（仪表盘） */
+  static readonly fsTitle: number = 24;
+  /** 18 顶栏 / 页面标题 */
+  static readonly fsHead: number = 18;
+  /** 16 卡片主标题 / 弹窗标题 */
+  static readonly fsHeading: number = 16;
+  /** 15 服务商名 */
+  static readonly fsName: number = 15;
+  /** 14 开关行标题 / 弹窗按钮 */
+  static readonly fsLabel: number = 14;
+  /** 13 正文与明细行 */
+  static readonly fsBody: number = 13;
+  /** 12 说明文字 / 行标签 */
+  static readonly fsCaption: number = 12;
+  /** 11 页脚注释 */
+  static readonly fsMicro: number = 11;
+  /** 10 图表刻度 */
+  static readonly fsAxis: number = 10;
+  /** 22 顶栏图标字形（‹ ↻ ⚙） */
+  static readonly fsGlyph: number = 22;
+  /** 26 详情页金额 */
+  static readonly fsMetric: number = 26;
+  /** 20 首页卡片金额 */
+  static readonly fsMetricSm: number = 20;
+  /** 30 空态大图标 */
+  static readonly fsEmojiLg: number = 30;
+
+  /** 分组标题字距（小字号标题拉开一点，和正文字重区分开） */
+  static readonly tracking: number = 0.5;
+
+  // ------------------------------------------------------------------ 层次
+
+  /**
+   * 卡片阴影：明亮模式下用柔和投影把卡片从浅灰底上「抬起来」，
+   * 暗色模式交回描边（深底上的黑色投影既看不见又显脏）。
+   */
+  static cardShadowRadius(): number {
+    return Theme.isDark() ? 0 : 16;
+  }
+
+  /** 卡片阴影参数（随系统深浅色切换，故是函数而不是常量） */
+  static cardShadow(): ShadowOptions {
+    if (Theme.isDark()) {
+      return { radius: 0, color: 'rgba(0, 0, 0, 0)', offsetX: 0, offsetY: 0 };
+    }
+    return { radius: 16, color: 'rgba(15, 23, 42, 0.06)', offsetX: 0, offsetY: 3 };
+  }
 
   // -------------------------------------------------------------- 运行时色彩
 

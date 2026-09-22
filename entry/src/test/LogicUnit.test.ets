@@ -195,6 +195,41 @@ export default function logicUnitTest() {
       expect(Theme.brandTint('#0EA5E9')).assertEqual('#0EA5E9');
     });
 
+    // 字号 / 间距 / 半径刻度：页面统一引用这些常量，不允许再出现插队值
+    it('Theme_scale_ladder', 0, () => {
+      expect(Theme.fsTitle > Theme.fsHead).assertTrue();
+      expect(Theme.fsHead > Theme.fsHeading).assertTrue();
+      expect(Theme.fsHeading > Theme.fsName).assertTrue();
+      expect(Theme.fsName > Theme.fsLabel).assertTrue();
+      expect(Theme.fsLabel > Theme.fsBody).assertTrue();
+      expect(Theme.fsBody > Theme.fsCaption).assertTrue();
+      expect(Theme.fsCaption > Theme.fsMicro).assertTrue();
+      expect(Theme.fsMicro > Theme.fsAxis).assertTrue();
+      // 金额与图标字形各自独立于正文阶梯（大字号展示位）
+      expect(Theme.fsMetric > Theme.fsTitle).assertTrue();
+      expect(Theme.fsMetricSm > Theme.fsHeading).assertTrue();
+      expect(Theme.fsEmojiLg > Theme.fsMetric).assertTrue();
+
+      // 间距：贴紧 < 极小 < 紧凑 < 行内 < 卡片间 < 卡片内边距 < 页面边距 < 区块 < 页面底部
+      expect(Theme.gapXxs < Theme.gapXs).assertTrue();
+      expect(Theme.gapXs < Theme.gapSm).assertTrue();
+      expect(Theme.gapSm < Theme.rowGap).assertTrue();
+      expect(Theme.rowGap < Theme.gap).assertTrue();
+      expect(Theme.gap < Theme.cardPad).assertTrue();
+      expect(Theme.cardPad < Theme.pad).assertTrue();
+      expect(Theme.pad < Theme.gapLg).assertTrue();
+      expect(Theme.gapLg < Theme.padBottom).assertTrue();
+
+      // 半径：卡片 > 图标按钮 > 输入框 > 标签 chip
+      expect(Theme.radius > Theme.radiusBtn).assertTrue();
+      expect(Theme.radiusBtn > Theme.radiusInput).assertTrue();
+      expect(Theme.radiusInput > Theme.radiusChip).assertTrue();
+
+      // 卡片阴影半径非负；暗色下为 0（层级交给描边，深底上的黑投影不可见）
+      expect(Theme.cardShadowRadius() >= 0).assertTrue();
+      expect(Theme.cardShadow().radius).assertEqual(Theme.cardShadowRadius());
+    });
+
     it('Json_helpers', 0, () => {
       const parsed = parseJson('{"name":"DeepSeek","total":"110.00","rate":42,"arr":[1,2],"nested":{"a":1}}');
       const o = asObj(parsed);

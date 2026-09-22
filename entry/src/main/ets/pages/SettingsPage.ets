@@ -140,17 +140,17 @@ struct ProviderSettingCard {
   @Builder
   accountBar() {
     if (this.descriptor != null && this.descriptor.authKind !== AuthKind.DEMO) {
-      Row({ space: 8 }) {
+      Row({ space: Theme.gapSm }) {
         Text('账号')
-          .fontSize(12)
+          .fontSize(Theme.fsCaption)
           .fontColor(Theme.textDim)
         ForEach(Settings.accounts(this.pid), (a: ProviderAccount) => {
           Text(a.name)
-            .fontSize(12)
+            .fontSize(Theme.fsCaption)
             .fontColor(Settings.activeAccountId(this.pid) === a.aid ? Theme.bg : Theme.textDim)
             .backgroundColor(Settings.activeAccountId(this.pid) === a.aid ? Theme.accent : Theme.input)
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
-            .borderRadius(9)
+            .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXxs, bottom: Theme.gapXxs })
+            .borderRadius(Theme.radiusChip)
             .maxLines(1)
             .onClick(() => {
               if (Settings.activeAccountId(this.pid) !== a.aid) {
@@ -165,11 +165,11 @@ struct ProviderSettingCard {
             }))
         }, (a: ProviderAccount) => `${a.aid}_${Settings.activeAccountId(this.pid) === a.aid}_${this.rev}_${this.accRev}`)
         Text('＋')
-          .fontSize(13)
+          .fontSize(Theme.fsBody)
           .fontColor(Theme.accent)
           .backgroundColor(Theme.input)
-          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
-          .borderRadius(9)
+          .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXxs, bottom: Theme.gapXxs })
+          .borderRadius(Theme.radiusChip)
           .onClick(() => {
             this.addAccount();
           })
@@ -178,29 +178,29 @@ struct ProviderSettingCard {
 
       // 内联重命名行
       if (this.renamingAid.length > 0) {
-        Row({ space: 8 }) {
+        Row({ space: Theme.gapSm }) {
           TextInput({ text: this.renameText, placeholder: '账号名称' })
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
             .backgroundColor(Theme.input)
-            .borderRadius(9)
+            .borderRadius(Theme.radiusChip)
             .height(34)
             .layoutWeight(1)
             .onChange((v: string) => {
               this.renameText = v;
             })
           Text('✓')
-            .fontSize(15)
+            .fontSize(Theme.fsName)
             .fontColor(Theme.accent)
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXxs, bottom: Theme.gapXxs })
             .onClick(() => {
               this.submitRename();
             })
           Text('✕')
-            .fontSize(14)
+            .fontSize(Theme.fsLabel)
             .fontColor(Theme.textDim)
-            .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+            .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXxs, bottom: Theme.gapXxs })
             .onClick(() => {
               this.cancelRename();
             })
@@ -225,11 +225,11 @@ struct ProviderSettingCard {
 
   build() {
     if (this.descriptor != null) {
-      Column({ space: 10 }) {
-        Row({ space: 10 }) {
+      Column({ space: Theme.rowGap }) {
+        Row({ space: Theme.rowGap }) {
           ProviderIcon({ providerId: this.descriptor.id, accentColor: this.descriptor.accentColor, iconSize: 32 })
           Text(this.descriptor.title)
-            .fontSize(15)
+            .fontSize(Theme.fsName)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
             .layoutWeight(1)
@@ -247,12 +247,12 @@ struct ProviderSettingCard {
 
         if (this.descriptor.authKind !== AuthKind.DEMO) {
           TextInput({ text: this.credential, placeholder: this.descriptor.authHint })
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
-            .placeholderFont({ size: 12 })
+            .placeholderFont({ size: Theme.fsCaption })
             .backgroundColor(Theme.input)
-            .borderRadius(10)
+            .borderRadius(Theme.radiusInput)
             .height(42)
             .width('100%')
             .onChange((v: string) => {
@@ -261,12 +261,12 @@ struct ProviderSettingCard {
 
           if (this.needSecond) {
             TextInput({ text: this.credential2, placeholder: this.secondHint })
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
               .placeholderColor(Theme.textDim)
-              .placeholderFont({ size: 12 })
+              .placeholderFont({ size: Theme.fsCaption })
               .backgroundColor(Theme.input)
-              .borderRadius(10)
+              .borderRadius(Theme.radiusInput)
               .height(42)
               .width('100%')
               .onChange((v: string) => {
@@ -277,12 +277,12 @@ struct ProviderSettingCard {
           // 额外字段（Endpoint / Deployment / Region 等）
           ForEach(this.fields, (f: ExtraField) => {
             TextInput({ text: extraValue(this.extraJson, f.key), placeholder: f.hint })
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
               .placeholderColor(Theme.textDim)
-              .placeholderFont({ size: 12 })
+              .placeholderFont({ size: Theme.fsCaption })
               .backgroundColor(Theme.input)
-              .borderRadius(10)
+              .borderRadius(Theme.radiusInput)
               .height(42)
               .width('100%')
               .onChange((v: string) => {
@@ -291,38 +291,38 @@ struct ProviderSettingCard {
           }, (f: ExtraField) => `${this.pid}_${f.key}`)
         }
 
-        Row({ space: 10 }) {
+        Row({ space: Theme.rowGap }) {
           if (this.canWebLogin) {
             Button('网页登录')
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.accent)
               .backgroundColor(Theme.input)
               .border({ width: 1, color: Theme.accent })
               .height(30)
-              .padding({ left: 14, right: 14 })
+              .padding({ left: Theme.cardPad, right: Theme.cardPad })
               .onClick(() => {
                 Nav.toOAuthLogin(this.pid);
               })
           }
           if (this.descriptor.authUrl.length > 0) {
             Text(`获取凭证 ↗`)
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.accent)
               .layoutWeight(1)
               .maxLines(1)
           } else {
             Text(this.descriptor.authHint)
-              .fontSize(11)
+              .fontSize(Theme.fsMicro)
               .fontColor(Theme.textDim)
               .layoutWeight(1)
               .maxLines(2)
           }
           Button('保存')
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.bg)
             .backgroundColor(Theme.accent)
             .height(30)
-            .padding({ left: 16, right: 16 })
+            .padding({ left: Theme.pad, right: Theme.pad })
             .onClick(() => {
               this.save();
             })
@@ -334,6 +334,7 @@ struct ProviderSettingCard {
       .borderRadius(Theme.radius)
       .backgroundColor(Theme.card)
       .border({ width: 1, color: Theme.stroke })
+      .shadow(Theme.cardShadow())
     }
   }
 }
@@ -400,39 +401,40 @@ struct SettingsPage {
   build() {
     Stack() {
     Column() {
-      Row({ space: 10 }) {
+      Row({ space: Theme.rowGap }) {
         Button() {
           Text('‹')
-            .fontSize(22)
+            .fontSize(Theme.fsGlyph)
             .fontColor(Theme.text)
         }
         .backgroundColor(Theme.card)
         .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
         .width(36)
         .height(36)
-        .borderRadius(12)
+        .borderRadius(Theme.radiusBtn)
         .onClick(() => {
           Nav.back();
         })
 
         Text('设置')
-          .fontSize(18)
+          .fontSize(Theme.fsHead)
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.text)
           .layoutWeight(1)
       }
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, top: 12, bottom: 8 })
+      .padding({ left: Theme.pad, right: Theme.pad, top: Theme.gap, bottom: Theme.gapSm })
 
-      List({ space: 12 }) {
+      List({ space: Theme.gap }) {
         ListItem() {
           TextInput({ placeholder: '🔍 搜索服务商', text: this.keyword })
-            .fontSize(13)
+            .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
-            .placeholderFont({ size: 13 })
+            .placeholderFont({ size: Theme.fsBody })
             .backgroundColor(Theme.input)
-            .borderRadius(10)
+            .borderRadius(Theme.radiusInput)
             .height(38)
             .width('100%')
             .onChange((v: string) => {
@@ -441,23 +443,23 @@ struct SettingsPage {
         }
 
         ListItem() {
-          Column({ space: 4 }) {
+          Column({ space: Theme.gapXxs }) {
             Text('凭证仅保存在本机应用数据中，刷新时直连服务商接口。')
-              .fontSize(12)
+              .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
           .width('100%')
-          .padding(12)
+          .padding(Theme.gap)
         }
 
         ListItem() {
-          Row({ space: 10 }) {
-            Column({ space: 3 }) {
+          Row({ space: Theme.rowGap }) {
+            Column({ space: Theme.gapXxs }) {
               Text('展示可选用量明细')
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.text)
               Text('关闭后按服务商策略隐藏可选分组（如 DeepSeek 用量、MiniMax 账单历史）')
-                .fontSize(11)
+                .fontSize(Theme.fsMicro)
                 .fontColor(Theme.textDim)
             }
             .alignItems(HorizontalAlign.Start)
@@ -475,20 +477,21 @@ struct SettingsPage {
           .borderRadius(Theme.radius)
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
         }
 
         if (this.ids(this.ver, this.keyword).length === 0) {
           ListItem() {
-            Column({ space: 6 }) {
+            Column({ space: Theme.gapXs }) {
               Text('未找到匹配的服务商')
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.text)
               Text('试试其他关键词，如 "Claude" 或 "deepseek"')
-                .fontSize(11)
+                .fontSize(Theme.fsMicro)
                 .fontColor(Theme.textDim)
             }
             .width('100%')
-            .padding(24)
+            .padding(Theme.padBottom)
             .alignItems(HorizontalAlign.Center)
           }
         }
@@ -507,25 +510,25 @@ struct SettingsPage {
       }
       .layoutWeight(1)
       .width('100%')
-      .padding({ left: Theme.pad, right: Theme.pad, bottom: 24 })
+      .padding({ left: Theme.pad, right: Theme.pad, bottom: Theme.padBottom })
       .scrollBar(BarState.Off)
       }
 
       // 自绘确认弹窗（配色走主题资源，不受系统 AlertDialog 主题影响）
       if (this.askVisible) {
         Column() {
-          Column({ space: 14 }) {
+          Column({ space: Theme.cardPad }) {
             Text(this.askTitle)
-              .fontSize(16)
+              .fontSize(Theme.fsHeading)
               .fontWeight(FontWeight.Medium)
               .fontColor(Theme.text)
             Text(this.askMessage)
-              .fontSize(13)
+              .fontSize(Theme.fsBody)
               .fontColor(Theme.textDim)
               .width('100%')
-            Row({ space: 10 }) {
+            Row({ space: Theme.rowGap }) {
               Button('取消')
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)
                 .layoutWeight(1)
@@ -534,7 +537,7 @@ struct SettingsPage {
                   this.onAskClose(false);
                 })
               Button(this.askConfirmText)
-                .fontSize(14)
+                .fontSize(Theme.fsLabel)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.danger)
                 .layoutWeight(1)
@@ -546,10 +549,11 @@ struct SettingsPage {
             .width('100%')
           }
           .alignItems(HorizontalAlign.Start)
-          .padding(20)
+          .padding(Theme.gapLg)
           .borderRadius(Theme.radius)
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
           .width('86%')
         }
         .width('100%')

@@ -65,14 +65,39 @@ export class AppStore {
     return null;
   }
 
+  /**
+   * 首页排序权重：已配置凭证的服务商排前面。
+   * 2 = 已配置且启用；1 = 已配置但停用；0 = 未配置。
+   * 同权重内保持注册表顺序（sort 稳定）。
+   */
+  static configuredRank(s: ProviderState): number {
+    if (s.setting.credential.length === 0) {
+      return 0;
+    }
+    return s.setting.enabled ? 2 : 1;
+  }
+
+  /** 首页展示顺序：已配置凭证的在前（组内保持注册表顺序） */
+  orderedStates(): ProviderState[] {
+    const list = this.states.slice();
+    list.sort((a: ProviderState, b: ProviderState) => AppStore.configuredRank(b) - AppStore.configuredRank(a));
+    return list;
+  }
+
   /** 保存设置后调用；已启用且未加载过的立即刷新 */
   applySetting(providerId: string, setting: ProviderSetting): void {
     Settings.saveProvider(providerId, setting);
     const state = this.find(providerId);
     if (state != null) {
       state.setting = setting;
+      // 清除上一次的失败快照：保存/更换凭证后不应继续显示旧的错误信息，
+      // 改为展示“查询中…”，由随后的刷新结果覆盖。
+      if (state.snapshot != null && !state.snapshot.ok) {
+        state.snapshot = null;
+      }
       if (setting.enabled && setting.credential.length > 0) {
-        this.refreshOne(providerId);
+        // 强制重新查询：即使上一次查询仍在进行，也以刚保存的凭证为准
+        this.refreshOne(providerId, true);
       } else {
         this.bump();
       }
@@ -86,7 +111,7 @@ export class AppStore {
     if (state != null) {
       state.setting = Settings.provider(providerId);
       if (state.setting.credential.length > 0) {
-        this.refreshOne(providerId);
+        this.refreshOne(providerId, true);
       } else {
         this.bump();
       }
@@ -117,9 +142,10 @@ export class AppStore {
     this.bump();
   }
 
-  async refreshOne(providerId: string): Promise<void> {
+  /** force=true 时即使正在查询也重新发起（新凭证优先，旧结果按 gen 丢弃） */
+  async refreshOne(providerId: string, force: boolean = false): Promise<void> {
     const state = this.find(providerId);
-    if (state == null || state.loading) {
+    if (state == null || (state.loading && !force)) {
       return;
     }
     const provider: UsageProvider | null = ProviderRegistry.byId(providerId);
@@ -136,12 +162,13 @@ export class AppStore {
     } catch (e) {
       snap = UsageSnapshot.failure(e instanceof Error ? e.message : '查询失败');
     }
-    state.loading = false;
-    // 查询期间凭证发生变更（清除/切换账号/重新保存）：丢弃过期结果
+    // 查询期间凭证发生变更（清除/切换账号/重新保存）：丢弃过期结果，
+    // 并保留 loading（由更新的那次查询负责收尾）
     if (gen !== state.fetchGen) {
       this.bump();
       return;
     }
+    state.loading = false;
     state.snapshot = snap;
     if (snap.ok) {
       state.lastSuccessAt = Date.now();

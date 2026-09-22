@@ -43,13 +43,7 @@ struct Index {
 
   /** 显式引用 ver/tick 以注册渲染依赖；已配置凭证的服务商排在前面（组内保持注册表顺序） */
   items(v: number, t: number): ProviderState[] {
-    const list = AppStore.get().states.slice();
-    list.sort((a: ProviderState, b: ProviderState) => this.configuredRank(b) - this.configuredRank(a));
-    return list;
-  }
-
-  configuredRank(s: ProviderState): number {
-    return s.setting.enabled && s.setting.credential.length > 0 ? 1 : 0;
+    return AppStore.get().orderedStates();
   }
 
   async doRefresh(): Promise<void> {

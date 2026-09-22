@@ -17,6 +17,25 @@ export class Notify {
   }
 
   /**
+   * 构建“点击通知拉起应用”的 wantAgent。
+   * 动态加载 common/WantAgent：鸿蒙可用；Android/iOS（ArkUI-X）无
+   * @ohos.app.ability.wantAgent 时 import 失败，静默返回 null，
+   * 通知依旧发出但点击不额外跳转。
+   */
+  private static async buildWantAgent(): Promise<Object | null> {
+    const ctx = Notify.ctx;
+    if (ctx == null) {
+      return null;
+    }
+    try {
+      const mod = await import('./WantAgent');
+      return await mod.buildLaunchWantAgent(ctx.abilityInfo.bundleName, ctx.abilityInfo.name);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
    * 请求通知授权（用户首次开启提醒时调用）。
    * 已授权直接返回 true；弹窗被拒或接口异常返回 false（不阻塞开启配置）。
    */
@@ -49,7 +68,7 @@ export class Notify {
     });
   }
 
-  /** 发送一条本地通知；任何失败静默（未授权/跨端不支持） */
+  /** 发送一条本地通知；任何失败静默（未授权/跨端不支持）；点击通知拉起应用 */
   static async post(id: number, title: string, text: string): Promise<void> {
     try {
       const request: notificationManager.NotificationRequest = {
@@ -63,6 +82,10 @@ export class Notify {
           }
         }
       };
+      const agent = await Notify.buildWantAgent();
+      if (agent != null) {
+        request.wantAgent = agent;
+      }
       await notificationManager.publish(request);
     } catch (e) {
       // 静默：通知失败不影响查询主流程

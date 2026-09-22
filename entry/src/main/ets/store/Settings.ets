@@ -6,7 +6,9 @@
 
 import preferences from '@ohos.data.preferences';
 import common from '@ohos.app.ability.common';
-import { defaultReminder, HistoryDay, ProviderAccount, ProviderSetting, ReminderConfig } from '../model/Models';
+import {
+  defaultReminder, HistoryDay, isDefaultEnabledProvider, ProviderAccount, ProviderSetting, ReminderConfig
+} from '../model/Models';
 
 // ---------------- 账号列表纯函数（本地单元测试覆盖） ----------------
 
@@ -30,6 +32,7 @@ export function parseAccounts(text: string): ProviderAccount[] {
           credential: typeof a.credential === 'string' ? a.credential as string : '',
           credential2: typeof a.credential2 === 'string' ? a.credential2 as string : '',
           refreshToken: typeof a.refreshToken === 'string' ? a.refreshToken as string : '',
+          extraConfig: typeof a.extraConfig === 'string' ? a.extraConfig as string : '',
         });
       }
     }
@@ -95,13 +98,15 @@ export function addAccountToList(
   credential: string,
   credential2: string,
   refreshToken: string,
+  extraConfig: string,
   now: number
 ): AddAccountResult {
   for (let i = 0; i < list.length; i++) {
     if (credential.length > 0 && list[i].credential === credential) {
-      // 同凭证：刷新辅助字段并复用
+      // 同凭证：补充辅助字段并复用
       list[i].credential2 = credential2.length > 0 ? credential2 : list[i].credential2;
       list[i].refreshToken = refreshToken.length > 0 ? refreshToken : list[i].refreshToken;
+      list[i].extraConfig = extraConfig.length > 0 ? extraConfig : list[i].extraConfig;
       return { list: list, account: list[i], deduped: true };
     }
   }
@@ -111,6 +116,7 @@ export function addAccountToList(
     credential: credential,
     credential2: credential2,
     refreshToken: refreshToken,
+    extraConfig: extraConfig,
   };
   const merged = list.concat([fresh]);
   return { list: merged, account: fresh, deduped: false };
@@ -127,6 +133,7 @@ export function renameAccountInList(list: ProviderAccount[], aid: string, name: 
         credential: list[i].credential,
         credential2: list[i].credential2,
         refreshToken: list[i].refreshToken,
+        extraConfig: list[i].extraConfig,
       });
     } else {
       out.push(list[i]);
@@ -221,18 +228,23 @@ export class Settings {
     const enabledRaw = Settings.getString(`${PREFIX}${providerId}`, '');
     if (active != null) {
       const s: ProviderSetting = {
-        enabled: enabledRaw === '1' || (enabledRaw === '' && active.credential.length > 0),
+        // 未设置过开关时：有凭证即启用；无凭证但源工程默认启用（Codex）也算开
+        enabled: enabledRaw === '1' ||
+          (enabledRaw === '' && (active.credential.length > 0 || isDefaultEnabledProvider(providerId))),
         credential: active.credential,
         credential2: active.credential2,
+        extraConfig: active.extraConfig,
       };
       return s;
     }
     const cred = Settings.getString(`${KEY_PREFIX}${providerId}_c1`, '');
     const cred2 = Settings.getString(`${KEY_PREFIX}${providerId}_c2`, '');
     const s: ProviderSetting = {
-      enabled: enabledRaw === '1' || (enabledRaw === '' && cred.length > 0),
+      enabled: enabledRaw === '1' ||
+        (enabledRaw === '' && (cred.length > 0 || isDefaultEnabledProvider(providerId))),
       credential: cred,
       credential2: cred2,
+      extraConfig: Settings.getString(`ex_${providerId}`, ''),
     };
     return s;
   }
@@ -244,6 +256,19 @@ export class Settings {
 
   static setLastSuccess(providerId: string, ms: number): void {
     Settings.setNumber(`t_${providerId}`, ms);
+  }
+
+/**
+   * 是否展示「可选用量 / 额度明细」（对照 macOS showOptionalCreditsAndExtraUsage，默认开启）。
+   * 关闭后按各服务商的 ProviderOptionalDetailsPresentation 隐藏可选分组
+   * （DeepSeek 全隐、MiniMax 隐藏 Billing history 等）。
+   */
+  static showOptionalDetails(): boolean {
+    return Settings.getNumber('show_optional_details', 1) !== 0;
+  }
+
+  static setShowOptionalDetails(on: boolean): void {
+    Settings.setNumber('show_optional_details', on ? 1 : 0);
   }
 
   /** 上次快照缓存（JSON 文本），冷启动时展示旧数据 */
@@ -290,7 +315,7 @@ export class Settings {
     Settings.setString(`f_${kind}_${providerId}`, key);
   }
 
-  /** OAuth refresh token（Codex）：激活账号优先，回退旧键 */
+  /** OAuth refresh token（Codex 等）：激活账号优先，回退旧键 */
   static oauthRefreshToken(providerId: string): string {
     const accounts = Settings.accounts(providerId);
     const active = pickAccount(accounts, Settings.activeAccountId(providerId));
@@ -302,8 +327,7 @@ export class Settings {
 
   static setOauthRefreshToken(providerId: string, token: string): void {
     const accounts = Settings.accounts(providerId);
-    const activeAid = Settings.activeAccountId(providerId);
-    const active = pickAccount(accounts, activeAid);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
     if (active != null) {
       active.refreshToken = token;
       Settings.saveAccounts(providerId, accounts);
@@ -312,11 +336,10 @@ export class Settings {
     Settings.setString(`rt_${providerId}`, token);
   }
 
-  /** 登录后写入令牌：有账号体系时更新激活账号，否则写旧键 */
+  /** 登录/续期后写入令牌：有账号体系时更新激活账号，否则写旧键 */
   static applyRefreshedTokens(providerId: string, accessToken: string, refreshToken: string): void {
     const accounts = Settings.accounts(providerId);
-    const activeAid = Settings.activeAccountId(providerId);
-    const active = pickAccount(accounts, activeAid);
+    const active = pickAccount(accounts, Settings.activeAccountId(providerId));
     if (active != null) {
       active.credential = accessToken;
       if (refreshToken.length > 0) {
@@ -338,6 +361,7 @@ export class Settings {
     if (active != null) {
       active.credential = setting.credential;
       active.credential2 = setting.credential2;
+      active.extraConfig = setting.extraConfig;
       Settings.saveAccounts(providerId, accounts);
       Settings.setString(`${PREFIX}${providerId}`, setting.enabled ? '1' : '0');
       return;
@@ -345,9 +369,10 @@ export class Settings {
     Settings.setString(`${PREFIX}${providerId}`, setting.enabled ? '1' : '0');
     Settings.setString(`${KEY_PREFIX}${providerId}_c1`, setting.credential);
     Settings.setString(`${KEY_PREFIX}${providerId}_c2`, setting.credential2);
+    Settings.setString(`ex_${providerId}`, setting.extraConfig);
   }
 
-  // ---------------- 多账号（Claude/Codex 会话型） ----------------
+  // ---------------- 多账号（全服务商） ----------------
 
   static accounts(providerId: string): ProviderAccount[] {
     return parseAccounts(Settings.getString(`acc_${providerId}`, ''));
@@ -370,10 +395,11 @@ export class Settings {
     providerId: string,
     credential: string,
     credential2: string,
-    refreshToken: string
+    refreshToken: string,
+    extraConfig: string = ''
   ): AddAccountResult {
     const list = Settings.accounts(providerId);
-    const res = addAccountToList(list, credential, credential2, refreshToken, Date.now());
+    const res = addAccountToList(list, credential, credential2, refreshToken, extraConfig, Date.now());
     Settings.saveAccounts(providerId, res.list);
     Settings.setActiveAccountId(providerId, res.account.aid);
     return res;
@@ -454,7 +480,7 @@ export class Settings {
     Settings.setFormIds(next);
   }
 
-  /** 清除凭证：激活账号与旧键、refresh token、启用标记一并清空（防回退链复活旧凭证） */
+  /** 清除凭证：激活账号与旧键、额外字段、启用标记一并清空（防回退链复活旧凭证） */
   static clearCredential(providerId: string): void {
     const accounts = Settings.accounts(providerId);
     const active = pickAccount(accounts, Settings.activeAccountId(providerId));
@@ -462,12 +488,14 @@ export class Settings {
       active.credential = '';
       active.credential2 = '';
       active.refreshToken = '';
+      active.extraConfig = '';
       Settings.saveAccounts(providerId, accounts);
     }
     Settings.setString(`${PREFIX}${providerId}`, '0');
     Settings.setString(`${KEY_PREFIX}${providerId}_c1`, '');
     Settings.setString(`${KEY_PREFIX}${providerId}_c2`, '');
     Settings.setString(`rt_${providerId}`, '');
+    Settings.setString(`ex_${providerId}`, '');
   }
 
   // ---------------- 用量历史（每日采样，统计页数据源） ----------------

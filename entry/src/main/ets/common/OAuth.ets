@@ -374,6 +374,59 @@ async function codexTokenRequest(formBody: string): Promise<CodexTokenSet> {
 // ---------------- Claude sessionKey ----------------
 
 /** 从 Cookie 串中提取 sessionKey 值（形如 sk-ant-sid01-…） */
+/** 平台会话令牌的可用性（对照 DeepSeekPlatformTokenImporter.isPlausibleToken：≥20 字符且不含空白） */
+function plausiblePlatformToken(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length < 20) {
+    return false;
+  }
+  return !/\s/.test(trimmed);
+}
+
+/**
+ * platform.deepseek.com 的 localStorage `userToken` → 平台会话令牌。
+ *
+ * 对照 macOS 的 `DeepSeekPlatformTokenImporter.extractUserToken` / `token(fromJSONObject)`：
+ * 该键可能是裸字符串、带引号的字符串、或 `{ value | token | access_token | accessToken | userToken }`
+ * 对象（甚至是被 JSON 序列化过的一层），四种形态都要能取出。
+ */
+export function extractDeepSeekUserToken(rawValue: string): string {
+  const trimmed = rawValue == null ? '' : rawValue.trim();
+  if (trimmed.length === 0) {
+    return '';
+  }
+  // 1) JSON 形态：字符串 / 对象
+  if (trimmed.charAt(0) === '"' || trimmed.charAt(0) === '{') {
+    try {
+      const parsed = JSON.parse(trimmed) as Object;
+      if (typeof parsed === 'string') {
+        const text = parsed as string;
+        return plausiblePlatformToken(text) ? text.trim() : '';
+      }
+      if (parsed != null && typeof parsed === 'object') {
+        const bag = parsed as Record<string, Object>;
+        const keys: string[] = ['value', 'token', 'access_token', 'accessToken', 'userToken'];
+        for (let i = 0; i < keys.length; i++) {
+          const candidate = bag[keys[i]];
+          if (typeof candidate === 'string' && plausiblePlatformToken(candidate as string)) {
+            return (candidate as string).trim();
+          }
+        }
+      }
+      return '';
+    } catch (e) {
+      // 不是 JSON，按裸字符串继续
+    }
+  }
+  // 2) 裸字符串 / 单双引号包裹
+  const first = trimmed.charAt(0);
+  const last = trimmed.charAt(trimmed.length - 1);
+  const unquoted = trimmed.length >= 2 && ((first === '"' && last === '"') || (first === '\'' && last === '\''))
+    ? trimmed.substring(1, trimmed.length - 1)
+    : trimmed;
+  return plausiblePlatformToken(unquoted) ? unquoted : '';
+}
+
 export function extractSessionKey(cookieText: string): string {
   if (cookieText == null || cookieText.length === 0) {
     return '';

@@ -20,6 +20,7 @@ import {
   codexAuthorizeUrl,
   codexExchangeCode,
   CodexTokenSet,
+  extractDeepSeekUserToken,
   extractSessionKey,
   makePkce,
   PkcePair,
@@ -28,6 +29,9 @@ import {
 
 const CODEX_CALLBACK_PREFIX = 'http://localhost:1455/auth/callback';
 const CLAUDE_COOKIE_URL = 'https://claude.ai';
+const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
+/** 读 localStorage.userToken（macOS 是从 Chrome 的同名键读，这里改成读应用内 Web 的同一键） */
+const DEEPSEEK_TOKEN_SCRIPT = 'window.localStorage.getItem("userToken") || ""';
 
 @Entry
 @Component
@@ -56,6 +60,12 @@ struct OAuthLogin {
       this.status = `在下方登录 claude.ai，成功后自动返回${addSuffix}`;
       this.timerId = setInterval(() => {
         this.pollClaudeCookie();
+      }, 2000);
+    } else if (this.providerId === 'deepseek') {
+      this.startUrl = this.addMode ? 'https://platform.deepseek.com/sign_in' : DEEPSEEK_USAGE_URL;
+      this.status = '在下方登录 platform.deepseek.com，成功后自动回填平台会话（不会改动已填的 API Key）';
+      this.timerId = setInterval(() => {
+        this.pollDeepSeekToken();
       }, 2000);
     } else {
       this.status = '不支持的服务商';
@@ -90,6 +100,52 @@ struct OAuthLogin {
       // Cookie API 不可用时静默；用户仍可回设置页手工粘贴
     }
     this.cookieInFlight = false;
+  }
+
+  /**
+   * DeepSeek：读 Web 组件里 platform.deepseek.com 的 localStorage.userToken，
+   * 与 macOS 从 Chrome localStorage 导入平台会话是同一个键、同一份数据。
+   */
+  private tokenInFlight: boolean = false;
+
+  async pollDeepSeekToken(): Promise<void> {
+    if (this.done || this.tokenInFlight || this.providerId !== 'deepseek') {
+      return;
+    }
+    this.tokenInFlight = true;
+    try {
+      const raw = await this.controller.runJavaScript(DEEPSEEK_TOKEN_SCRIPT);
+      const token = extractDeepSeekUserToken(raw);
+      if (token.length > 0) {
+        this.done = true;
+        this.status = '已获取平台会话，正在保存…';
+        await this.saveDeepSeekSession(token);
+      } else {
+        this.status = '登录 platform.deepseek.com 后会自动读取平台会话（仅 API Key 时明细不可用）';
+      }
+    } catch (e) {
+      // 页面未就绪或 JS 执行被拒：静默重试，用户也可回设置页手工粘贴
+    }
+    this.tokenInFlight = false;
+  }
+
+  /** DeepSeek：只写第二栏（平台会话），API Key 保持不动 */
+  async saveDeepSeekSession(token: string): Promise<void> {
+    const store = AppStore.get();
+    const state = store.find(this.providerId);
+    const apiKey = state != null ? state.setting.credential.trim() : '';
+    store.applySetting(this.providerId, {
+      enabled: true,
+      credential: apiKey,
+      credential2: token,
+      extraConfig: state != null ? state.setting.extraConfig : '',
+    });
+    if (apiKey.length === 0) {
+      Nav.toast('已获取平台会话，还需在设置页填写 DeepSeek API Key');
+    } else {
+      Nav.toast('已获取平台会话，正在刷新用量明细');
+    }
+    Nav.back();
   }
 
   /** Codex：拦截 localhost:1455 回调 */
@@ -132,7 +188,7 @@ struct OAuthLogin {
     const state = store.find(this.providerId);
     const current: ProviderSetting = state != null
       ? state.setting
-      : { enabled: true, credential: '', credential2: '' };
+      : { enabled: true, credential: '', credential2: '', extraConfig: '' };
     let cred2 = current.credential2.trim();
     if (this.providerId === 'codex') {
       if (cred2.length === 0 && accountId != null && accountId.length > 0) {
@@ -154,9 +210,21 @@ struct OAuthLogin {
       enabled: true,
       credential: credential,
       credential2: cred2,
+      extraConfig: state != null ? state.setting.extraConfig : '',
     });
     Nav.toast('登录成功，凭证已保存');
     Nav.back();
+  }
+
+  /** 页面标题：按服务商区分（DeepSeek 只取平台会话，不是账号登录） */
+  loginTitle(): string {
+    if (this.providerId === 'codex') {
+      return 'Codex 网页登录';
+    }
+    if (this.providerId === 'deepseek') {
+      return 'DeepSeek 平台会话';
+    }
+    return 'Claude 网页登录';
   }
 
   build() {
@@ -177,7 +245,7 @@ struct OAuthLogin {
         })
 
         Column({ space: 2 }) {
-          Text(this.providerId === 'codex' ? 'Codex 网页登录' : 'Claude 网页登录')
+          Text(this.loginTitle())
             .fontSize(16)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
@@ -202,6 +270,7 @@ struct OAuthLogin {
           })
           .onPageEnd(() => {
             this.pollClaudeCookie();
+            this.pollDeepSeekToken();
           })
       } else {
         Column({ space: 8 }) {

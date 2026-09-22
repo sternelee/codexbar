@@ -3,7 +3,7 @@
  * 持有全部服务商的展示状态并编排刷新；UI 层通过 version 触发重建。
  */
 
-import { AuthKind, ProviderState, ProviderSetting, UsageSnapshot } from '../model/Models';
+import { applyWindowLabels, AuthKind, ProviderState, ProviderSetting, UsageSnapshot } from '../model/Models';
 import { ProviderRegistry } from '../providers/ProviderRegistry';
 import { UsageProvider } from '../providers/ProviderBase';
 import { Settings } from './Settings';
@@ -38,12 +38,13 @@ export class AppStore {
       state.lastSuccessAt = Settings.lastSuccess(p.descriptor.id);
       const cached = Settings.cache(p.descriptor.id);
       if (cached.length > 0 && state.lastSuccessAt > 0) {
-        try {
-          const parsed = JSON.parse(cached) as UsageSnapshot;
-          state.snapshot = parsed;
-        } catch (e) {
-          state.snapshot = null;
+        // 逐字段补齐（旧版本缓存缺后加字段，直接 as 断言会让 UI 读到 undefined）
+        const restored = UsageSnapshot.fromStored(cached);
+        if (restored != null) {
+          // 旧缓存没有窗口标签（或来自旧版无标签的构建）：按元数据再补一次
+          applyWindowLabels(restored, p.descriptor.id);
         }
+        state.snapshot = restored;
       }
       list.push(state);
     }
@@ -169,6 +170,8 @@ export class AppStore {
       return;
     }
     state.loading = false;
+    // 窗口标签统一在此补齐：服务商显式设置的优先，其余取元数据表（Session/Weekly/Sonnet 等）
+    applyWindowLabels(snap, providerId);
     state.snapshot = snap;
     if (snap.ok) {
       state.lastSuccessAt = Date.now();

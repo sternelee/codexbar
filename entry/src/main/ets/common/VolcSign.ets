@@ -5,56 +5,16 @@
  * Top OpenAPI（open.volcengineapi.com）与 AWS SigV4 同构——规范化请求 →
  * 派生签名密钥（date/region/service/request 四级 HMAC）→ 计算签名。
  *
- * 纯 TS 实现：ArkUI-X 三端零平台依赖，可本地单测（SHA-256 复用 common/OAuth）。
+ * 纯 TS 实现：ArkUI-X 三端零平台依赖，可本地单测（SHA-256 / HMAC 复用 common/Crypto）。
  */
 
-import { hexFromBytes, sha256Digest, utf8Bytes } from './OAuth';
+import { hmacSha256, hmacSha256Hex, sha256Hex, utf8Bytes } from './Crypto';
 
-/** HMAC 分组长度（SHA-256） */
-const BLOCK_SIZE = 64;
 const ALGORITHM = 'HMAC-SHA256';
 const SERVICE = 'ark';
 const TERMINATOR = 'request';
 /** 规范化/签名头须按小写名字典序排列（服务端会重排校验，乱序 → HTTP 403） */
 const SIGNED_HEADERS = 'content-type;host;x-content-sha256;x-date';
-
-/** HMAC-SHA256：key / message 均为字节数组，返回 32 字节摘要 */
-export function hmacSha256(key: number[], message: number[]): number[] {
-  let k = key.slice();
-  if (k.length > BLOCK_SIZE) {
-    k = sha256Digest(k);
-  }
-  const pad = new Array<number>(BLOCK_SIZE);
-  for (let i = 0; i < BLOCK_SIZE; i++) {
-    pad[i] = i < k.length ? k[i] : 0;
-  }
-  const inner = new Array<number>(BLOCK_SIZE + message.length);
-  for (let i = 0; i < BLOCK_SIZE; i++) {
-    inner[i] = pad[i] ^ 0x36;
-  }
-  for (let i = 0; i < message.length; i++) {
-    inner[BLOCK_SIZE + i] = message[i];
-  }
-  const innerHash = sha256Digest(inner);
-  const outer = new Array<number>(BLOCK_SIZE + innerHash.length);
-  for (let i = 0; i < BLOCK_SIZE; i++) {
-    outer[i] = pad[i] ^ 0x5c;
-  }
-  for (let i = 0; i < innerHash.length; i++) {
-    outer[BLOCK_SIZE + i] = innerHash[i];
-  }
-  return sha256Digest(outer);
-}
-
-/** HMAC-SHA256 → 小写十六进制 */
-export function hmacSha256Hex(key: number[], message: string): string {
-  return hexFromBytes(hmacSha256(key, utf8Bytes(message)));
-}
-
-/** SHA-256 → 小写十六进制 */
-export function sha256Hex(message: string): string {
-  return hexFromBytes(sha256Digest(utf8Bytes(message)));
-}
 
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;

@@ -26,6 +26,8 @@ import {
   ProviderDescriptor,
   ProviderDetailRow,
   ProviderDetailSection,
+  ProviderChartPoint,
+  makeChart,
   ProviderSetting,
   RateWindow,
   UsageSnapshot
@@ -329,8 +331,19 @@ class IBMBobProvider implements UsageProvider {
         if (tLimit > 0) {
           limit = tLimit;
         }
-        const tName = str(t, 'name', `团队 ${i + 1}`);
-        rows.push({ label: tName, value: `${Math.round(tUsed)}${tLimit > 0 ? ` / ${Math.round(tLimit)}` : ''} Bobcoins` });
+        // 标签/取值对照 Swift Bobcoin usage 分组：
+        // label = teamName（与 instanceName 不同时用 "instanceName · teamName"），
+        // value = "used / limit Bobcoins"（无上限时 "used Bobcoins used"），副文本为套餐名。
+        const instanceName = optStr(inst, 'instance_name') ?? optStr(inst, 'name') ?? instanceId;
+        const tName = str(t, 'team_name', str(t, 'name', `团队 ${i + 1}`));
+        const label = tName === instanceName ? tName : `${instanceName} · ${tName}`;
+        rows.push({
+          label: label,
+          value: tLimit > 0
+            ? `${Math.round(tUsed)} / ${Math.round(tLimit)} Bobcoins`
+            : `${Math.round(tUsed)} Bobcoins used`,
+          secondary: planName ?? undefined,
+        });
         const refresh = optStr(t, 'refresh_at');
         if (refresh != null && resets === 0) {
           resets = isoMs3(refresh);
@@ -346,7 +359,7 @@ class IBMBobProvider implements UsageProvider {
       snap.identity = { accountEmail: '', accountOrganization: planName, loginMethod: isJwt ? 'JWT' : 'Apikey' };
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: 'Bobcoin 用量', rows: rows };
+      const section: ProviderDetailSection = { title: 'Bobcoin usage', rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -588,9 +601,40 @@ class Sub2ApiProvider implements UsageProvider {
         rows.push({ label: '到期', value: Format.dateTime(isoMs3(expiresAt)) });
       }
     }
+    const sections: ProviderDetailSection[] = [];
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '订阅', rows: rows };
-      snap.details = [section];
+      sections.push({ title: '订阅', rows: rows });
+    }
+
+    // Usage summary（对照插件 details：余额 + 今日/累计请求数、token 数（副文本为花费））
+    const money = (value: number): string => unit.toUpperCase() === 'USD'
+      ? Format.money(value, 'USD')
+      : `${value.toFixed(2)} ${unit}`;
+    const usageRows: ProviderDetailRow[] = [];
+    if (balance != null) {
+      usageRows.push({ label: 'Balance', value: money(balance) });
+    }
+    const usage = asObj(root['usage']);
+    if (usage != null) {
+      const groups: string[][] = [['Today', 'today'], ['All time', 'total']];
+      for (let i = 0; i < groups.length; i++) {
+        const totals = asObj(usage[groups[i][1]]);
+        if (totals == null) {
+          continue;
+        }
+        usageRows.push({ label: `${groups[i][0]} requests`, value: `${num(totals, 'requests', 0)}` });
+        usageRows.push({
+          label: `${groups[i][0]} tokens`,
+          value: `${num(totals, 'total_tokens', 0)}`,
+          secondary: money(num(totals, 'actual_cost', 0)),
+        });
+      }
+    }
+    if (usageRows.length > 0) {
+      sections.push({ title: 'Usage summary', rows: usageRows });
+    }
+    if (sections.length > 0) {
+      snap.details = sections;
     }
     return snap;
   }
@@ -689,7 +733,7 @@ class AbacusProvider implements UsageProvider {
     id: 'abacus',
     title: 'Abacus',
     authKind: AuthKind.SESSION,
-    accentColor: '#7C3AED',
+    accentColor: '#38BDF8',
     authHint: '粘贴 apps.abacus.ai 的会话 Cookie',
     authUrl: 'https://apps.abacus.ai',
   };
@@ -814,7 +858,7 @@ class CommandCodeProvider implements UsageProvider {
     id: 'commandcode',
     title: 'Command Code',
     authKind: AuthKind.SESSION,
-    accentColor: '#EA580C',
+    accentColor: '#A04DFD',
     authHint: '粘贴 commandcode.ai 的会话 Cookie，或 API Key',
     authUrl: 'https://commandcode.ai/settings/billing',
   };
@@ -903,7 +947,7 @@ class LongCatProvider implements UsageProvider {
     id: 'longcat',
     title: 'LongCat',
     authKind: AuthKind.SESSION,
-    accentColor: '#14B8A6',
+    accentColor: '#FFD100',
     authHint: '粘贴 longcat.chat 平台的会话 Cookie',
     authUrl: 'https://longcat.chat/platform',
   };
@@ -982,69 +1026,382 @@ class LongCatProvider implements UsageProvider {
 // ZoomMate
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// ZoomMate（对照 ZoomMateUsageFetcher / ZoomMateCreditsHistoryFetcher）
+// ---------------------------------------------------------------------------
+
+/** 两个可互换的主机，任一退役不影响（源工程 withAPIHostFailover） */
+const ZM_HOSTS = ['ai.zoom.us', 'zoommate.zoom.us'];
+const ZM_STATUS_PATH = '/ai-computer/api/v1/credits/status';
+const ZM_HISTORY_PATH = '/ai-computer/api/v1/credits/history';
+const ZM_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
+
+/** 状态信封：data.credit_status → credit_status → credits → 根对象 */
+export function zoomMateCreditStatus(json: Json): Record<string, Json> | null {
+  const root = asObj(json);
+  if (root == null) {
+    return null;
+  }
+  const data = asObj(root['data']);
+  if (data != null) {
+    const inner = asObj(data['credit_status']);
+    if (inner != null) {
+      return inner;
+    }
+  }
+  const direct = asObj(root['credit_status']);
+  if (direct != null) {
+    return direct;
+  }
+  const credits = asObj(root['credits']);
+  if (credits != null) {
+    return credits;
+  }
+  return root;
+}
+
+/**
+ * credit_status → 主窗口（对照 ZoomMateModels.toUsageSnapshot D5 映射）：
+ * 无限额或预算为 0 时用量记 0；重置点取 cycle_end_date（毫秒或 ISO）。
+ */
+export function zoomMateStatusWindow(value: Json): RateWindow | null {
+  const status = asObj(value);
+  if (status == null) {
+    return null;
+  }
+  const unlimited = status['is_unlimited'] === true || status['isUnlimited'] === true;
+  const cap = getNum3(status, ['budget_cap', 'budgetCap']) ?? 0;
+  const used = getNum3(status, ['used_credit', 'usedCredit']) ?? 0;
+  const percent = unlimited || cap <= 0 ? 0 : Math.min(100, Math.max(0, (used / cap) * 100));
+  return makeWindow(percent, zoomMateResetMs(status), unlimited || cap <= 0 ? false : true);
+}
+
+/** 周期日期字段 → 毫秒（支持毫秒/秒时间戳与 ISO 字符串） */
+function zmDateMs(raw: Json): number {
+  if (typeof raw === 'number') {
+    const n = raw as number;
+    if (n > 1e12) {
+      return n;
+    }
+    return n > 1e9 ? n * 1000 : 0;
+  }
+  if (typeof raw === 'string' && (raw as string).length > 0) {
+    const parsed = Date.parse(raw as string);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+/** cycle_end_date → 毫秒（主窗口重置点） */
+export function zoomMateResetMs(value: Json): number {
+  const status = asObj(value);
+  return status == null ? 0 : zmDateMs(get3(status, ['cycle_end_date', 'cycleEndDate']));
+}
+
+function zmDateKey(ms: number): string {
+  const d = new Date(ms);
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${d.getFullYear()}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
+}
+
+/** ISO8601（秒级，对照源工程 .withInternetDateTime） */
+function zmIso(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** 本地零点 */
+function zmStartOfDay(ms: number): number {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+}
+
+function zmCredits(value: number): string {
+  return `${Math.round(value * 100) / 100}`;
+}
+
+/** credits/history 响应 → 记录数组（缺 data 信封时返回 null，对照源工程 parseFailed 不附带历史） */
+export function zoomMateHistoryRecords(json: Json): Json[] | null {
+  const root = asObj(json);
+  const data = root != null ? asObj(root['data']) : null;
+  if (data == null) {
+    return null;
+  }
+  const records = asArray(data['records']);
+  return records == null ? [] : records;
+}
+
+/**
+ * 整页记录都早于给定时间点？（对照源工程的 allOlderThanWindow 防御性停页；
+ * time 无法解析的记录按「不算旧」处理，避免误停）
+ */
+function zmPageAllOlderThan(records: Json[], startTime: number): boolean {
+  if (records.length === 0) {
+    return false;
+  }
+  for (let i = 0; i < records.length; i++) {
+    const rec = asObj(records[i]);
+    const timeStr = rec != null ? optStr(rec, 'time') : null;
+    if (timeStr == null || timeStr.length === 0) {
+      return false;
+    }
+    const ms = Date.parse(timeStr);
+    if (isNaN(ms) || ms >= startTime) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 多页记录 → 本地日聚合（对照 ZoomMateCreditsHistorySnapshot.dailyBreakdown）：
+ * 跳过 is_deleted、cost 缺失或为负、time 无法解析的记录；窗口为「今天往前 29 天」的本地零点起。
+ */
+export function zoomMateDailyBreakdown(records: Json[], now: number): ProviderChartPoint[] {
+  const from = zmStartOfDay(now) - 29 * 86400000;
+  const totals: Map<string, number> = new Map<string, number>();
+  for (let i = 0; i < records.length; i++) {
+    const rec = asObj(records[i]);
+    if (rec == null || rec['is_deleted'] === true) {
+      continue;
+    }
+    const cost = getNum3(rec, ['cost']);
+    if (cost == null || cost < 0) {
+      continue;
+    }
+    const timeStr = optStr(rec, 'time');
+    if (timeStr == null || timeStr.length === 0) {
+      continue;
+    }
+    const ms = Date.parse(timeStr);
+    if (isNaN(ms) || ms < from) {
+      continue;
+    }
+    const key = zmDateKey(ms);
+    totals.set(key, (totals.get(key) ?? 0) + cost);
+  }
+  const keys = Array.from(totals.keys());
+  keys.sort();
+  const out: ProviderChartPoint[] = [];
+  for (let i = 0; i < keys.length; i++) {
+    out.push({ label: keys[i], value: totals.get(keys[i])! });
+  }
+  return out;
+}
+
+/** 记录 → Today / 30d credits 两行（对照 toUsageSnapshot：有历史就有这两行，哪怕都是 0） */
+export function zoomMateHistoryRowsFrom(records: Json[], now: number): ProviderDetailRow[] {
+  const breakdown = zoomMateDailyBreakdown(records, now);
+  const todayKey = zmDateKey(now);
+  let today = 0;
+  let total = 0;
+  for (let i = 0; i < breakdown.length; i++) {
+    total += breakdown[i].value;
+    if (breakdown[i].label === todayKey) {
+      today = breakdown[i].value;
+    }
+  }
+  return [
+    { label: 'Today', value: zmCredits(today) },
+    { label: '30d credits', value: zmCredits(total) },
+  ];
+}
+
+/** credits/history 单页响应 → 明细行（测试与单页场景用） */
+export function zoomMateHistoryRows(json: Json, now: number): ProviderDetailRow[] {
+  const records = zoomMateHistoryRecords(json);
+  return records == null ? [] : zoomMateHistoryRowsFrom(records, now);
+}
+
+/**
+ * Pace 文案（对照 UsagePace.weekly 的 workDays: nil 分支 = 按周期线性推进，
+ * 以及 ZoomMateUsageSnapshot.paceString 的档位阈值）：
+ * |delta| ≤2 视为 on track，≤6 / ≤12 / 更大分别对应 slightly / normal / far。
+ */
+export function zoomMatePaceText(usedPercent: number, cycleMinutes: number, resetsAtMs: number, now: number): string {
+  const duration = cycleMinutes * 60000;
+  const timeUntilReset = resetsAtMs - now;
+  if (duration <= 0 || timeUntilReset <= 0 || timeUntilReset > duration) {
+    return '';
+  }
+  const elapsed = Math.min(Math.max(duration - timeUntilReset, 0), duration);
+  const expected = Math.min(Math.max((elapsed / duration) * 100, 0), 100);
+  const actual = Math.min(Math.max(usedPercent, 0), 100);
+  // 周期刚开始就已有消耗：源工程此时放弃判定
+  if (elapsed === 0 && actual > 0) {
+    return '';
+  }
+  const delta = actual - expected;
+  const abs = Math.abs(delta);
+  if (abs <= 2) {
+    return 'On track';
+  }
+  const percent = `${Math.round(abs)}%`;
+  if (delta >= 0) {
+    return `${percent} ahead of budget`;
+  }
+  return `${percent} behind budget`;
+}
+
+/**
+ * Pace 明细行（对照 ZoomMateCreditStatus.pacingVerdict）：
+ * 需要预算上限、非无限额、且周期起止时间可解析；周期长度即 UsagePace 的 windowMinutes。
+ */
+export function zoomMatePaceRow(status: Record<string, Json> | null, now: number): ProviderDetailRow | null {
+  if (status == null) {
+    return null;
+  }
+  const unlimited = status['is_unlimited'] === true || status['isUnlimited'] === true;
+  const cap = getNum3(status, ['budget_cap', 'budgetCap']);
+  if (unlimited || cap == null || cap <= 0) {
+    return null;
+  }
+  const startMs = zmDateMs(get3(status, ['cycle_start_date', 'cycleStartDate']));
+  const endMs = zmDateMs(get3(status, ['cycle_end_date', 'cycleEndDate']));
+  if (startMs <= 0 || endMs <= startMs) {
+    return null;
+  }
+  const cycleMinutes = Math.floor((endMs - startMs) / 60000);
+  if (cycleMinutes <= 0) {
+    return null;
+  }
+  const used = getNum3(status, ['used_credit', 'usedCredit']) ?? 0;
+  const usedPercent = Math.min(100, Math.max(0, (used / cap) * 100));
+  const text = zoomMatePaceText(usedPercent, cycleMinutes, endMs, now);
+  return text.length === 0 ? null : { label: 'Pace', value: text };
+}
+
 class ZoomMateProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'zoommate',
     title: 'ZoomMate',
     authKind: AuthKind.OAUTH_TOKEN,
-    accentColor: '#2D8CFF',
-    authHint: '粘贴 zoommate.zoom.us 的会话令牌或 Cookie',
+    accentColor: '#0B5CFF',
+    authHint: '粘贴 ai.zoom.us / zoommate.zoom.us 的会话令牌（Bearer）或整段 Cookie',
     authUrl: 'https://zoommate.zoom.us',
   };
+
+  private headers(cred: string): Record<string, string> {
+    const h: Record<string, string> = {
+      'accept': 'application/json, text/plain, */*',
+      'accept-language': 'en-US,en;q=0.9',
+      'user-agent': ZM_UA,
+    };
+    // 三段式 JWT 视为 Bearer 令牌，否则按 Cookie 串处理
+    if (cred.split('.').length === 3) {
+      h['authorization'] = `Bearer ${cred}`;
+    } else {
+      h['cookie'] = cred;
+    }
+    return h;
+  }
+
+  /** credits/history 额外请求头（对照源工程 PageRequest 的 Sec-Fetch-* 与 Origin/Referer） */
+  private historyHeaders(cred: string): Record<string, string> {
+    const h = this.headers(cred);
+    h['sec-fetch-dest'] = 'empty';
+    h['sec-fetch-mode'] = 'cors';
+    h['sec-fetch-site'] = 'same-site';
+    h['origin'] = 'https://zoommate.zoom.us';
+    h['referer'] = 'https://zoommate.zoom.us';
+    return h;
+  }
+
+  /**
+   * 拉取近 30 天账单记录（对照 ZoomMateCreditsHistoryFetcher.fetch）：
+   * limit=50 逐页翻，直到 page*limit >= total、空页、整页都早于窗口起点或达到 20 页上限；
+   * 任一页失败视为整个历史不可用（源工程的 pagination 循环同失败同处理）。
+   */
+  private async fetchHistory(host: string, cred: string, now: number): Promise<Json[] | null> {
+    const limit = 50;
+    const maxPages = 20;
+    const startTime = now - 30 * 86400000;
+    const headers = this.historyHeaders(cred);
+    const all: Json[] = [];
+    let total = Number.MAX_SAFE_INTEGER;
+    let pages = 0;
+    for (let page = 0; page * limit < total && page < maxPages; page++) {
+      const url = `https://${host}${ZM_HISTORY_PATH}` +
+        `?app_id=demo_app&limit=${limit}&page=${page}&sort_by=time&sort_order=desc` +
+        `&start_time=${encodeURIComponent(zmIso(startTime))}` +
+        `&end_time=${encodeURIComponent(zmIso(now))}`;
+      const resp = await Http.get(url, headers);
+      if (!resp.ok) {
+        return null;
+      }
+      const records = zoomMateHistoryRecords(resp.json());
+      if (records == null) {
+        return null;
+      }
+      pages += 1;
+      if (records.length === 0) {
+        break;
+      }
+      for (let i = 0; i < records.length; i++) {
+        all.push(records[i]);
+      }
+      const root = asObj(resp.json());
+      const data = root != null ? asObj(root['data']) : null;
+      total = data != null ? (getNum3(data, ['total']) ?? all.length) : all.length;
+      // 整页都已早于窗口（按时间降序，后续页只会更旧）→ 停
+      if (zmPageAllOlderThan(records, startTime)) {
+        break;
+      }
+    }
+    return pages > 0 ? all : null;
+  }
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cred = setting.credential.trim();
     if (cred.length === 0) {
       return UsageSnapshot.failure('未配置令牌');
     }
-    const isJwt = cred.split('.').length === 3;
-    const headers: Record<string, string> = {
-      'accept': 'application/json',
-    };
-    if (isJwt) {
-      headers['authorization'] = `Bearer ${cred}`;
-    } else {
-      headers['cookie'] = cred;
-    }
-    const resp = await Http.get('https://zoommate.zoom.us/ai-computer/api/v1/credits/status', headers);
-    if (!resp.ok) {
-      return UsageSnapshot.failure(resp.errorText());
-    }
-    const root = asObj(resp.json());
-    if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
-    }
-    const credits = asObj(root['credits']) ?? root;
-    const today = asObj(credits['today']);
-    const weekly = asObj(credits['weekly']);
-    const windowFrom = (o: Record<string, Json> | null, label: string): RateWindow | null => {
-      if (o == null) {
-        return null;
+    const headers = this.headers(cred);
+
+    // 主机降级：非鉴权失败（连不上 / 5xx）时换另一台
+    let status: Record<string, Json> | null = null;
+    let host = '';
+    let lastError = '';
+    for (let i = 0; i < ZM_HOSTS.length && status == null; i++) {
+      const resp = await Http.get(`https://${ZM_HOSTS[i]}${ZM_STATUS_PATH}`, headers);
+      if (resp.ok) {
+        const parsed = zoomMateCreditStatus(resp.json());
+        if (parsed != null) {
+          status = parsed;
+          host = ZM_HOSTS[i];
+          break;
+        }
+        lastError = '响应解析失败';
+        break;
       }
-      const unlimited = bool(o, 'is_unlimited') || bool(o, 'isUnlimited');
-      if (unlimited) {
-        return makeWindow(0, 0, true);
+      lastError = resp.errorText();
+      // 401/403：凭证问题，换主机也没用
+      if (resp.code === 401 || resp.code === 403) {
+        break;
       }
-      const used = getNum3(o, ['used_credit', 'usedCredit', 'used']) ?? 0;
-      const limit = getNum3(o, ['budget_cap', 'budgetCap', 'limit']) ?? 0;
-      if (limit <= 0) {
-        return null;
+    }
+    if (status == null) {
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '查询失败');
+    }
+
+    const snap = UsageSnapshot.success(zoomMateStatusWindow(status), null, null);
+    snap.primaryLabel = 'Credits';
+
+    // 额度明细（对照源工程：余额/透支/周期结束均由主窗口承载，
+    // 明细只有 Credit history 一组：Today / 30d credits / Pace + Daily credits 柱状图）
+    const now = Date.now();
+    const historyRecords = await this.fetchHistory(host, cred, now);
+    if (historyRecords != null) {
+      const historyRows = zoomMateHistoryRowsFrom(historyRecords, now);
+      const paceRow = zoomMatePaceRow(status, now);
+      if (paceRow != null) {
+        historyRows.push(paceRow);
       }
-      return makeWindow(Math.min(100, (used / limit) * 100), 0, true);
-    };
-    const snap = UsageSnapshot.success(windowFrom(today, '今日'), windowFrom(weekly, '每周'), null);
-    const remaining = getNum3(credits, ['remaining_credit', 'remainingCredit']);
-    const rows: ProviderDetailRow[] = [];
-    if (remaining != null) {
-      rows.push({ label: '剩余额度', value: `${remaining}` });
-    }
-    const cycleEnd = optStr(credits, 'cycle_end_date');
-    if (cycleEnd != null) {
-      rows.push({ label: '周期结束', value: cycleEnd });
-    }
-    if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '额度', rows: rows };
-      snap.details = [section];
+      const breakdown = zoomMateDailyBreakdown(historyRecords, now);
+      const historySection: ProviderDetailSection = breakdown.length > 0
+        ? { title: 'Credit history', rows: historyRows, chart: makeChart('Daily credits', 'credits', breakdown) }
+        : { title: 'Credit history', rows: historyRows };
+      snap.details = [historySection];
     }
     return snap;
   }
@@ -1059,7 +1416,7 @@ class NotionProvider implements UsageProvider {
     id: 'notion',
     title: 'Notion AI',
     authKind: AuthKind.SESSION,
-    accentColor: '#111111',
+    accentColor: '#337EA9',
     authHint: '粘贴 app.notion.com 的 Cookie（需含 token_v2）',
     authUrl: 'https://www.notion.so/my-account',
   };

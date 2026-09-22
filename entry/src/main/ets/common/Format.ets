@@ -88,6 +88,31 @@ export class Format {
     return Format.dateTime(ms);
   }
 
+  /**
+   * 额度数字：千分位 + 最多两位小数、去掉尾随 0（对照 UsageFormatter.creditsNumberString）：
+   * 1234.5 → "1,234.5"；0 → "0"；1000000 → "1,000,000"
+   */
+  static creditsNumber(value: number): string {
+    if (!isFinite(value)) {
+      return '0';
+    }
+    const rounded = Math.round(value * 100) / 100;
+    const negative = rounded < 0;
+    const fixed = Math.abs(rounded).toFixed(2);
+    const intPart = fixed.substring(0, fixed.length - 3);
+    const frac = fixed.substring(fixed.length - 2).replace(/0+$/, '');
+    let grouped = '';
+    for (let i = 0; i < intPart.length; i++) {
+      grouped += intPart.charAt(i);
+      const remaining = intPart.length - i - 1;
+      if (remaining > 0 && remaining % 3 === 0) {
+        grouped += ',';
+      }
+    }
+    const text = frac.length > 0 ? `${grouped}.${frac}` : grouped;
+    return negative ? `-${text}` : text;
+  }
+
   /** 大数缩写：1234 → "1.2K"，1234567 → "1.23M" */
   static compact(n: number): string {
     if (n >= 1_000_000_000) {

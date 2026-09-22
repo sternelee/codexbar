@@ -57,28 +57,72 @@ export function iconFileFor(providerId: string): string | null {
     case 'muse':
       return 'meta-color.svg';
     case 'clinepass':
-      return 'cline.svg';
+      return 'clinepass.svg';
     case 'clawrouter':
-      return 'openclaw-color.svg';
+      return 'clawrouter.svg';
+    case 'opencode':
+    case 'opencodego':
+      return 'opencode.svg';
     case 'llmproxy':
       return 'llmapi-color.svg';
+    case 'litellm':
+      return 'litellm.svg';
     case 'elevenlabs':
       return 'elevenlabs.svg';
     case 'fireworks':
       return 'fireworks-color.svg';
+    case 'neuralwatt':
+      return 'neuralwatt.svg';
     case 'ibmbob':
       return 'ibm.svg';
     case 'devin':
       return 'devin-color.svg';
+    case 'abacus':
+      return 'abacus.svg';
+    case 'commandcode':
+      return 'commandcode.svg';
+    case 'longcat':
+      return 'longcat.svg';
+    case 'zoommate':
+      return 'zoommate.svg';
+    case 't3chat':
+      return 't3chat.svg';
+    case 'factory':
+      return 'factory.svg';
     case 'notion':
       return 'notion.svg';
+    case 'azure-openai':
+      return 'openai.svg';
     case 'huggingface':
       return 'huggingface-color.svg';
+    case 'warp':
+      return 'warp.svg';
+    case 'chutes':
+      return 'chutes.svg';
+    case 'codebuff':
+      return 'codebuff.svg';
+    case 'deepgram':
+      return 'deepgram.svg';
+    case 'sub2api':
+      return 'sub2api.svg';
+    case 'synthetic':
+      return 'synthetic.svg';
+    case 'aiand':
+      return 'aiand.svg';
+    case 'alibaba-coding':
+      return 'alibaba.svg';
     case 'groq':
       return 'groq.svg';
-    case 'opencode':
-    case 'opencodego':
-      return 'opencode.svg';
+    case 'v0':
+      return 'v0.svg';
+    case 'amp':
+      return 'amp.svg';
+    case 'ollama':
+      return 'ollama.svg';
+    case 'bedrock':
+      return 'bedrock.svg';
+    case 'copilot':
+      return 'copilot.svg';
     case 'doubao':
       return 'doubao-color.svg';
     default:

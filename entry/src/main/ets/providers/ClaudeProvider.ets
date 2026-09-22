@@ -5,11 +5,23 @@
  * 1. GET https://claude.ai/api/organizations           （Cookie: sessionKey=...）→ 取组织 uuid
  * 2. GET https://claude.ai/api/organizations/{uuid}/usage
  *    → five_hour / seven_day / seven_day_opus(.sonnet) 三个窗口（utilization 0-100 + resets_at ISO8601）
+ *      + extra_usage（Extra usage 本月已用/上限，单位：分）
+ * 3. 尽力而为：GET .../{uuid}/overage_spend_limit（extra_usage 缺失时的费用来源）
+ *              GET .../{uuid}/prepaid/credits（预付余额，覆盖费用卡余额）
  */
 
 import { Http } from '../net/Http';
 import { asArray, asObj, Json, optNum, optStr, str } from '../net/Json';
-import { makeWindow, ProviderDescriptor, ProviderSetting, RateWindow, UsageSnapshot, AuthKind } from '../model/Models';
+import {
+  makeWindow,
+  ProviderCostSnapshot,
+  ProviderDescriptor,
+  ProviderSetting,
+  RateWindow,
+  UsageSnapshot,
+  AuthKind
+} from '../model/Models';
+import { Format } from '../common/Format';
 import { UsageProvider, UrlUtil } from './ProviderBase';
 
 class ClaudeWebProvider implements UsageProvider {
@@ -17,7 +29,7 @@ class ClaudeWebProvider implements UsageProvider {
     id: 'claude',
     title: 'Claude',
     authKind: AuthKind.SESSION,
-    accentColor: '#D97757',
+    accentColor: '#CC7C5E',
     authHint: '粘贴 claude.ai 的 sessionKey（sk-ant-sid01-… 开头），或在设置页「网页登录」直接登录',
     authUrl: 'https://claude.ai/settings/billing',
   };
@@ -96,8 +108,33 @@ class ClaudeWebProvider implements UsageProvider {
       opus = ClaudeWebProvider.windowOf(root, 'seven_day_opus');
     }
 
-    const snap = UsageSnapshot.success(session, weekly, opus);
+    // 第三步（尽力而为，对照 ClaudeWebAPIFetcher）：Extra usage 费用与预付余额
+    // /usage 里的 extra_usage；缺失时回退 /overage_spend_limit；最后用 /prepaid/credits 覆盖余额
+    let cost = claudeExtraUsageCost(root['extra_usage']);
+    const orgBase = `https://claude.ai/api/organizations/${UrlUtil.encode(orgId)}`;
+    if (cost == null) {
+      const overage = await Http.get(`${orgBase}/overage_spend_limit`, headers);
+      if (overage.ok) {
+        cost = claudeOverageSpendLimitCost(overage.json());
+      }
+    }
+    const prepaid = await Http.get(`${orgBase}/prepaid/credits`, headers);
+    if (prepaid.ok) {
+      cost = claudePrepaidBalanceCost(prepaid.json(), cost);
+    }
+
+    // 主窗口缺失但 Extra usage 开启：源工程把它当"消费限额窗口"展示
+    let primary = session;
+    if (primary == null && cost != null && cost.limit != null && cost.limit > 0) {
+      const pct = Math.max(0, Math.min(100, (cost.used / cost.limit) * 100));
+      primary = makeWindow(pct, 0, true);
+    }
+
+    const snap = UsageSnapshot.success(primary, weekly, opus);
     snap.identity = { accountEmail: email, accountOrganization: orgName, loginMethod: 'sessionKey' };
+    if (cost != null) {
+      snap.providerCost = cost;
+    }
     return snap;
   }
 
@@ -122,6 +159,100 @@ class ClaudeWebProvider implements UsageProvider {
     }
     return makeWindow(percent, resets, true);
   }
+}
+
+/**
+ * /usage 响应里的 extra_usage → 费用快照（对照 ClaudeWebExtraUsageCost.parse）。
+ * 字段：used_credits / monthly_limit（或 monthly_credit_limit）/ currency，单位是"分"。
+ * 缺失或 limit <= 0 时返回 null。
+ */
+export function claudeExtraUsageCost(value: Json | null): ProviderCostSnapshot | null {
+  const u = asObj(value);
+  if (u == null) {
+    return null;
+  }
+  const used = optNum(u, 'used_credits');
+  let limit = optNum(u, 'monthly_limit');
+  if (limit == null) {
+    limit = optNum(u, 'monthly_credit_limit');
+  }
+  if (used == null || limit == null || limit <= 0) {
+    return null;
+  }
+  return claudeUsageCost(used, limit, optStr(u, 'currency'), 'Monthly cap');
+}
+
+/** /overage_spend_limit 响应 → 费用快照（is_enabled !== true 时不展示） */
+export function claudeOverageSpendLimitCost(value: Json): ProviderCostSnapshot | null {
+  const o = asObj(value);
+  if (o == null) {
+    return null;
+  }
+  const enabled = o['is_enabled'];
+  if (enabled !== true) {
+    return null;
+  }
+  const used = optNum(o, 'used_credits');
+  const limit = optNum(o, 'monthly_credit_limit');
+  if (used == null || limit == null || limit <= 0) {
+    return null;
+  }
+  return claudeUsageCost(used, limit, optStr(o, 'currency'), 'Monthly cap');
+}
+
+/**
+ * /prepaid/credits 响应 → 用预付余额覆盖 remaining（对照 applyingPrepaidBalance）：
+ * 币种不同则保留原费用；原本没有费用时以余额单独立卡（period = Extra usage）。
+ */
+export function claudePrepaidBalanceCost(value: Json, existing: ProviderCostSnapshot | null): ProviderCostSnapshot | null {
+  const p = asObj(value);
+  if (p == null) {
+    return existing;
+  }
+  const amount = optNum(p, 'amount');
+  const currency = optStr(p, 'currency');
+  if (amount == null || currency == null || currency.length === 0) {
+    return existing;
+  }
+  if (existing != null) {
+    if (existing.currency.toUpperCase() !== currency.toUpperCase()) {
+      return existing;
+    }
+    const updated: ProviderCostSnapshot = {
+      remaining: amount,
+      used: existing.used,
+      currency: existing.currency,
+      displayText: Format.money(amount, existing.currency),
+      period: existing.period,
+      limit: existing.limit,
+    };
+    return updated;
+  }
+  const fresh: ProviderCostSnapshot = {
+    remaining: amount,
+    used: 0,
+    currency: currency,
+    displayText: Format.money(amount, currency),
+    period: 'Extra usage',
+    limit: 0,
+  };
+  return fresh;
+}
+
+/** 分 → 元，并按源工程文案组织费用快照 */
+function claudeUsageCost(usedCredits: number, monthlyCreditLimit: number, currency: string | null, period: string): ProviderCostSnapshot {
+  const code = currency != null && currency.length > 0 ? currency : 'USD';
+  const used = usedCredits / 100;
+  const limit = monthlyCreditLimit / 100;
+  const cost: ProviderCostSnapshot = {
+    remaining: Math.max(0, limit - used),
+    used: used,
+    currency: code,
+    displayText: Format.money(Math.max(0, limit - used), code),
+    period: period,
+    limit: limit,
+  };
+  return cost;
 }
 
 export function createClaudeProvider(): UsageProvider {

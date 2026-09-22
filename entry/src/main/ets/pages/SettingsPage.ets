@@ -6,10 +6,14 @@
 import { promptAction } from '@kit.ArkUI';
 import {
   AuthKind,
+  extraFields,
+  extraValue,
+  ExtraField,
   needsSecondCredential,
   ProviderAccount,
   ProviderDescriptor,
-  secondCredentialHint
+  secondCredentialHint,
+  setExtraValue
 } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
@@ -23,6 +27,8 @@ struct ProviderSettingCard {
   @State isEnabled: boolean = false;
   @State credential: string = '';
   @State credential2: string = '';
+  /** 额外字段（JSON 对象文本，键由 extraFields(pid) 定义） */
+  @State extraJson: string = '';
   /** 父页面版本号；返回本页/切换账号后 +1 触发重读 */
   @Prop @Watch('reloadFromStore') rev: number = 0;
   /** 卡片内账号操作计数：添加/切换/删除后 +1 立即重渲染 */
@@ -33,7 +39,11 @@ struct ProviderSettingCard {
   private descriptor: ProviderDescriptor | null = null;
   private needSecond: boolean = false;
   private secondHint: string = '可选：组织 / 账号 ID';
+  private fields: ExtraField[] = [];
+  /** Claude / Codex 支持应用内网页登录（Cookie / PKCE）；DeepSeek 用它取平台会话补第二栏 */
   private canWebLogin: boolean = false;
+  /** 网页登录会新建账号的服务商（DeepSeek 只回填平台会话，不建账号） */
+  private webLoginMakesAccount: boolean = false;
   /** 请求父页面弹确认框（卡片内不放弹窗，保证覆盖全屏与主题一致） */
   onAsk: (title: string, message: string, confirmText: string, action: () => void) => void =
     (_t: string, _m: string, _c: string, _a: () => void) => {};
@@ -52,10 +62,13 @@ struct ProviderSettingCard {
         this.isEnabled = s.setting.enabled;
         this.credential = s.setting.credential;
         this.credential2 = s.setting.credential2;
+        this.extraJson = s.setting.extraConfig;
         const pid = s.descriptor.id;
         this.needSecond = needsSecondCredential(pid);
         this.secondHint = secondCredentialHint(pid);
-        this.canWebLogin = pid === 'claude' || pid === 'codex';
+        this.fields = extraFields(pid);
+        this.canWebLogin = pid === 'claude' || pid === 'codex' || pid === 'deepseek';
+        this.webLoginMakesAccount = pid === 'claude' || pid === 'codex';
         break;
       }
     }
@@ -69,6 +82,7 @@ struct ProviderSettingCard {
       enabled: this.isEnabled,
       credential: this.credential.trim(),
       credential2: this.credential2.trim(),
+      extraConfig: this.extraJson.trim(),
     });
     Nav.toast('已保存');
   }
@@ -198,7 +212,7 @@ struct ProviderSettingCard {
 
   /** ＋ 按钮：Claude/Codex 走网页登录加号；其他服务商建空账号待填凭证 */
   addAccount(): void {
-    if (this.canWebLogin) {
+    if (this.webLoginMakesAccount) {
       Nav.toOAuthLogin(this.pid, true);
       return;
     }
@@ -259,6 +273,22 @@ struct ProviderSettingCard {
                 this.credential2 = v;
               })
           }
+
+          // 额外字段（Endpoint / Deployment / Region 等）
+          ForEach(this.fields, (f: ExtraField) => {
+            TextInput({ text: extraValue(this.extraJson, f.key), placeholder: f.hint })
+              .fontSize(13)
+              .fontColor(Theme.text)
+              .placeholderColor(Theme.textDim)
+              .placeholderFont({ size: 12 })
+              .backgroundColor(Theme.input)
+              .borderRadius(10)
+              .height(42)
+              .width('100%')
+              .onChange((v: string) => {
+                this.extraJson = setExtraValue(this.extraJson, f.key, v);
+              })
+          }, (f: ExtraField) => `${this.pid}_${f.key}`)
         }
 
         Row({ space: 10 }) {
@@ -315,10 +345,13 @@ struct SettingsPage {
 
   aboutToAppear(): void {
     this.ver = AppStore.get().version;
+    this.showOptional = Settings.showOptionalDetails();
   }
 
   /** 搜索关键字（按名称/ID 过滤） */
   @State keyword: string = '';
+  /** 是否展示可选用量 / 额度明细（对照 macOS showOptionalCreditsAndExtraUsage） */
+  @State showOptional: boolean = true;
   /** 自绘确认弹窗状态 */
   @State askVisible: boolean = false;
   @State askTitle: string = '';
@@ -326,7 +359,7 @@ struct SettingsPage {
   @State askConfirmText: string = '确认';
   private askAction: (() => void) | null = null;
 
-  /** 从 OAuthLogin 等页面返回时刷新账号条 */
+  /** 返回本页时刷新账号条 */
   onPageShow(): void {
     this.ver += 1;
   }
@@ -414,6 +447,33 @@ struct SettingsPage {
           }
           .width('100%')
           .padding(12)
+        }
+
+        ListItem() {
+          Row({ space: 10 }) {
+            Column({ space: 3 }) {
+              Text('展示可选用量明细')
+                .fontSize(14)
+                .fontColor(Theme.text)
+              Text('关闭后按服务商策略隐藏可选分组（如 DeepSeek 用量、MiniMax 账单历史）')
+                .fontSize(11)
+                .fontColor(Theme.textDim)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.showOptional })
+              .selectedColor(Theme.accent)
+              .onChange((on: boolean) => {
+                this.showOptional = on;
+                Settings.setShowOptionalDetails(on);
+                this.ver += 1;
+              })
+          }
+          .width('100%')
+          .padding(Theme.cardPad)
+          .borderRadius(Theme.radius)
+          .backgroundColor(Theme.card)
+          .border({ width: 1, color: Theme.stroke })
         }
 
         if (this.ids(this.ver, this.keyword).length === 0) {

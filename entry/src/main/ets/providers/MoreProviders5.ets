@@ -15,10 +15,12 @@ import { asArray, asObj, bool, Json, num, optNum, optStr, str } from '../net/Jso
 import {
   AuthKind,
   makeWindow,
+  ProviderChartPoint,
   ProviderCostSnapshot,
   ProviderDescriptor,
   ProviderDetailRow,
   ProviderDetailSection,
+  makeChart,
   ProviderSetting,
   RateWindow,
   UsageSnapshot
@@ -82,16 +84,21 @@ class HuggingFaceProvider implements UsageProvider {
       remaining: Math.max(0, limit - billable), used: billable, currency: 'USD',
       displayText: Format.money(billable, 'USD'),
     };
+    // Inference Providers 分组（对照插件 rows：计费额、总量、包含额度、消费上限、请求数）
     const rows: ProviderDetailRow[] = [
-      { label: '本月消费', value: Format.money(gross, 'USD') },
-      { label: '含额度抵扣', value: Format.money(included, 'USD') },
+      { label: 'Billable usage', value: Format.money(billable, 'USD') },
     ];
+    if (included > 0) {
+      rows.push({ label: 'Gross inference usage', value: Format.money(gross, 'USD') });
+      rows.push({ label: 'Included inference amount', value: Format.money(included, 'USD') });
+    }
     if (limit > 0) {
-      rows.push({ label: '上限', value: Format.money(limit, 'USD') });
+      rows.push({ label: 'Spending limit', value: Format.money(limit, 'USD') });
     }
     if (requests != null) {
-      rows.push({ label: '请求数', value: `${Math.round(requests)}` });
+      rows.push({ label: 'Requests', value: `${Math.round(requests)}` });
     }
+    const sections: ProviderDetailSection[] = [{ title: 'Inference Providers', rows: rows }];
 
     // ZeroGPU 副窗口（可选，失败不阻塞）
     const gpuResp = await Http.get('https://huggingface.co/api/spaces/zero-gpu/quota', headers);
@@ -110,12 +117,22 @@ class HuggingFaceProvider implements UsageProvider {
           }
         }
         snap.secondary = makeWindow(Math.min(100, (consumed / base) * 100), resets, true);
-        rows.push({ label: 'ZeroGPU 已用', value: `${Math.round(consumed / 60)} 分钟` });
-        rows.push({ label: 'ZeroGPU 剩余', value: `${Math.round(current / 60)} 分钟` });
+        // 秒 → 分钟文本（对照插件 minutes()：≥10 分钟取整，否则保留 1 位）
+        const minutes = (seconds: number): string => {
+          const value = seconds / 60;
+          const decimals = seconds >= 600 ? 0 : 1;
+          return `${value.toFixed(decimals)} min`;
+        };
+        sections.push({
+          title: 'ZeroGPU',
+          rows: [
+            { label: 'GPU time used', value: minutes(consumed) },
+            { label: 'GPU time remaining', value: minutes(current) },
+          ],
+        });
       }
     }
-    const section: ProviderDetailSection = { title: '推理计费', rows: rows };
-    snap.details = [section];
+    snap.details = sections;
     return snap;
   }
 }
@@ -418,7 +435,7 @@ class OpenCodeProvider extends OpenCodeBaseProvider {
       id: 'opencode',
       title: 'OpenCode',
       authKind: AuthKind.SESSION,
-      accentColor: '#F4A261',
+      accentColor: '#3B82F6',
       authHint: '粘贴 opencode.ai 会话 Cookie；可选第二栏填工作区 ID',
       authUrl: 'https://opencode.ai/workspace',
     }, false);
@@ -431,7 +448,7 @@ class OpenCodeGoProvider extends OpenCodeBaseProvider {
       id: 'opencodego',
       title: 'OpenCode Go',
       authKind: AuthKind.SESSION,
-      accentColor: '#E76F51',
+      accentColor: '#3B82F6',
       authHint: '粘贴 opencode.ai 会话 Cookie 或 Zen API Key（Go 计划）；可选第二栏填工作区 ID',
       authUrl: 'https://opencode.ai/workspace',
     }, true);
@@ -484,7 +501,7 @@ class GroqProvider implements UsageProvider {
     id: 'groq',
     title: 'Groq',
     authKind: AuthKind.SESSION,
-    accentColor: '#F55036',
+    accentColor: '#F56844',
     authHint: '粘贴 groq.com 的 stytch_session Cookie；可选第二栏填组织 ID',
     authUrl: 'https://console.groq.com/settings/organization',
   };
@@ -572,9 +589,10 @@ class GroqProvider implements UsageProvider {
     }
     const actRoot = asObj(actResp.json());
     const rows = actRoot != null ? asArray(actRoot['data']) : null;
-    let requests = 0;
-    let contextTokens = 0;
-    let generatedTokens = 0;
+    const totals = new GroqActivity();
+    const models: Map<string, GroqModelUsage> = new Map<string, GroqModelUsage>();
+    // 每日花费桶（对照源工程 byDay：本地零点日键）
+    const dayCosts: Map<string, number> = new Map<string, number>();
     let orgName = '';
     if (rows != null) {
       for (let i = 0; i < rows.length; i++) {
@@ -582,25 +600,119 @@ class GroqProvider implements UsageProvider {
         if (r == null) {
           continue;
         }
-        requests += num(r, 'num_requests', 0);
-        contextTokens += num(r, 'n_context_tokens_total', 0);
-        generatedTokens += num(r, 'n_generated_tokens_total', 0);
+        const requests = num(r, 'num_requests', 0);
+        const context = num(r, 'n_context_tokens_total', 0);
+        const rawNonCached = num(r, 'n_non_cached_context_tokens_total', -1);
+        // 缺 n_non_cached 时回退成上下文总量（对照源工程 ?? contextTokens）
+        const nonCached = rawNonCached >= 0 ? rawNonCached : context;
+        const generated = num(r, 'n_generated_tokens_total', 0);
+        const cost = num(r, 'cost', 0);
+        // 缓存 = 上下文总量 - 非缓存上下文（对照源工程 max(0, context - nonCached)）
+        const cached = Math.max(0, context - nonCached);
+        const timestamp = num(r, 'timestamp', 0);
+        if (timestamp > 0) {
+          const dayKey = groqDayKey(timestamp * 1000);
+          dayCosts.set(dayKey, (dayCosts.get(dayKey) ?? 0) + cost);
+        }
+        totals.requests += requests;
+        totals.cachedInput += cached;
+        totals.tokens += context + generated;
+        totals.cost += cost;
+        const modelName = optStr(r, 'model');
+        const name = modelName != null && modelName.length > 0 ? modelName : 'unknown';
+        const entry = models.get(name) ?? new GroqModelUsage();
+        entry.requests += requests;
+        entry.tokens += context + generated;
+        models.set(name, entry);
         if (orgName.length === 0) {
           orgName = str(r, 'organization_name', '');
         }
       }
     }
     const snap = UsageSnapshot.success(null, null, null);
-    snap.identity = { accountEmail: '', accountOrganization: orgName, loginMethod: 'Console Cookie' };
-    const detailRows: ProviderDetailRow[] = [
-      { label: '近 30 天请求', value: `${requests}` },
-      { label: '上下文 Token', value: Format.compact(contextTokens) },
-      { label: '生成 Token', value: Format.compact(generatedTokens) },
+    snap.identity = { accountEmail: '', accountOrganization: orgName, loginMethod: 'Console' };
+
+    // Usage summary 分组（对照源工程：花费/请求数/Token/缓存输入）
+    const periodLabel = 'Last 30 days';
+    const summaryRows: ProviderDetailRow[] = [
+      { label: 'Spend', value: Format.money(totals.cost, 'USD'), secondary: periodLabel },
+      { label: 'Requests', value: `${totals.requests}` },
+      { label: 'Tokens', value: `${totals.tokens}` },
     ];
-    const section: ProviderDetailSection = { title: '活动用量', rows: detailRows };
-    snap.details = [section];
+    if (totals.cachedInput > 0) {
+      summaryRows.push({ label: 'Cached input', value: `${totals.cachedInput}` });
+    }
+    // Usage summary 附「Daily spend」柱状图（按日键升序，对照 daily.map { ($0.day, $0.costUSD) }）
+    const dayKeys = Array.from(dayCosts.keys());
+    dayKeys.sort();
+    const dayPoints: ProviderChartPoint[] = [];
+    for (let i = 0; i < dayKeys.length; i++) {
+      dayPoints.push({ label: dayKeys[i], value: dayCosts.get(dayKeys[i])! });
+    }
+    const summarySection: ProviderDetailSection = { title: 'Usage summary', rows: summaryRows };
+    if (dayPoints.length > 0) {
+      summarySection.chart = makeChart('Daily spend', 'USD', dayPoints);
+    }
+    const sections: ProviderDetailSection[] = [summarySection];
+
+    // Models 分组（对照源工程：按 token 降序取前 20，value=tokens、副文本=requests）
+    const modelList: GroqModelUsage[] = [];
+    const names = Array.from(models.keys());
+    for (let i = 0; i < names.length; i++) {
+      const m = models.get(names[i])!;
+      m.name = names[i];
+      modelList.push(m);
+    }
+    modelList.sort((a: GroqModelUsage, b: GroqModelUsage): number => {
+      if (a.tokens === b.tokens) {
+        return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0);
+      }
+      return b.tokens - a.tokens;
+    });
+    if (modelList.length > 0) {
+      const modelRows: ProviderDetailRow[] = [];
+      const count = modelList.length > 20 ? 20 : modelList.length;
+      for (let i = 0; i < count; i++) {
+        modelRows.push({
+          label: modelList[i].name,
+          value: `${modelList[i].tokens} tokens`,
+          secondary: `${modelList[i].requests} requests`,
+        });
+      }
+      sections.push({ title: 'Models', rows: modelRows });
+    }
+    snap.details = sections;
+    snap.providerCost = {
+      remaining: 0, used: totals.cost, currency: 'USD',
+      displayText: Format.money(totals.cost, 'USD'),
+      period: periodLabel,
+      limit: 0,
+    };
     return snap;
   }
+}
+
+/** 本地日键（Groq 活动行的 timestamp 桶，对照源工程 yyyy-MM-dd 日格式器） */
+function groqDayKey(ms: number): string {
+  const d = new Date(ms);
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  return `${d.getFullYear()}-${month < 10 ? '0' : ''}${month}-${day < 10 ? '0' : ''}${day}`;
+}
+
+/** Groq 近 30 天活动汇总 */
+class GroqActivity {
+  requests: number = 0;
+  tokens: number = 0;
+  cachedInput: number = 0;
+  cost: number = 0;
+}
+
+/** Groq 单模型用量 */
+class GroqModelUsage {
+  name: string = '';
+  tokens: number = 0;
+  requests: number = 0;
 }
 
 export function createHuggingFaceProvider(): UsageProvider {

@@ -5,13 +5,20 @@
 
 import {
   AuthKind,
+  extraFields,
+  extraValue,
+  ExtraField,
   NamedRateWindow,
   needsSecondCredential,
+  progressPercent,
+  ProviderCostSnapshot,
   ProviderDetailRow,
   ProviderDetailSection,
   ProviderState,
   ReminderConfig,
-  secondCredentialHint
+  secondCredentialHint,
+  setExtraValue,
+  visibleDetails
 } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Reminders } from '../store/Reminders';
@@ -20,7 +27,8 @@ import { Notify } from '../common/Notify';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
-import { WindowBlock } from '../view/UsageBar';
+import { RowProgressBar, WindowBlock } from '../view/UsageBar';
+import { DetailChart } from '../view/DetailChart';
 import { ProviderIcon } from '../view/ProviderIcon';
 
 /** 恢复提醒的提前量档位（分钟） */
@@ -87,6 +95,30 @@ struct ProviderDetail {
   @State editingCred: boolean = false;
   @State credInput: string = '';
   @State cred2Input: string = '';
+  @State credExtraJson: string = '';
+
+  /** 该服务商声明的额外字段（Endpoint / Deployment / Region 等） */
+  extraFieldList(pid: string): ExtraField[] {
+    return extraFields(pid);
+  }
+  /** 费用卡标题：源工程 ProviderCostSnapshot.period 优先，否则用中性的「余额」 */
+  costTitle(cost: ProviderCostSnapshot): string {
+    const period = cost.period;
+    return period != null && period.length > 0 ? period : '余额';
+  }
+
+  /**
+   * 明细分组（已按源工程 optionalDetails 策略过滤）：
+   * 费用卡可见时去掉被它承载的重复行，并在关闭「可选用量明细」时按服务商策略隐藏。
+   */
+  sections(s: ProviderState): ProviderDetailSection[] {
+    if (s.snapshot == null) {
+      return [];
+    }
+    const costVisible = s.snapshot.ok && s.snapshot.providerCost != null;
+    return visibleDetails(s.descriptor.id, s.snapshot.details, Settings.showOptionalDetails(), costVisible);
+  }
+
   /** 自绘确认弹窗（替代系统 AlertDialog，暗色模式下可读） */
   @State askVisible: boolean = false;
   @State askTitle: string = '';
@@ -115,6 +147,13 @@ struct ProviderDetail {
     return s.snapshot != null && !s.snapshot.ok && s.snapshot.error.indexOf('凭证无效') >= 0;
   }
 
+  /** 主凭证已配置但平台会话（第二栏）缺少：给一个网页登录入口把明细补上 */
+  needsSessionLogin(s: ProviderState): boolean {
+    return s.descriptor.id === 'deepseek' &&
+      s.setting.credential.trim().length > 0 &&
+      s.setting.credential2.trim().length === 0;
+  }
+
   /** 配置卡片标题：区分未配置与已失效 */
   credCardTitle(s: ProviderState): string {
     return s.setting.credential.length > 0 ? '凭证无效或已过期' : '尚未配置凭证';
@@ -136,14 +175,17 @@ struct ProviderDetail {
       Nav.toast('请输入凭证');
       return;
     }
-    // 用户未重填第二凭证时保留现值（如 Codex 账号 ID）
+    // 用户未重填第二凭证 / 额外字段时保留现值（如 Codex 账号 ID、Azure 端点）
     const existing = AppStore.get().find(this.providerId);
     const prevCred2 = existing != null ? existing.setting.credential2.trim() : '';
     const cred2 = this.cred2Input.trim().length > 0 ? this.cred2Input.trim() : prevCred2;
+    const prevExtra = existing != null ? existing.setting.extraConfig : '';
+    const extra = this.credExtraJson.trim().length > 0 ? this.credExtraJson.trim() : prevExtra;
     AppStore.get().applySetting(this.providerId, {
       enabled: true,
       credential: cred,
       credential2: cred2,
+      extraConfig: extra,
     });
     this.editingCred = false;
     this.credInput = '';
@@ -467,6 +509,20 @@ struct ProviderDetail {
                   this.cred2Input = v;
                 })
             }
+            ForEach(this.extraFieldList(this.providerId), (f: ExtraField) => {
+              TextInput({ placeholder: f.hint, text: extraValue(this.credExtraJson, f.key) })
+                .fontSize(13)
+                .fontColor(Theme.text)
+                .placeholderColor(Theme.textDim)
+                .placeholderFont({ size: 12 })
+                .backgroundColor(Theme.input)
+                .borderRadius(10)
+                .height(42)
+                .width('100%')
+                .onChange((v: string) => {
+                  this.credExtraJson = setExtraValue(this.credExtraJson, f.key, v);
+                })
+            }, (f: ExtraField) => `${this.providerId}_${f.key}`)
             Row({ space: 10 }) {
               Button('取消')
                 .fontSize(13)
@@ -478,6 +534,7 @@ struct ProviderDetail {
                   this.editingCred = false;
                   this.credInput = '';
                   this.cred2Input = '';
+                  this.credExtraJson = '';
                 })
               Button('保存并查询')
                 .fontSize(13)
@@ -497,6 +554,36 @@ struct ProviderDetail {
         .borderRadius(Theme.radius)
         .backgroundColor(Theme.card)
         .border({ width: 1, color: this.editingCred ? Theme.accent : Theme.stroke })
+        .alignItems(HorizontalAlign.Center)
+      }
+
+      // DeepSeek：只差平台会话（API Key 已有）时，提供网页登录一键补全
+      if (this.needsSessionLogin(s)) {
+        Column({ space: 8 }) {
+          Text('平台会话未配置')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Theme.text)
+          Text('近 30 天用量与花费需要 platform.deepseek.com 的会话；网页登录一次即可自动回填，不会改动已填的 API Key')
+            .fontSize(12)
+            .fontColor(Theme.textDim)
+            .textAlign(TextAlign.Center)
+          Button('网页登录')
+            .fontSize(13)
+            .fontColor(Theme.accent)
+            .backgroundColor(Theme.input)
+            .border({ width: 1, color: Theme.accent })
+            .height(34)
+            .padding({ left: 16, right: 16 })
+            .onClick(() => {
+              Nav.toOAuthLogin(s.descriptor.id);
+            })
+        }
+        .width('100%')
+        .padding(20)
+        .borderRadius(Theme.radius)
+        .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
         .alignItems(HorizontalAlign.Center)
       }
 
@@ -547,10 +634,10 @@ struct ProviderDetail {
         }, (w: NamedRateWindow) => `${w.id}_${w.window.usedPercent}_${Math.floor(this.tick / 30)}`)
       }
 
-      // 余额
+      // 余额（providerCost.period 非空时用它作标题，如 "Monthly cap" / "Extra usage"）
       if (s.snapshot != null && s.snapshot.ok && s.snapshot.providerCost != null) {
         Column({ space: 6 }) {
-          Text('余额')
+          Text(this.costTitle(s.snapshot.providerCost))
             .fontSize(12)
             .fontColor(Theme.textDim)
           Row() {
@@ -560,6 +647,19 @@ struct ProviderDetail {
               .fontColor(Theme.text)
           }
           .width('100%')
+          // 详情页才显示的补充说明（如 DeepSeek 的 "¥12.00 (Paid: … / Granted: …)"）
+          if (s.snapshot.providerCost.detailText != null &&
+            s.snapshot.providerCost.detailText!.length > 0) {
+            Text(s.snapshot.providerCost.detailText!)
+              .fontSize(12)
+              .fontColor(Theme.textDim)
+          }
+          // 有周期上限时补一行「已用 / 上限」（对照源工程费用卡的 used/limit）
+          if (s.snapshot.providerCost.limit != null && s.snapshot.providerCost.limit! > 0) {
+            Text(`已用 ${Format.money(s.snapshot.providerCost.used, s.snapshot.providerCost.currency)} / 上限 ${Format.money(s.snapshot.providerCost.limit!, s.snapshot.providerCost.currency)}`)
+              .fontSize(12)
+              .fontColor(Theme.textDim)
+          }
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -569,26 +669,45 @@ struct ProviderDetail {
         .border({ width: 1, color: Theme.stroke })
       }
 
-      // 明细分组
+      // 明细分组（按 ProviderOptionalDetailsPresentation 与费用卡占位过滤）
       if (s.snapshot != null && s.snapshot.ok) {
-        ForEach(s.snapshot.details, (sec: ProviderDetailSection) => {
+        ForEach(this.sections(s), (sec: ProviderDetailSection) => {
           Column({ space: 8 }) {
             Text(sec.title)
               .fontSize(13)
               .fontWeight(FontWeight.Medium)
               .fontColor(Theme.text)
             ForEach(sec.rows, (r: ProviderDetailRow) => {
-              Row() {
-                Text(r.label)
-                  .fontSize(13)
-                  .fontColor(Theme.textDim)
-                Blank()
-                Text(r.value)
-                  .fontSize(13)
-                  .fontColor(Theme.text)
+              Column({ space: 6 }) {
+                Row({ space: 8 }) {
+                  Text(r.label)
+                    .fontSize(13)
+                    .fontColor(Theme.textDim)
+                  Blank()
+                  Text(r.value)
+                    .fontSize(13)
+                    .fontColor(Theme.text)
+                  if (r.secondary != null && r.secondary!.length > 0) {
+                    Text(r.secondary!)
+                      .fontSize(12)
+                      .fontColor(Theme.textDim)
+                  }
+                }
+                .width('100%')
+                // 行内进度条（对照 Row.progress：分子分母都已知时才有）
+                if (r.progress != null) {
+                  RowProgressBar({
+                    percent: progressPercent(r.progress!),
+                    tint: s.descriptor.accentColor,
+                  })
+                }
               }
               .width('100%')
             }, (r: ProviderDetailRow) => `${r.label}_${r.value}`)
+            // 分组图表（柱状/折线，对应源工程 ProviderDetailSection.Chart）
+            if (sec.chart != null && sec.chart!.points.length > 0) {
+              DetailChart({ chart: sec.chart! })
+            }
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')

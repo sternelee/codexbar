@@ -28,6 +28,32 @@ export struct UsageBar {
   }
 }
 
+/**
+ * 明细行内进度条（对照 UsageProgressBar 在明细行里的用法）：
+ * 中性轨道 + 服务商主色填充；传入的百分比按 0..100 截断（超额计划的原始数值由行文案保留）。
+ */
+@Component
+export struct RowProgressBar {
+  @Prop percent: number = 0;
+  @Prop tint: string = Theme.accent;
+
+  build() {
+    Stack({ alignContent: Alignment.Start }) {
+      Row()
+        .width('100%')
+        .height(5)
+        .borderRadius(2.5)
+        .backgroundColor(Theme.stroke)
+      Row()
+        .width(`${Math.max(0, Math.min(100, this.percent))}%`)
+        .height(5)
+        .borderRadius(2.5)
+        .backgroundColor(this.tint)
+    }
+    .width('100%')
+  }
+}
+
 /** 一个用量窗口块：名称 + 百分比 + 进度条 + 重置倒计时 */
 @Component
 export struct WindowBlock {

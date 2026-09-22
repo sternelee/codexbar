@@ -134,7 +134,7 @@ class ManusProvider implements UsageProvider {
     id: 'manus',
     title: 'Manus',
     authKind: AuthKind.OAUTH_TOKEN,
-    accentColor: '#5B6CFF',
+    accentColor: '#34322D',
     authHint: '粘贴 manus.im 的会话 token',
     authUrl: 'https://manus.im',
   };
@@ -277,7 +277,7 @@ class PerplexityProvider implements UsageProvider {
     id: 'perplexity',
     title: 'Perplexity',
     authKind: AuthKind.SESSION,
-    accentColor: '#20808D',
+    accentColor: '#20B2AA',
     authHint: '粘贴 perplexity.ai 的会话 Cookie（浏览器 Network 面板整段复制）',
     authUrl: 'https://www.perplexity.ai/account/usage',
   };
@@ -349,7 +349,7 @@ class KimiCodingProvider implements UsageProvider {
     id: 'kimi-coding',
     title: 'Kimi 编码版',
     authKind: AuthKind.OAUTH_TOKEN,
-    accentColor: '#6E56CF',
+    accentColor: '#FE603C',
     authHint: '粘贴 kimi.com 的 authToken，或 Kimi Code API Key（sk-… 开头）',
     authUrl: 'https://www.kimi.com/code/console',
   };
@@ -372,11 +372,17 @@ class KimiCodingProvider implements UsageProvider {
     if (pools == null) {
       return UsageSnapshot.failure('未返回用量数据');
     }
+    // 泳道绑定对照 macOS KimiProviderDescriptor：primary=.weekly(7 天)、secondary=.session(5 小时)，
+    // 标签同源（sessionLabel "7-day usage" / weeklyLabel "5-hour usage"），故主窗口放 7 天池；
+    // 月度池源工程未命名，这里显式标为 Monthly。
     const snap = UsageSnapshot.success(
-      KimiCodingProvider.windowOf(pools, 'limit_5h'),
       KimiCodingProvider.windowOf(pools, 'limit_7d'),
+      KimiCodingProvider.windowOf(pools, 'limit_5h'),
       KimiCodingProvider.windowOf(pools, 'limit_month_total')
     );
+    snap.primaryLabel = '7-day usage';
+    snap.secondaryLabel = '5-hour usage';
+    snap.tertiaryLabel = 'Monthly';
     // 会员等级 → 计划名（对照 macOS planName 映射）
     const user = asObj(root['user']);
     const membership = user != null ? asObj(user['membership']) : null;
@@ -463,11 +469,15 @@ class KimiCodingProvider implements UsageProvider {
     if (target == null) {
       return UsageSnapshot.failure('响应解析失败');
     }
+    // 与 API Key 路径同序：主窗口 = 7 天池（sessionLabel "7-day usage"）
     const snap = UsageSnapshot.success(
-      KimiCodingProvider.windowOf(target, 'limit_5h'),
       KimiCodingProvider.windowOf(target, 'limit_7d'),
+      KimiCodingProvider.windowOf(target, 'limit_5h'),
       KimiCodingProvider.windowOf(target, 'limit_month_total')
     );
+    snap.primaryLabel = '7-day usage';
+    snap.secondaryLabel = '5-hour usage';
+    snap.tertiaryLabel = 'Monthly';
     return snap;
   }
 }

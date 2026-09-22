@@ -179,14 +179,14 @@ struct Index {
       if (s.snapshot != null && s.snapshot.ok) {
         if (s.snapshot.primary != null) {
           WindowBlock({
-            title: '会话',
+            title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : '会话',
             win: s.snapshot.primary,
             compact: true
           })
         }
         if (s.snapshot.secondary != null) {
           WindowBlock({
-            title: '每周',
+            title: s.snapshot.secondaryLabel.length > 0 ? s.snapshot.secondaryLabel : '每周',
             win: s.snapshot.secondary,
             compact: true
           })

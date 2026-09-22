@@ -63,7 +63,15 @@ import {
   createZoomMateProvider
 } from './MoreProviders4';
 import { createAlibabaCodingPlanProvider, createFactoryProvider } from './MoreProviders6';
+import {
+  createAmpProvider,
+  createAzureOpenAIProvider,
+  createCopilotProvider,
+  createOllamaProvider,
+  createV0Provider
+} from './ApiKeyProviders2';
 import { createDoubaoProvider } from './DoubaoProvider';
+import { createBedrockProvider } from './BedrockProvider';
 import {
   createGroqProvider,
   createHuggingFaceProvider,
@@ -133,6 +141,12 @@ export class ProviderRegistry {
         createAlibabaCodingPlanProvider(),
         createFactoryProvider(),
         createDoubaoProvider(),
+        createV0Provider(),
+        createAmpProvider(),
+        createAzureOpenAIProvider(),
+        createOllamaProvider(),
+        createCopilotProvider(),
+        createBedrockProvider(),
         createDemoProvider(),
       ];
     }

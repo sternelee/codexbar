@@ -22,17 +22,27 @@ final class WidgetRenderer {
     private WidgetRenderer() {
     }
 
+    /** 读取当前摘要并渲染，最多 maxRows 行 */
     static RemoteViews build(Context ctx, int maxRows) {
-        WidgetData data = WidgetData.load(ctx);
+        return build(ctx, WidgetData.load(ctx), maxRows);
+    }
+
+    /** 用已解析好的摘要渲染（同一份数据要出多个不同行数的实例时，避免重复读文件） */
+    static RemoteViews build(Context ctx, WidgetData data, int maxRows) {
         RemoteViews views = new RemoteViews(ctx.getPackageName(), R.layout.widget_codexbar);
-        views.setTextViewText(R.id.widget_updated, data.updatedAt);
         views.removeAllViews(R.id.widget_rows);
 
-        if (data.items.isEmpty()) {
+        int total = data.items.size();
+        int count = Math.min(total, Math.max(0, maxRows));
+        if (total == 0) {
+            views.setTextViewText(R.id.widget_updated, data.updatedAt);
             views.setViewVisibility(R.id.widget_empty, View.VISIBLE);
         } else {
+            // 挑的服务商多过组件能放下的行数时，在更新时间后面缀个「+N」，
+            // 免得用户以为挑选没生效（把组件拉高就能看到剩下的）
+            views.setTextViewText(R.id.widget_updated,
+                    total > count ? data.updatedAt + " ·+" + (total - count) : data.updatedAt);
             views.setViewVisibility(R.id.widget_empty, View.GONE);
-            int count = Math.min(data.items.size(), maxRows);
             for (int i = 0; i < count; i++) {
                 views.addView(R.id.widget_rows, rowViews(ctx, data.items.get(i)));
             }

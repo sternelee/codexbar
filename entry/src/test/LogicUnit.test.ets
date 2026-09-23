@@ -52,7 +52,7 @@ import {
   removeAccountFromList,
   renameAccountInList,
 } from '../main/ets/store/Settings';
-import { buildWidgetItems, WidgetDataStore } from '../main/ets/store/WidgetData';
+import { buildWidgetItems, parseWidgetSelection, WidgetDataStore } from '../main/ets/store/WidgetData';
 import { HistoryDay, ProviderChartPoint } from '../main/ets/model/Models';
 import { ChartPoint } from '../main/ets/store/UsageHistory';
 import {
@@ -116,10 +116,15 @@ import {
   doubaoSignedSnapshot,
 } from '../main/ets/providers/DoubaoProvider';
 
-/** 构造只带一个主窗口的服务商状态（提醒测试用） */
-function stateWith(primary: RateWindow, title: string = '演示', enabled: boolean = true): ProviderState {
+/** 构造只带一个主窗口的服务商状态（提醒测试用）；id 默认 demo，卡片挑选测试需要区分服务商时显式传入 */
+function stateWith(
+  primary: RateWindow,
+  title: string = '演示',
+  enabled: boolean = true,
+  id: string = 'demo'
+): ProviderState {
   const d: ProviderDescriptor = {
-    id: 'demo', title: title, authKind: AuthKind.DEMO,
+    id: id, title: title, authKind: AuthKind.DEMO,
     accentColor: '#16D3B4', authHint: '', authUrl: ''
   };
   const s = new ProviderState(d, { enabled: enabled, credential: '', credential2: '', extraConfig: '' });
@@ -623,13 +628,13 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       empty.snapshot = UsageSnapshot.success(null, null, null);
       const rows2 = buildWidgetItems([off, fail, empty, a], now);
       expect(rows2.length).assertEqual(1);
-      // 按用量降序 + 上限 4 条
+      // 按用量降序（数据上限 8 条，不及上限时全部保留；鸿蒙卡片再自行截前 2 / 4 条）
       const many: ProviderState[] = [];
       for (let i = 0; i < 6; i++) {
         many.push(stateWith(makeWindow(10 + i * 10, 0, true), `P${i}`));
       }
       const rows3 = buildWidgetItems(many, now);
-      expect(rows3.length).assertEqual(4);
+      expect(rows3.length).assertEqual(6);
       expect(rows3[0].name).assertEqual('P5');
       expect(rows3[3].name).assertEqual('P2');
       // 无主窗口回退次窗口；usageKnown=false 灰色；重置已过无倒计时
@@ -640,6 +645,56 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(rows4[0].pct).assertEqual('55%');
       expect(rows4[0].level).assertEqual('unknown');
       expect(rows4[0].cd).assertEqual('');
+    });
+
+    it('Widget_selection', 0, () => {
+      const now = 1758000000000;
+      const a = stateWith(makeWindow(42, 0, true), 'Alpha', true, 'alpha');
+      const b = stateWith(makeWindow(90, 0, true), 'Beta', true, 'beta');
+      const c = stateWith(makeWindow(10, 0, true), 'Gamma', true, 'gamma');
+      const off = stateWith(makeWindow(70, 0, true), 'Delta', false, 'delta');
+      const all: ProviderState[] = [a, b, c, off];
+      // 自动模式（未挑选）：按用量降序
+      const auto = buildWidgetItems(all, now);
+      expect(auto.length).assertEqual(3);
+      expect(auto[0].name).assertEqual('Beta');
+      // 挑选模式：只取指定服务商，且顺序就是挑选顺序（用量高低不再重排）
+      const picked = buildWidgetItems(all, now, ['gamma', 'alpha']);
+      expect(picked.length).assertEqual(2);
+      expect(picked[0].name).assertEqual('Gamma');
+      expect(picked[1].name).assertEqual('Alpha');
+      // 未启用的 / 不存在的 ID：跳过，不影响其余行
+      const picked2 = buildWidgetItems(all, now, ['delta', 'nope', 'beta']);
+      expect(picked2.length).assertEqual(1);
+      expect(picked2[0].name).assertEqual('Beta');
+      // 数据行上限 8 条：选了 10 家只出前 8（安卓组件可拉伸显示到 8 行，
+      // 鸿蒙 2x2 / 2x4 卡再自行截前 2 / 4 条）
+      const many: ProviderState[] = [];
+      const ids: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        ids.push(`p${i}`);
+        many.push(stateWith(makeWindow(10 + i * 5, 0, true), `P${i}`, true, `p${i}`));
+      }
+      const clamped = buildWidgetItems(many, now, ids);
+      expect(clamped.length).assertEqual(8);
+      expect(clamped[0].name).assertEqual('P0');
+      expect(clamped[7].name).assertEqual('P7');
+      // 自动模式同样受上限约束（按用量降序后截断）
+      expect(buildWidgetItems(many, now).length).assertEqual(8);
+      // 清空选择（「恢复自动」）等价于自动模式
+      expect(buildWidgetItems(all, now, []).length).assertEqual(auto.length);
+    });
+
+    it('Widget_selection_parse', 0, () => {
+      // 损坏 / 非数组 / 空文本 → 自动模式（空数组）
+      expect(parseWidgetSelection('').length).assertEqual(0);
+      expect(parseWidgetSelection('{bad').length).assertEqual(0);
+      expect(parseWidgetSelection('{"a":1}').length).assertEqual(0);
+      // 去重 + 丢弃空串 / 非字符串项，保持原顺序
+      const list = parseWidgetSelection('["claude","","codex","claude",123]');
+      expect(list.length).assertEqual(2);
+      expect(list[0]).assertEqual('claude');
+      expect(list[1]).assertEqual('codex');
     });
 
     it('Widget_cross_platform_contract', 0, () => {

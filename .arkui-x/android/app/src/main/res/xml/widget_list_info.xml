@@ -1,10 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 2x4「额度列表」：与鸿蒙 2x4 卡片同一份数据、同一套行样式 -->
+<!--
+  2x4「额度列表」：与鸿蒙 2x4 卡片同一份数据、同一套行样式。
+  previewImage 供 API < 31 的启动器在选择器里显示示意图（previewLayout 需要 API 31+）。
+  行数不在这里写死：组件可任意拉伸，由 WidgetUpdater 按实例高度算能放几行。
+-->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_list_desc"
     android:initialLayout="@layout/widget_codexbar"
     android:minHeight="110dp"
     android:minWidth="250dp"
+    android:previewImage="@drawable/widget_preview_list"
     android:previewLayout="@layout/widget_codexbar"
     android:resizeMode="horizontal|vertical"
     android:targetCellHeight="2"

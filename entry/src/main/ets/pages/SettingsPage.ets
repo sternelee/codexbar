@@ -17,6 +17,7 @@ import {
 } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
+import { WidgetDataStore } from '../store/WidgetData';
 import { Theme } from '../common/Theme';
 import { Nav } from '../common/Nav';
 import { ProviderIcon } from '../view/ProviderIcon';
@@ -347,12 +348,81 @@ struct SettingsPage {
   aboutToAppear(): void {
     this.ver = AppStore.get().version;
     this.showOptional = Settings.showOptionalDetails();
+    this.widgetSel = WidgetDataStore.selectedIds();
+  }
+
+  /**
+   * 桌面组件的可选项 = 已启用的服务商（未启用不产生数据，选了也显示不出来），
+   * 外加已挑选但当前被关掉的服务商——否则它们在 chip 列表里消失，只能靠「恢复自动」清掉。
+   */
+  widgetCandidates(): string[] {
+    const list: string[] = [];
+    const states = AppStore.get().states;
+    for (let i = 0; i < states.length; i++) {
+      if (states[i].setting.enabled) {
+        list.push(states[i].descriptor.id);
+      }
+    }
+    for (let i = 0; i < this.widgetSel.length; i++) {
+      if (list.indexOf(this.widgetSel[i]) < 0) {
+        list.push(this.widgetSel[i]);
+      }
+    }
+    return list;
+  }
+
+  private titleOf(providerId: string): string {
+    const states = AppStore.get().states;
+    for (let i = 0; i < states.length; i++) {
+      if (states[i].descriptor.id === providerId) {
+        return states[i].descriptor.title;
+      }
+    }
+    return providerId;
+  }
+
+  /** chip 文案：已点选的前置序号，直接体现卡片上的顺序 */
+  chipLabel(providerId: string): string {
+    const idx = this.widgetSel.indexOf(providerId);
+    const title = this.titleOf(providerId);
+    return idx >= 0 ? `${idx + 1}. ${title}` : title;
+  }
+
+  /** 点选 / 取消：放到末位 == 卡片上排在后面 */
+  toggleWidgetProvider(providerId: string): void {
+    const next: string[] = [];
+    let found = false;
+    for (let i = 0; i < this.widgetSel.length; i++) {
+      if (this.widgetSel[i] === providerId) {
+        found = true;
+      } else {
+        next.push(this.widgetSel[i]);
+      }
+    }
+    if (!found) {
+      next.push(providerId);
+    }
+    this.widgetSel = next;
+    this.afterWidgetSelectionChanged();
+  }
+
+  resetWidgetSelection(): void {
+    this.widgetSel = [];
+    this.afterWidgetSelectionChanged();
+  }
+
+  /** 落盘后立即按当前状态重建组件数据，不必等服务商刷新 */
+  private afterWidgetSelectionChanged(): void {
+    WidgetDataStore.setSelectedIds(this.widgetSel);
+    AppStore.get().syncWidgets();
   }
 
   /** 搜索关键字（按名称/ID 过滤） */
   @State keyword: string = '';
   /** 是否展示可选用量 / 额度明细（对照 macOS showOptionalCreditsAndExtraUsage） */
   @State showOptional: boolean = true;
+  /** 桌面组件显示的服务商 ID（按卡片上的出现顺序；空 = 自动） */
+  @State widgetSel: string[] = [];
   /** 自绘确认弹窗状态 */
   @State askVisible: boolean = false;
   @State askTitle: string = '';
@@ -471,6 +541,63 @@ struct SettingsPage {
                 Settings.setShowOptionalDetails(on);
                 this.ver += 1;
               })
+          }
+          .width('100%')
+          .padding(Theme.cardPad)
+          .borderRadius(Theme.radius)
+          .backgroundColor(Theme.card)
+          .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
+        }
+
+        ListItem() {
+          Column({ space: Theme.gapSm }) {
+            Row() {
+              Column({ space: Theme.gapXxs }) {
+                Text('桌面组件显示')
+                  .fontSize(Theme.fsLabel)
+                  .fontColor(Theme.text)
+                Text('点选要显示的服务商，顺序即卡片上的顺序；鸿蒙 2x2 / 2x4 卡取前 2 / 4 家，Android 组件按高度自适应（拉高可显示更多）；未选择时自动显示用量最高的若干家')
+                  .fontSize(Theme.fsMicro)
+                  .fontColor(Theme.textDim)
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+            }
+            .width('100%')
+
+            if (this.widgetCandidates().length === 0) {
+              Text('暂无已启用的服务商')
+                .fontSize(Theme.fsMicro)
+                .fontColor(Theme.textDim)
+            } else {
+              Flex({ wrap: FlexWrap.Wrap }) {
+                ForEach(this.widgetCandidates(), (id: string) => {
+                  Text(this.chipLabel(id))
+                    .fontSize(Theme.fsCaption)
+                    .fontColor(this.widgetSel.indexOf(id) >= 0 ? Theme.bg : Theme.textDim)
+                    .backgroundColor(this.widgetSel.indexOf(id) >= 0 ? Theme.accent : Theme.input)
+                    .border({ width: 1, color: this.widgetSel.indexOf(id) >= 0 ? Theme.accent : Theme.stroke })
+                    .padding({ left: Theme.rowGap, right: Theme.rowGap, top: Theme.gapXs, bottom: Theme.gapXs })
+                    .borderRadius(Theme.radiusChip)
+                    .maxLines(1)
+                    .margin({ right: Theme.gapSm, bottom: Theme.gapSm })
+                    .onClick(() => {
+                      this.toggleWidgetProvider(id);
+                    })
+                }, (id: string) => `${id}_${this.chipLabel(id)}`)
+              }
+              .width('100%')
+
+              if (this.widgetSel.length > 0) {
+                Text('恢复自动（按用量排序）')
+                  .fontSize(Theme.fsMicro)
+                  .fontColor(Theme.accent)
+                  .onClick(() => {
+                    this.resetWidgetSelection();
+                  })
+              }
+            }
           }
           .width('100%')
           .padding(Theme.cardPad)

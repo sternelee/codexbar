@@ -21,14 +21,14 @@
 - **额外配置字段**（`extraConfig`）：需要 3 个以上输入的服务商在设置页/详情页动态渲染字段——Azure OpenAI 的 Endpoint / Deployment / API 版本、Bedrock 的 Region / Session Token / 预算、v0 的 Scope、Copilot 的 Enterprise 域名。
 - **设置页**：逐服务商开关 + 凭证录入（含额外字段）、「展示可选用量明细」开关、「桌面组件显示」挑选（点选服务商 = 上卡片，带序号；一键恢复自动），凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
 - **明亮 / 暗色自适配**：配色全部走资源引用，`resources/base/element/color.json`（明亮）与 `resources/dark/element/color.json`（暗色）各一套，跟随系统深浅色即时切换，无需手工监听；启动窗口背景、服务卡片、明细图表与品牌图标衬底一并适配（卡片数据只能传 JSON，所以传的是用量「等级」而不是色值）。
-- **演示模式**：无需任何凭证即可体验全部 UI。
 
-## 支持的服务商（61 家 + 演示模式）
+## 支持的服务商（61 家）
 
 | 服务商 | 方式 | 凭证 | 展示内容 |
 |---|---|---|---|
 | Claude | Web 会话 / 网页登录 | claude.ai `sessionKey`（设置页「网页登录」自动捕获） | 5 小时/每周 会话窗口 + 订阅计划 |
 | Codex (ChatGPT) | 网页登录 OAuth + PAT | PKCE 授权（refresh token 自动续期）或 OpenAI PAT | 主/次窗口 + 模型附加限制 + 账号/套餐 |
+| Cursor | 网页会话 / Admin API Key | cursor.com `WorkosCursorSessionToken`（可整段 Cookie），或官方 Admin API Key（`crsr_…`） | Total / Cursor(Auto+Composer) / Third Party 三窗口 + Grok Bot 附加窗 + 计划内用量与按量花费；API Key 路径出团队目录/月度花费/预算与近 30 天请求量图 |
 | v0 | API Key | v0 Platform API Key（可选 Scope） | 计费窗口 + 速率限制窗口 + 按量余额 |
 | Amp | Access Token | `AMP_API_KEY` | Agent / Orb 用量窗口 + Amp Free 免费额度 + Individual/Workspace 余额 |
 | Azure OpenAI | API Key | API Key + Endpoint + Deployment（+ API 版本） | 部署/模型校验结果、端点与版本明细 |
@@ -87,12 +87,11 @@
 | 阿里云百炼编码计划 | API Key | 百炼/DashScope Key（intl/cn） | 5 小时/周/账单月 配额窗口 |
 | Doubao (豆包/火山方舟) | AK/SK 或 API Key | 火山方舟 AK + Secret Access Key（或单独 Ark API Key） | 编码计划 5h/周/月 + Agent 计划窗口；仅填 API Key 时按请求额度探测 |
 | AWS Bedrock | AWS Access Key + Secret | Access Key ID + Secret Access Key（可选 Region / Session Token / 月度预算） | Cost Explorer 本月 Bedrock 花费 + 预算使用率 + 近14天 Claude tokens/请求数 |
-| 演示模式 | 无 | — | 拟真数据 |
 
 ### 其余服务商可行性分级（对照源工程 75+ 家）
 
 - **本轮恢复（网页会话 / OAuth 网页登录）**：Claude（claude.ai `sessionKey`，应用内网页登录自动捕获）、Codex（PKCE 授权 + refresh token 续期，同时保留 PAT 路径）、Perplexity、Manus、MiMo、Mistral、T3 Chat、Qoder、Muse Code、Abacus、Command Code、LongCat、ZoomMate、Notion AI、OpenCode（`_server` RPC），以及 Groq / Kimi 编码版 / ClawRouter / OpenCode Go 的 Cookie 路径。对应 API Key 侧能力保留：Claude/Anthropic 控制台走 Admin API Key（`anthropic-console`），Kimi 走 Kimi Code API Key，ClawRouter / OpenCode Go 可填 API Key。
-- **仍不迁移（桌面专属 / CLI 探测 / HTML 抓取）**：Gemini / Antigravity / Vertex AI（OAuth 或桌面授权）、AWS Bedrock Profile 模式、Azure 容器外端点、Cursor / Augment / Windsurf / JetBrains / Zed / CodeRabbit（CLI 探测或浏览器 Cookie 存储）、Kiro（AWS）、Copilot 预算页括取、Ollama 本地、StepFun（设备注册）、QwenCloud 与 Alibaba Token Plan（阿里云控制台 Cookie+sec_token 签名 RPC 网关）、Grok 消费版（需桌面 `grok login`）、Sakana / Replicate（HTML 解析）、Pi（本地 CLI 会话读取器）、Wayfinder（仅 localhost）、Helmcode / TypeSafe（网页会话）。
+- **仍不迁移（桌面专属 / CLI 探测 / HTML 抓取）**：Gemini / Antigravity / Vertex AI（OAuth 或桌面授权）、AWS Bedrock Profile 模式、Azure 容器外端点、Augment / Windsurf / JetBrains / Zed / CodeRabbit（CLI 探测或浏览器 Cookie 存储）、Kiro（AWS）、Copilot 预算页括取、Ollama 本地、StepFun（设备注册）、QwenCloud 与 Alibaba Token Plan（阿里云控制台 Cookie+sec_token 签名 RPC 网关）、Grok 消费版（需桌面 `grok login`）、Sakana / Replicate（HTML 解析）、Pi（本地 CLI 会话读取器）、Wayfinder（仅 localhost）、Helmcode / TypeSafe（网页会话）。
 
 > Doubao（豆包/火山方舟）与 AWS Bedrock 同为 AK/SK 签名模式：火山引擎 Top OpenAPI 与 AWS SigV4（Cost Explorer / CloudWatch）都建立在 `common/Crypto.ets` 的纯 TS HMAC-SHA256 链上（`common/VolcSign.ets` / `common/AwsSign.ets`），三端零平台依赖。
 
@@ -129,6 +128,7 @@ entry/src/main/ets/
 │   ├── ApiKeyProviders2.ets  ← Providers/{V0, Amp, AzureOpenAI, Ollama, Copilot}（本轮新增）
 │   ├── ClaudeProvider.ets    ← Providers/Claude/ClaudeWeb/ClaudeWebUsageFetcher.swift（claude.ai sessionKey）
 │   ├── CodexProvider.ets     ← Providers/Codex/{CodexOAuth,CodexPAT}（wham/usage + whoami，OAuth 自动续期）
+│   ├── CursorProvider.ets    ← Providers/Cursor/{CursorStatusProbe,CursorStatusProbe+UsageSummary}（网页会话）+ api.cursor.com Admin API（「crsr_」Key）
 │   ├── ApiKeyProviders.ets   ← Providers/{OpenRouter,DeepSeek,Moonshot,SiliconFlow,OpenAI,Claude(ClaudeAdminAPI)}
 │   ├── MoreProviders.ets     ← Providers/{ZenMux,DeepInfra,Kimi Code,Kimi 编码版,Chutes}
 │   ├── MoreProviders2.ets    ← Providers/{MiniMax,Kilo,Poe,Zai}
@@ -137,8 +137,7 @@ entry/src/main/ets/
 │   ├── MoreProviders5.ets    ← Providers/{HuggingFace,Warp,OpenCode(Cookie RPC),OpenCodeGo(Cookie/Zen API Key),Groq(stytch 会话)}
 │   ├── MoreProviders6.ets    ← Providers/{Alibaba/AlibabaCodingPlan 百炼编码计划, Factory}
 │   ├── DoubaoProvider.ets    ← Providers/Doubao/{DoubaoUsageFetcher,DoubaoVolcengineSigner}
-│   ├── BedrockProvider.ets   ← Providers/Bedrock/{BedrockUsageStats,BedrockCloudWatchUsage,BedrockAWSSigner}
-│   └── DemoProvider.ets      ← 演示数据
+│   └── BedrockProvider.ets   ← Providers/Bedrock/{BedrockUsageStats,BedrockCloudWatchUsage,BedrockAWSSigner}
 ├── view/
 │   ├── DetailChart.ets       ← 明细分组图表（ProviderDetailSection.Chart 的柱状/折线渲染）
 │   ├── UsageBar.ets          ← 用量条 + 窗口块 + 明细行内进度条（Row.progress）
@@ -182,7 +181,7 @@ devecocli run
 #   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 #   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 54, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 55, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -233,7 +232,7 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 
 ## 图标
 
-服务商品牌图标来自 [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）的彩色/品牌 SVG，存放于 `entry/src/main/resources/rawfile/icons/`，经规范化（尺寸 1em→24、currentColor→纯黑）后由 `Image($rawfile(...))` 加载，渲染在白色圆角衬底上以保证深色主题下单色品牌标的可见性。本轮共 57 个 SVG：除 v0 / Amp / Ollama / Bedrock / Copilot / Chutes / ClawRouter / Codebuff / Deepgram / LiteLLM / NeuralWatt / Sub2API / Synthetic / Warp / 阿里云百炼 / Ai& / ClinePass 外，另从源工程 `Sources/CodexBar/Resources/ProviderIcon-*.svg` 补齐了恢复服务商的品牌标——Claude `claude-color`、Manus、Perplexity、MiMo `xiaomimimo`、Mistral、Qoder、Muse `meta-color`、Notion、OpenCode，以及此前只有彩色圆点的 T3 Chat / Abacus / **Command Code** / LongCat / ZoomMate / Factory AI（白稿已按品牌色或黑色重着色以适配白色圆角衬底）。未收录品牌图的服务商仅 Crof（该服务商在源工程已退役，无官方资源）与演示模式，回退为强调色圆点；Azure OpenAI 复用 OpenAI 图标。
+服务商品牌图标来自 [lobehub/lobe-icons](https://github.com/lobehub/lobe-icons)（MIT）的彩色/品牌 SVG，存放于 `entry/src/main/resources/rawfile/icons/`，经规范化（尺寸 1em→24、currentColor→纯黑）后由 `Image($rawfile(...))` 加载，渲染在白色圆角衬底上以保证深色主题下单色品牌标的可见性。本轮共 58 个 SVG：除 v0 / Amp / Ollama / Bedrock / Copilot / Chutes / ClawRouter / Codebuff / Deepgram / LiteLLM / NeuralWatt / Sub2API / Synthetic / Warp / 阿里云百炼 / Ai& / ClinePass 外，另从源工程 `Sources/CodexBar/Resources/ProviderIcon-*.svg` 补齐了恢复服务商的品牌标——Claude `claude-color`、Manus、Perplexity、MiMo `xiaomimimo`、Mistral、Qoder、Muse `meta-color`、Notion、OpenCode，以及此前只有彩色圆点的 T3 Chat / Abacus / **Command Code** / LongCat / ZoomMate / Factory AI（白稿已按品牌色或黑色重着色以适配白色圆角衬底）。本轮新增 Cursor `cursor`（源工程 `ProviderIcon-cursor.svg` 是白稿，按品牌色重着色为 `#1A1A1A`）。未收录品牌图的服务商仅 Crof（该服务商在源工程已退役，无官方资源），回退为强调色圆点；Azure OpenAI 复用 OpenAI 图标。
 
 强调色同样对齐源工程的 `ProviderBranding.color`：Claude `#CC7C5E`、Command Code `#A04DFD`、Abacus `#38BDF8`、LongCat `#FFD100`、ZoomMate `#0B5CFF`、Notion `#337EA9`、T3 Chat `#F56647`、Qoder `#10B981`、Perplexity `#20B2AA`、Manus `#34322D`、OpenCode / OpenCode Go `#3B82F6`、Groq `#F56844`、Kimi 编码版 `#FE603C`、ClawRouter `#596EF6`。
 
@@ -242,6 +241,15 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（Cursor 双凭证接入 + OpenRouter 余额 + 去掉演示模式）：三件事：新增 Cursor 一家（同时支持网页会话与官方 API Key），修好 OpenRouter「看不到剩余额度」，并把演示模式彻底移除。
+
+- **Cursor · 网页会话（oauth web）**：对照 `CursorStatusProbe.fetchWithCookieHeader` —— `GET /api/usage-summary` 为主数据（必需），`/api/auth/me`（邮箱 / sub）、`/api/usage?user=<sub>`（旧版按请求数计划配额）、`POST /api/dashboard/get-sand-usage-status`（Grok Bot 附加窗口）均为尽力而为，失败不影响主数据。凭证接受整段 Cookie（`WorkosCursorSessionToken=…`，可带 `Cookie: ` 前缀）或只填值，自动补上 cookie 名。
+- **Cursor · 百分比与窗口映射**：`cursorParseSummary` 复刻 `parseUsageSummary` 的回退链——`plan.totalPercentUsed` → Auto/API 均值 → API → Auto → `plan.used/limit` → `individualUsage.overall` → `teamUsage.pooled`（金额字段是「分」，除 100 转美元；百分比字段本身就是百分数，只做 0-100 截断，所以 0.36 是 0.36%）。窗口标签按描述符落为 Total / Cursor / Third Party，团队/企业计划不展示 Auto/API 拆分，旧版请求计划只出 `Request quota` 行且不出 Grok Bot。按量花费走 `providerCost`（period `Monthly`，带 `limit` 时详情页补「已用 / 上限」行）。
+- **Cursor · API Key（官方 Admin API）**：`crsr_` 开头的凭证走 `api.cursor.com`，Basic 认证（用户名=Key、密码留空）。`GET /teams/members` 兼做密钥校验与团队目录；`POST /teams/spend` 汇总成员 `overallSpendCents` 与上限（`effectivePerUserLimitDollars` 优先、0 不回落 `monthlyLimitDollars`）→ 月度花费与预算窗口；`POST /teams/daily-usage-data` 取近 30 天 `subscriptionIncludedReqs` / `usageBasedReqs` / `apiKeyReqs` 三档请求量 → `Daily usage (30 days)` 分组 + 每日请求柱状图。401/403 分别提示「Key 无效」与「权限不足」。
+- **OpenRouter 余额不再被静默吃掉**：两个原因——① `Credits` 分组原先只在拿到余额时才 push，普通推理密钥（`/credits` 返 403）直接整块消失；② `replacedDetailRowsFor` 原先写死 `Credits: [Remaining, Used]`，只要费用卡可见就把余额行删掉，而卡片本身又不展示余额。现在 `Credits` / `API key` 分组始终存在（不可用时给 `Balance: 暂不可用` + 原因副文本），并把删除规则改成逐条件判定（对照 `OpenRouterProviderDescriptor.costPresenter`）：卡片带余额行才删 `Remaining`、周期是 `This month (API key)` 才删 `This month`、周期是 `Total account usage` 才删 `Used`。`ProviderCostSnapshot` 新增 `balanceText`，详情页费用卡多一行「余额 $X」，首页卡片摘要优先报这个余额。
+- **去掉演示模式**：删除 `DemoProvider.ets`、注销注册表条目，并连带移除 `AuthKind.DEMO` 与全部 `!== AuthKind.DEMO` 守卫（设置页账号条 / 凭证输入、首页「未配置凭证」提示、详情页凭证卡与凭证链接），`StatsPage` 空态文案里的「演示模式立即生效」一并改掉。单测里构造状态的辅助函数改用 `AuthKind.SESSION`（默认 id 由 `demo` 改 `test`）。
+- **测试**：新增 `Cursor_provider`（计划名映射、窗口标签、百分比回退链全部 6 档、分/上限换算、旧版请求配额、Grok Bot 有额度/无额度/缺字段、Admin API 的成员花费与每日请求解析与排序）与更新后的 `OptionalDetails_replaced_rows`（逐条件删除规则 + 「卡片无余额行时 Credits 三行原样保留」）；共 55 条全绿。
 
 本轮已完成（桌面组件可挑选显示的服务商 + 安卓组件尺寸自适应与预览图）：组件原来固定「按用量取前 4 家」，现在可以在设置页点选；安卓组件还改成按实例高度决定行数。
 
@@ -346,4 +354,4 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 3. **iOS 重验证**：Android 已用 `ace build apk` 重建并在模拟器上实测桌面组件（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商（iOS 侧同样没有 Form Kit，桌面组件需按 WidgetKit 另写）。
 4. **鸿蒙真机再验一次卡片入口**：配置与产物已核对无误，但还没有在真机上走完「长按应用图标 → 卡片 → 添加」；若列表里看不到本应用，按本轮小节里的方法重装 + 重启桌面再试。
 
-仍明确不迁移（桌面专属 / CLI 探测 / HTML 抓取）：Windsurf、Sakana、Replicate、TypeSafe、Helmcode、StepFun、QwenCloud、Alibaba Token Plan、Cursor、Augment、JetBrains、Antigravity、Vertex AI / Gemini、Copilot 预算页抓取、Bedrock Profile 模式、Kiro、Ollama 本地、Pi、CodeRabbit、Wayfinder、Zed。
+仍明确不迁移（桌面专属 / CLI 探测 / HTML 抓取）：Windsurf、Sakana、Replicate、TypeSafe、Helmcode、StepFun、QwenCloud、Alibaba Token Plan、Augment、JetBrains、Antigravity、Vertex AI / Gemini、Copilot 预算页抓取、Bedrock Profile 模式、Kiro、Ollama 本地、Pi、CodeRabbit、Wayfinder、Zed。

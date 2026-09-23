@@ -19,6 +19,8 @@ export function iconFileFor(providerId: string): string | null {
     case 'codex':
     case 'openai':
       return 'openai.svg';
+    case 'cursor':
+      return 'cursor.svg';
     case 'openrouter':
       return 'openrouter-color.svg';
     case 'deepseek':

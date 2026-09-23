@@ -5,7 +5,8 @@ import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../ma
 import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderDetailSection, ProviderSetting,
   ProviderState, AuthKind, applyWindowLabels, defaultReminder, extraFields, extraValue,
   isDefaultEnabledProvider, isPrimaryProvider, makeChart, needsSecondCredential, optionalDetailsFor, parseExtra,
-  progressPercent, replacedDetailRowsFor, rowProgress, setExtraValue, visibleDetails, windowLabelsFor
+  progressPercent, ProviderCostSnapshot, replacedDetailRowsFor, rowProgress, setExtraValue, visibleDetails,
+  windowLabelsFor
 } from '../main/ets/model/Models';
 import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow } from '../main/ets/providers/MoreProviders';
@@ -31,6 +32,14 @@ import {
   zoomMateResetMs,
   zoomMateStatusWindow,
 } from '../main/ets/providers/MoreProviders4';
+import {
+  cursorGrokBotWindow,
+  cursorParseDailyUsage,
+  cursorParseMembers,
+  cursorParseRequestQuota,
+  cursorParseSummary,
+  cursorPlanName,
+} from '../main/ets/providers/CursorProvider';
 import {
   claudeExtraUsageCost,
   claudeOverageSpendLimitCost,
@@ -116,15 +125,15 @@ import {
   doubaoSignedSnapshot,
 } from '../main/ets/providers/DoubaoProvider';
 
-/** 构造只带一个主窗口的服务商状态（提醒测试用）；id 默认 demo，卡片挑选测试需要区分服务商时显式传入 */
+/** 构造只带一个主窗口的服务商状态（提醒测试用）；id 默认 test，卡片挑选测试需要区分服务商时显式传入 */
 function stateWith(
   primary: RateWindow,
-  title: string = '演示',
+  title: string = '测试',
   enabled: boolean = true,
-  id: string = 'demo'
+  id: string = 'test'
 ): ProviderState {
   const d: ProviderDescriptor = {
-    id: id, title: title, authKind: AuthKind.DEMO,
+    id: id, title: title, authKind: AuthKind.SESSION,
     accentColor: '#16D3B4', authHint: '', authUrl: ''
   };
   const s = new ProviderState(d, { enabled: enabled, credential: '', credential2: '', extraConfig: '' });
@@ -349,7 +358,7 @@ export default function logicUnitTest() {
         expect(hit.kind).assertEqual('usage');
         expect(hit.windowId).assertEqual('primary');
         expect(hit.dedupeKey).assertEqual(`u_primary_${now + 3600000}`);
-        expect(hit.title.indexOf('演示') >= 0).assertTrue();
+        expect(hit.title.indexOf('测试') >= 0).assertTrue();
         expect(hit.text.indexOf('95%') >= 0).assertTrue();
       }
       // 低于阈值：不提醒
@@ -1698,11 +1707,38 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
     });
 
     it('OptionalDetails_replaced_rows', 0, () => {
-      // 对照 OpenRouterProviderDescriptor 的 replacedDetailRows
+      // 对照 OpenRouterProviderDescriptor 的 costPresenter：逐条件判定，
+      // 卡片只吃掉自己展示的那一行，否则余额会被静默吞掉
+      const capCost: ProviderCostSnapshot = {
+        remaining: 5, used: 2, currency: 'USD', displayText: '$2.00',
+        period: 'This month (API key)', balanceText: '$5.00'
+      };
+      const keyCost: ProviderCostSnapshot = {
+        remaining: 0, used: 2, currency: 'USD', displayText: '$2.00', period: 'Total key usage'
+      };
+      const accountCost: ProviderCostSnapshot = {
+        remaining: 0, used: 2, currency: 'USD', displayText: '$2.00', period: 'Total account usage'
+      };
+      const plainCost: ProviderCostSnapshot = {
+        remaining: 0, used: 2, currency: 'USD', displayText: '$2.00', period: 'Monthly cap'
+      };
+
+      // 费用卡不可见：不删任何行
       expect(replacedDetailRowsFor('openrouter', false)['Credits']).assertEqual(undefined);
-      const replaced = replacedDetailRowsFor('openrouter', true);
-      expect(replaced['Credits'].length).assertEqual(2);
-      expect(replaced['API key'][0]).assertEqual('This month');
+      // 卡片没有余额行（周期为 Total key usage）：Credits 一行不动
+      expect(replacedDetailRowsFor('openrouter', true, keyCost)['Credits']).assertEqual(undefined);
+      // 卡片带余额行：只删 Credits 的 Remaining
+      const withBalance = replacedDetailRowsFor('openrouter', true, capCost);
+      expect(withBalance['Credits'].length).assertEqual(1);
+      expect(withBalance['Credits'][0]).assertEqual('Remaining');
+      expect(withBalance['API key'][0]).assertEqual('This month');
+      // 卡片承载账户总用量：只删 Credits 的 Used
+      const account = replacedDetailRowsFor('openrouter', true, accountCost);
+      expect(account['Credits'].length).assertEqual(1);
+      expect(account['Credits'][0]).assertEqual('Used');
+      expect(account['API key']).assertEqual(undefined);
+      // 其他服务商不受影响
+      expect(replacedDetailRowsFor('claude', true, plainCost)['Credits']).assertEqual(undefined);
 
       // 费用卡可见时移除重复行；不可见时原样保留
       const credits: ProviderDetailSection = {
@@ -1720,14 +1756,20 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
           { label: 'Reset window', value: 'monthly' },
         ],
       };
-      const filtered = visibleDetails('openrouter', [credits, keySection], true, true);
+      const filtered = visibleDetails('openrouter', [credits, keySection], true, true, capCost);
       expect(filtered.length).assertEqual(2);
-      expect(filtered[0].rows.length).assertEqual(1);
-      expect(filtered[0].rows[0].label).assertEqual('Total added');
+      expect(filtered[0].rows.length).assertEqual(2);
+      expect(filtered[0].rows[0].label).assertEqual('Used');
+      expect(filtered[0].rows[1].label).assertEqual('Total added');
       expect(filtered[1].rows.length).assertEqual(1);
       expect(filtered[1].rows[0].label).assertEqual('Reset window');
 
-      // 三行全被移除的分组整体消失
+      // 卡片没带余额行时，Credits 三行原样保留（余额不被吃掉）
+      const noBalance = visibleDetails('openrouter', [credits], true, true, keyCost);
+      expect(noBalance.length).assertEqual(1);
+      expect(noBalance[0].rows.length).assertEqual(3);
+
+      // 卡片把两行都吃掉的分组整体消失
       const onlyReplaced: ProviderDetailSection = {
         title: 'Credits',
         rows: [
@@ -1735,7 +1777,11 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
           { label: 'Used', value: '$2.00' },
         ],
       };
-      expect(visibleDetails('openrouter', [onlyReplaced], true, true).length).assertEqual(0);
+      const bothCost: ProviderCostSnapshot = {
+        remaining: 5, used: 2, currency: 'USD', displayText: '$2.00',
+        period: 'Total account usage', balanceText: '$5.00'
+      };
+      expect(visibleDetails('openrouter', [onlyReplaced], true, true, bothCost).length).assertEqual(0);
       expect(visibleDetails('openrouter', [onlyReplaced], true, false).length).assertEqual(1);
 
       // 行被费用卡吃光但带图表的分组要保留（对照源工程 chart 仍然渲染）
@@ -1744,10 +1790,99 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
         rows: [{ label: 'Remaining', value: '$5.00' }],
         chart: makeChart('Daily spend', 'USD', [{ label: '2026-09-01', value: 1 }]),
       };
-      const kept = visibleDetails('openrouter', [charted], true, true);
+      const kept = visibleDetails('openrouter', [charted], true, true, capCost);
       expect(kept.length).assertEqual(1);
       expect(kept[0].rows.length).assertEqual(0);
       expect(kept[0].chart != null).assertTrue();
+    });
+
+    it('Cursor_provider', 0, () => {
+      // 计划名映射（对照 formatMembershipType）
+      expect(cursorPlanName('pro')).assertEqual('Cursor Pro');
+      expect(cursorPlanName('free_trial')).assertEqual('Cursor Pro Trial');
+      expect(cursorPlanName('enterprise')).assertEqual('Cursor Enterprise');
+      expect(cursorPlanName('mystery')).assertEqual('Cursor mystery');
+      expect(cursorPlanName(null)).assertEqual('Cursor');
+      // 窗口标签（对照 CursorProviderDescriptor 的 session/weekly/opusLabel）
+      const labels = windowLabelsFor('cursor');
+      expect(labels.primary).assertEqual('Total');
+      expect(labels.secondary).assertEqual('Cursor');
+      expect(labels.tertiary).assertEqual('Third Party');
+
+      // 顶层百分比优先
+      const total = cursorParseSummary(parseJson(
+        '{"membershipType":"pro","billingCycleEnd":"2026-09-30T00:00:00.000Z",' +
+        '"individualUsage":{"plan":{"used":2000,"limit":2000,"totalPercentUsed":42.5}}}'));
+      expect(total != null).assertTrue();
+      expect(total!.headlinePercent()).assertEqual(42.5);
+      expect(total!.membershipType).assertEqual('pro');
+
+      // 无顶层百分比：Auto 与 API 取均值
+      const avg = cursorParseSummary(parseJson(
+        '{"individualUsage":{"plan":{"autoPercentUsed":30,"apiPercentUsed":50}}}'));
+      expect(avg!.headlinePercent()).assertEqual(40);
+      // 只有 API 百分比
+      expect(cursorParseSummary(parseJson(
+        '{"individualUsage":{"plan":{"apiPercentUsed":12}}}'))!.headlinePercent()).assertEqual(12);
+      // 退到分 / 上限
+      expect(cursorParseSummary(parseJson(
+        '{"individualUsage":{"plan":{"used":1000,"limit":4000}}}'))!.headlinePercent()).assertEqual(25);
+      // 再退到 individualUsage.overall，最后到 teamUsage.pooled
+      const overallPct = cursorParseSummary(parseJson(
+        '{"individualUsage":{"overall":{"used":7384,"limit":10000}}}'))!.headlinePercent();
+      expect(Math.round(overallPct * 100) / 100).assertEqual(73.84);
+      expect(cursorParseSummary(parseJson(
+        '{"teamUsage":{"pooled":{"used":50,"limit":200}}}'))!.headlinePercent()).assertEqual(25);
+      // 什么都缺：0
+      expect(cursorParseSummary(parseJson('{}'))!.headlinePercent()).assertEqual(0);
+      expect(cursorParseSummary(null)).assertEqual(null);
+
+      // 旧版按请求数计划：maxRequestUsage 必须 > 0
+      const quota = cursorParseRequestQuota(parseJson(
+        '{"gpt-4":{"numRequestsTotal":120,"maxRequestUsage":500}}'));
+      expect(quota != null).assertTrue();
+      expect(quota!.used).assertEqual(120);
+      expect(quota!.limit).assertEqual(500);
+      expect(quota!.usedPercent()).assertEqual(24);
+      expect(cursorParseRequestQuota(parseJson('{"gpt-4":{"numRequests":3}}'))).assertEqual(null);
+      expect(cursorParseRequestQuota(parseJson('{"startOfMonth":"2026-09-01"}'))).assertEqual(null);
+
+      // Grok Bot：有额度才出窗口；试用未过期但无额度时按试用到期处理
+      const now = 1758000000000;
+      const sand = cursorGrokBotWindow(parseJson(
+        '{"usagePercent":63.2,"includedLimitZero":false,' +
+        '"nextResetTimestampUtc":"2026-09-28T00:00:00.000Z"}'), now);
+      expect(sand != null).assertTrue();
+      expect(sand!.id).assertEqual('cursor-grok-bot');
+      expect(sand!.title).assertEqual('Grok Bot');
+      expect(sand!.window.usedPercent).assertEqual(63.2);
+      expect(sand!.window.resetsAt).assertEqual(Date.parse('2026-09-28T00:00:00.000Z'));
+      expect(cursorGrokBotWindow(parseJson('{"usagePercent":10,"includedLimitZero":true}'), now))
+        .assertEqual(null);
+      expect(cursorGrokBotWindow(parseJson('{"includedLimitZero":false}'), now)).assertEqual(null);
+
+      // Admin API Key：成员花费与每日请求量解析（字段缺失记 0）
+      const members = cursorParseMembers(parseJson(
+        '{"teamMemberSpend":[{"email":"a@x.com","overallSpendCents":1250,' +
+        '"monthlyLimitDollars":40},{"email":"b@x.com","spendCents":300}]}'));
+      expect(members.length).assertEqual(2);
+      expect(members[0].overallSpendCents).assertEqual(1250);
+      expect(members[0].monthlyLimitDollars).assertEqual(40);
+      // overallSpendCents 缺失时回落 spendCents
+      expect(members[1].overallSpendCents).assertEqual(300);
+      expect(members[1].monthlyLimitDollars).assertEqual(null);
+      expect(cursorParseMembers(parseJson('{}')).length).assertEqual(0);
+
+      const daily = cursorParseDailyUsage(parseJson(
+        '{"data":[{"date":"2026-09-02","subscriptionIncludedReqs":10,"usageBasedReqs":2,' +
+        '"apiKeyReqs":1},{"date":"2026-09-01","subscriptionIncludedReqs":4}]}'));
+      expect(daily.length).assertEqual(2);
+      expect(daily[0].date).assertEqual('2026-09-01'); // 升序
+      expect(daily[0].total()).assertEqual(4);
+      expect(daily[1].total()).assertEqual(13);
+      // 缺 date 的行丢弃
+      expect(cursorParseDailyUsage(parseJson('{"data":[{"subscriptionIncludedReqs":1}]}')).length)
+        .assertEqual(0);
     });
 
     it('Row_progress_bar', 0, () => {

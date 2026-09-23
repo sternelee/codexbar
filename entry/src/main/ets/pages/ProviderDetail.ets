@@ -4,7 +4,6 @@
  */
 
 import {
-  AuthKind,
   extraFields,
   extraValue,
   ExtraField,
@@ -115,8 +114,9 @@ struct ProviderDetail {
     if (s.snapshot == null) {
       return [];
     }
-    const costVisible = s.snapshot.ok && s.snapshot.providerCost != null;
-    return visibleDetails(s.descriptor.id, s.snapshot.details, Settings.showOptionalDetails(), costVisible);
+    const cost = s.snapshot.providerCost;
+    const costVisible = s.snapshot.ok && cost != null;
+    return visibleDetails(s.descriptor.id, s.snapshot.details, Settings.showOptionalDetails(), costVisible, cost);
   }
 
   /** 自绘确认弹窗（替代系统 AlertDialog，配色走主题资源，深浅色都可读） */
@@ -138,9 +138,6 @@ struct ProviderDetail {
 
   /** 凭证缺失或已失效（401/403）时显示配置卡片 */
   needsCredentialCard(s: ProviderState): boolean {
-    if (s.descriptor.authKind === AuthKind.DEMO) {
-      return false;
-    }
     if (s.setting.credential.length === 0) {
       return true;
     }
@@ -666,6 +663,19 @@ struct ProviderDetail {
               .fontColor(Theme.text)
           }
           .width('100%')
+          // 按量花费卡片的余额行（对照 payAsYouGoSpend 的 balanceLine，如 OpenRouter）
+          if (s.snapshot.providerCost.balanceText != null &&
+            s.snapshot.providerCost.balanceText!.length > 0) {
+            Row({ space: Theme.gapXs }) {
+              Text('余额')
+                .fontSize(Theme.fsBody)
+                .fontColor(Theme.textDim)
+              Text(s.snapshot.providerCost.balanceText!)
+                .fontSize(Theme.fsBody)
+                .fontColor(Theme.text)
+            }
+            .width('100%')
+          }
           // 详情页才显示的补充说明（如 DeepSeek 的 "¥12.00 (Paid: … / Granted: …)"）
           if (s.snapshot.providerCost.detailText != null &&
             s.snapshot.providerCost.detailText!.length > 0) {
@@ -749,7 +759,7 @@ struct ProviderDetail {
       this.reminderCard(s)
 
       // 认证说明
-      if (s.descriptor.authKind !== AuthKind.DEMO && s.descriptor.authUrl.length > 0) {
+      if (s.descriptor.authUrl.length > 0) {
         Text(`凭证获取：${s.descriptor.authUrl}`)
           .fontSize(Theme.fsMicro)
           .fontColor(Theme.textDim)

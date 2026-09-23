@@ -125,7 +125,7 @@ struct StatsPage {
           Text('暂无统计数据')
             .fontSize(Theme.fsName)
             .fontColor(Theme.text)
-          Text('回仪表盘点「刷新」积累数据（演示模式立即生效）')
+          Text('回仪表盘点「刷新」积累数据')
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .textAlign(TextAlign.Center)

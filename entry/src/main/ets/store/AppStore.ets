@@ -3,7 +3,7 @@
  * 持有全部服务商的展示状态并编排刷新；UI 层通过 version 触发重建。
  */
 
-import { applyWindowLabels, AuthKind, ProviderState, ProviderSetting, UsageSnapshot } from '../model/Models';
+import { applyWindowLabels, ProviderState, ProviderSetting, UsageSnapshot } from '../model/Models';
 import { ProviderRegistry } from '../providers/ProviderRegistry';
 import { UsageProvider } from '../providers/ProviderBase';
 import { Settings } from './Settings';
@@ -235,9 +235,7 @@ export class AppStore {
     const tasks: Promise<void>[] = [];
     for (let i = 0; i < this.states.length; i++) {
       const s = this.states[i];
-      const needFetch = s.descriptor.authKind === AuthKind.DEMO ||
-        (s.setting.enabled && s.setting.credential.length > 0);
-      if (needFetch) {
+      if (s.setting.enabled && s.setting.credential.length > 0) {
         tasks.push(this.refreshOne(s.descriptor.id));
       }
     }

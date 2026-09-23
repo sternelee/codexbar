@@ -15,7 +15,6 @@ import {
   createOpenRouterProvider,
   createSiliconFlowProvider
 } from './ApiKeyProviders';
-import { createDemoProvider } from './DemoProvider';
 import {
   createChutesProvider,
   createDeepInfraProvider,
@@ -70,6 +69,7 @@ import {
   createOllamaProvider,
   createV0Provider
 } from './ApiKeyProviders2';
+import { createCursorProvider } from './CursorProvider';
 import { createDoubaoProvider } from './DoubaoProvider';
 import { createBedrockProvider } from './BedrockProvider';
 import {
@@ -89,6 +89,7 @@ export class ProviderRegistry {
       ProviderRegistry.providers = [
         createClaudeProvider(),
         createCodexProvider(),
+        createCursorProvider(),
         createOpenAIPlatformProvider(),
         createAnthropicConsoleProvider(),
         createOpenRouterProvider(),
@@ -147,7 +148,6 @@ export class ProviderRegistry {
         createOllamaProvider(),
         createCopilotProvider(),
         createBedrockProvider(),
-        createDemoProvider(),
       ];
     }
     return ProviderRegistry.providers;

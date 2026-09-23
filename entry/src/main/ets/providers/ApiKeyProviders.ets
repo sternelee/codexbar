@@ -916,11 +916,12 @@ class OpenRouterProvider implements UsageProvider {
     const headers = bearer(key);
     headers['x-title'] = 'CodexBar';
 
-    // 1) 账户余额（/credits）
+    // 1) 账户余额（/credits）：只有管理密钥能读，普通推理密钥返回 403
     const creditsResp = await Http.get('https://openrouter.ai/api/v1/credits', headers);
     let balance: number | null = null;
     let totalUsage: number | null = null;
     let totalCredits: number | null = null;
+    let creditsIssue = '';
     if (creditsResp.ok) {
       const root = asObj(creditsResp.json());
       const data = root != null ? asObj(root['data']) : null;
@@ -931,17 +932,30 @@ class OpenRouterProvider implements UsageProvider {
           balance = Math.max(0, totalCredits - totalUsage);
         }
       }
+      if (balance == null) {
+        creditsIssue = '响应解析失败';
+      }
+    } else if (creditsResp.code === 401 || creditsResp.code === 403) {
+      creditsIssue = '需要管理密钥（管理密钥才能读账户余额）';
+    } else {
+      creditsIssue = creditsResp.errorText();
     }
 
     // 2) API key 额度（/key）
     const keyResp = await Http.get('https://openrouter.ai/api/v1/key', headers);
     let keyData: Record<string, Json> | null = null;
+    let keyIssue = '';
     if (keyResp.ok) {
       const root = asObj(keyResp.json());
       keyData = root != null ? asObj(root['data']) : null;
+      if (keyData == null) {
+        keyIssue = '响应解析失败';
+      }
+    } else {
+      keyIssue = keyResp.errorText();
     }
     if (balance == null && keyData == null) {
-      return UsageSnapshot.failure(creditsResp.ok ? '响应解析失败' : creditsResp.errorText());
+      return UsageSnapshot.failure(creditsIssue.length > 0 ? creditsIssue : keyIssue);
     }
 
     const keyLimit = keyData != null ? OpenRouterProvider.numField(keyData, 'limit') : null;
@@ -988,6 +1002,12 @@ class OpenRouterProvider implements UsageProvider {
           { label: 'Total added', value: OpenRouterProvider.usd(totalCredits ?? 0) },
         ],
       });
+    } else {
+      // 对照源工程：拿不到余额时仍保留 Credits 分组并写清原因，而不是整块消失
+      details.push({
+        title: 'Credits',
+        rows: [{ label: 'Balance', value: '暂不可用', secondary: creditsIssue }],
+      });
     }
     if (keyData != null) {
       const rows: ProviderDetailRow[] = [];
@@ -1013,6 +1033,11 @@ class OpenRouterProvider implements UsageProvider {
         }
       }
       details.push({ title: 'API key', rows: rows });
+    } else {
+      details.push({
+        title: 'API key',
+        rows: [{ label: 'API key limit', value: '暂不可用', secondary: keyIssue }],
+      });
     }
 
     // 3) 近 30 个完整 UTC 日的活动聚合（管理密钥才有权限，失败不影响余额展示）
@@ -1051,6 +1076,10 @@ class OpenRouterProvider implements UsageProvider {
           period: period,
           limit: 0,
         };
+        // 按量花费卡片另起一行余额（对照 payAsYouGoSpend 的 balanceLine）
+        if (balance != null) {
+          snap.providerCost.balanceText = OpenRouterProvider.usd(balance);
+        }
       }
     }
     return snap;

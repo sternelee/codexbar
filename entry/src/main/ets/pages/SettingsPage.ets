@@ -5,7 +5,6 @@
 
 import { promptAction } from '@kit.ArkUI';
 import {
-  AuthKind,
   extraFields,
   extraValue,
   ExtraField,
@@ -136,11 +135,11 @@ struct ProviderSettingCard {
     this.accRev += 1;
   }
 
-  /** 账号条：chip 切换激活、＋ 添加、长按删除。所有非演示服务商可用；
+  /** 账号条：chip 切换激活、＋ 添加、长按删除；
    *  Claude/Codex 的 ＋ 走网页登录，其余直接建空账号由用户填凭证 */
   @Builder
   accountBar() {
-    if (this.descriptor != null && this.descriptor.authKind !== AuthKind.DEMO) {
+    if (this.descriptor != null) {
       Row({ space: Theme.gapSm }) {
         Text('账号')
           .fontSize(Theme.fsCaption)
@@ -246,8 +245,7 @@ struct ProviderSettingCard {
         // 多账号条（Claude/Codex）
         this.accountBar()
 
-        if (this.descriptor.authKind !== AuthKind.DEMO) {
-          TextInput({ text: this.credential, placeholder: this.descriptor.authHint })
+        TextInput({ text: this.credential, placeholder: this.descriptor.authHint })
             .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
@@ -290,7 +288,6 @@ struct ProviderSettingCard {
                 this.extraJson = setExtraValue(this.extraJson, f.key, v);
               })
           }, (f: ExtraField) => `${this.pid}_${f.key}`)
-        }
 
         Row({ space: Theme.rowGap }) {
           if (this.canWebLogin) {

@@ -36,6 +36,12 @@ export interface ProviderCostSnapshot {
   /** 详情页补充说明（可空；为空时详情页不加说明行）：
    *  例如 DeepSeek 的 macOS 原句 "¥12.00 (Paid: ¥10.00 / Granted: ¥2.00)" —— 首页只显示 displayText */
   detailText?: string;
+  /**
+   * 卡片上的余额文案（"$12.34"），对应 Swift ProviderCostSection 的 balanceLine：
+   * 只有「按量花费」型卡片（如 OpenRouter payAsYouGoSpend）才两者并存——
+   * 大号数字是本期花费，余额另起一行；为空表示该卡片没有余额行。
+   */
+  balanceText?: string;
   /** 费用周期文案（对应 Swift ProviderCostSnapshot.period，如 "Monthly cap" / "Extra usage"）：
    *  非空时详情页用它作为费用分组标题 */
   period?: string;
@@ -320,8 +326,6 @@ export enum AuthKind {
   SESSION = 1,
   /** OAuth 访问令牌（如 ChatGPT backend-api access token） */
   OAUTH_TOKEN = 2,
-  /** 演示模式，无需认证 */
-  DEMO = 3,
 }
 
 /** 窗口语义，用于 UI 图标与排序 */
@@ -515,6 +519,8 @@ export function windowLabelsFor(providerId: string): WindowLabels {
     l.primary = 'Session'; l.secondary = 'Weekly';
   } else if (providerId === 'openai') {
     l.primary = 'Spend'; l.secondary = 'Requests';
+  } else if (providerId === 'cursor') {
+    l.primary = 'Total'; l.secondary = 'Cursor'; l.tertiary = 'Third Party';
   } else if (providerId === 'openrouter') {
     l.primary = 'Credits'; l.secondary = 'Usage';
   } else if (providerId === 'deepseek') {
@@ -702,18 +708,36 @@ export function optionalDetailsFor(providerId: string): OptionalDetailsPolicy {
 /**
  * 费用卡已展示时需要从明细里删掉的重复行（对照 ProviderCostPresentation.replacedDetailRows）。
  * 键为分组标题，值为要删除的行标签；费用卡不可见时返回空表。
- * - OpenRouter：余额行 / 本月 API key 花费 / 账户总用量
- * - TypeSafe（本工程未实现）：账单页花费行
+ *
+ * OpenRouter 的规则是逐条件判定的（源工程 OpenRouterProviderDescriptor.costPresenter）：
+ * - 卡片带余额行（cost.balanceText）时才删 Credits 的 Remaining
+ * - 卡片周期为 "This month (API key)" 时才删 API key 的 This month
+ * - 卡片周期为 "Total account usage" 时才删 Credits 的 Used
+ * 卡片只承载它自己展示的那一项，其余行必须留在明细里，否则余额就被静默吃掉。
+ * TypeSafe（本工程未实现）：账单页花费行。
  */
-export function replacedDetailRowsFor(providerId: string, costVisible: boolean): Record<string, string[]> {
+export function replacedDetailRowsFor(
+  providerId: string,
+  costVisible: boolean,
+  cost: ProviderCostSnapshot | null = null
+): Record<string, string[]> {
   const empty: Record<string, string[]> = {};
   if (!costVisible) {
     return empty;
   }
   const out: Record<string, string[]> = {};
   if (providerId === 'openrouter') {
-    out['Credits'] = ['Remaining', 'Used'];
-    out['API key'] = ['This month'];
+    if (cost != null && cost.balanceText != null && cost.balanceText.length > 0) {
+      out['Credits'] = ['Remaining'];
+    }
+    if (cost != null && cost.period === 'This month (API key)') {
+      out['API key'] = ['This month'];
+    }
+    if (cost != null && cost.period === 'Total account usage') {
+      const credits = out['Credits'] != null ? out['Credits'] : [];
+      credits.push('Used');
+      out['Credits'] = credits;
+    }
   }
   return out;
 }
@@ -727,9 +751,10 @@ export function visibleDetails(
   providerId: string,
   details: ProviderDetailSection[],
   showOptional: boolean,
-  costVisible: boolean
+  costVisible: boolean,
+  cost: ProviderCostSnapshot | null = null
 ): ProviderDetailSection[] {
-  const replaced = replacedDetailRowsFor(providerId, costVisible);
+  const replaced = replacedDetailRowsFor(providerId, costVisible, cost);
   const policy = optionalDetailsFor(providerId);
   const out: ProviderDetailSection[] = [];
   for (let i = 0; i < details.length; i++) {

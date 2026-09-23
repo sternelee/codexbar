@@ -3,7 +3,7 @@
  * 服务商用量卡片列表：用量条 + 重置倒计时 + 余额 + 下拉刷新。
  */
 
-import { AuthKind, ProviderState } from '../model/Models';
+import { ProviderState } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
@@ -57,7 +57,7 @@ struct Index {
     if (s.loading) {
       return '查询中…';
     }
-    if (s.setting.enabled && s.setting.credential.length === 0 && s.descriptor.authKind !== AuthKind.DEMO) {
+    if (s.setting.enabled && s.setting.credential.length === 0) {
       return '未配置凭证';
     }
     const snap = s.snapshot;
@@ -68,6 +68,11 @@ struct Index {
       return snap.error;
     }
     if (snap.providerCost != null) {
+      // 卡片另起余额行时（按量花费型，如 OpenRouter）摘要就报余额，否则报卡片上的大号数字
+      const balance = snap.providerCost.balanceText;
+      if (balance != null && balance.length > 0) {
+        return `余额 ${balance}`;
+      }
       return `余额 ${snap.providerCost.displayText}`;
     }
     if (snap.primary != null) {
@@ -222,7 +227,7 @@ struct Index {
       }
 
       // 未配置提示
-      if (!s.loading && s.setting.credential.length === 0 && s.descriptor.authKind !== AuthKind.DEMO) {
+      if (!s.loading && s.setting.credential.length === 0) {
         Row({ space: Theme.gapXs }) {
           Text('🔑')
             .fontSize(Theme.fsCaption)

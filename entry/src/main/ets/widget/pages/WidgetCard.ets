@@ -1,7 +1,7 @@
 /**
  * CodexBar Mobile — 2x2 服务卡片
- * 显示最紧急的 2 家服务商用量；点击打开应用。
- * 数据由应用刷新后经 formBindingData 推送（items 数组，按用量降序）。
+ * 桌面上左右滑动（Swiper 轮播）切换显示的服务商，一页一家；
+ * 点击打开应用。数据由应用刷新后经 formBindingData 推送。
  *
  * 颜色全部取 `$r('app.color.*')`：卡片进程按系统深浅色自动换值，
  * 因此数据里传的是用量「等级」（level）而不是色值。
@@ -85,13 +85,24 @@ struct WidgetCard {
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
       } else {
-        ForEach(this.items, (item: WidgetCardItem, idx: number) => {
-          if (idx < 2) {
-            Column() {
+        Swiper() {
+          ForEach(this.items, (item: WidgetCardItem, idx: number) => {
+            Column({ space: 6 }) {
               this.itemRow(item)
+              // 轮播位置提示：第 x / n 家
+              Text(`${idx + 1} / ${this.items.length}`)
+                .fontSize(8)
+                .fontColor($r('app.color.text_dim'))
             }
-          }
-        }, (item: WidgetCardItem, idx: number) => `${idx}_${item.name}_${item.pct}`)
+            .width('100%')
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+          }, (item: WidgetCardItem, idx: number) => `${idx}_${item.name}_${item.pct}`)
+        }
+        .indicator(true)
+        .loop(true)
+        .width('100%')
+        .layoutWeight(1)
       }
     }
     .width('100%')

@@ -1,7 +1,7 @@
 /**
  * CodexBar Mobile — 2x4 服务卡片
- * 显示最紧急的 4 家服务商用量；点击打开应用。
- * 颜色走 `$r('app.color.*')`，随系统深浅色自动换值（数据里传用量等级）。
+ * 桌面上左右滑动（Swiper 轮播）切换显示的服务商，一页一家（含倒计时）；
+ * 点击打开应用。颜色走 `$r('app.color.*')`，随系统深浅色自动换值。
  */
 
 import { widgetLevelColor } from './WidgetTheme';
@@ -73,21 +73,57 @@ struct WidgetListCard {
           .textAlign(TextAlign.Center)
           .layoutWeight(1)
       } else {
-        ForEach(this.items, (item: WidgetListCardItem, idx: number) => {
-          if (idx < 4) {
-            Column({ space: 2 }) {
-              this.itemRow(item)
-              if (item.cd.length > 0 && idx < 2) {
+        Swiper() {
+          ForEach(this.items, (item: WidgetListCardItem, idx: number) => {
+            Column({ space: 8 }) {
+              // 一页一家：服务名 + 大号百分比 + 进度条 + 重置倒计时
+              Row({ space: 8 }) {
+                Text(item.name)
+                  .fontSize(13)
+                  .fontColor($r('app.color.text'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                Text(item.pct)
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(widgetLevelColor(item.level))
+              }
+              .width('100%')
+
+              Row() {
+                Row()
+                  .width(`${item.barPct}%`)
+                  .height('100%')
+                  .borderRadius(2)
+                  .backgroundColor(widgetLevelColor(item.level))
+              }
+              .width('100%')
+              .height(5)
+              .borderRadius(2)
+              .backgroundColor($r('app.color.stroke'))
+
+              if (item.cd.length > 0) {
                 Text(item.cd)
-                  .fontSize(9)
+                  .fontSize(10)
                   .fontColor($r('app.color.text_dim'))
                   .maxLines(1)
                   .width('100%')
               }
+
+              Text(`${idx + 1} / ${this.items.length}`)
+                .fontSize(8)
+                .fontColor($r('app.color.text_dim'))
             }
             .width('100%')
-          }
-        }, (item: WidgetListCardItem, idx: number) => `${idx}_${item.name}_${item.pct}_${item.cd}`)
+            .height('100%')
+            .justifyContent(FlexAlign.Center)
+          }, (item: WidgetListCardItem, idx: number) => `${idx}_${item.name}_${item.pct}_${item.cd}`)
+        }
+        .indicator(true)
+        .loop(true)
+        .width('100%')
+        .layoutWeight(1)
       }
     }
     .width('100%')

@@ -90,13 +90,15 @@ export class AppStore {
     Settings.saveProvider(providerId, setting);
     const state = this.find(providerId);
     if (state != null) {
-      state.setting = setting;
+      // 以落盘结果为准：多账号 / 旧单凭证键两条读取规则都在 Settings.provider 里，
+      // 这样本次查询用的凭证与之后 refreshAll / 冷启动读到的完全一致
+      state.setting = Settings.provider(providerId);
       // 清除上一次的失败快照：保存/更换凭证后不应继续显示旧的错误信息，
       // 改为展示“查询中…”，由随后的刷新结果覆盖。
       if (state.snapshot != null && !state.snapshot.ok) {
         state.snapshot = null;
       }
-      if (setting.enabled && setting.credential.length > 0) {
+      if (state.setting.enabled && state.setting.credential.length > 0) {
         // 强制重新查询：即使上一次查询仍在进行，也以刚保存的凭证为准
         this.refreshOne(providerId, true);
       } else {

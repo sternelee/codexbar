@@ -5,7 +5,6 @@
 
 import {
   extraFields,
-  extraValue,
   ExtraField,
   NamedRateWindow,
   needsSecondCredential,
@@ -72,6 +71,11 @@ struct ProviderDetail {
     this.remLead = cfg.resetLeadMinutes;
     this.ver = AppStore.get().version;
     this.timerId = setInterval(() => {
+      // 正在填写凭证时整页冻结：既不重建 TextInput（ArkUI 回写会打断输入法提交，
+      // 粘贴的长串可能只提交一部分），也不推进 store 版本，避免输入框被重建清空
+      if (this.editingCred) {
+        return;
+      }
       if (AppStore.get().version !== this.ver) {
         this.ver = AppStore.get().version;
       }
@@ -88,6 +92,28 @@ struct ProviderDetail {
 
   state(v: number, t: number): ProviderState | null {
     return AppStore.get().find(this.providerId);
+  }
+
+  /**
+   * ForEach 数据源：拿不到服务商时返回空数组（由下方「未找到」项兜底）。
+   *
+   * 为什么用 ForEach 而不是直接放一个 ListItem：ArkUI 只对 @State 之类的可观察对象做
+   * 依赖追踪，`ProviderState` 是普通类，页面对 `s.snapshot` / `s.setting` / `s.loading`
+   * 的读取不会被登记成依赖，直接写在 ListItem 里的内容在 store 变更后不会重建 —— 表现就是
+   * 「刚保存完凭证仍显示凭证无效或已过期，必须退出重进页面才更新」。
+   * 这里把条目交给 ForEach，并在 key 里带上 store 版本（见 stateKey），版本一变整棵重建。
+   */
+  bodyItems(v: number, t: number): ProviderState[] {
+    const s = this.state(v, t);
+    return s != null ? [s] : [];
+  }
+
+  /**
+   * body 重建键：带上 providerId、store 版本（每次状态变更 +1）与页面自身的编辑/加载态。
+   * key 变化 → ForEach 重建条目 → body 内所有普通对象读取都拿到最新值。
+   */
+  stateKey(s: ProviderState): string {
+    return `${this.providerId}_${this.ver}_${this.editingCred ? 'e' : 'c'}_${s.loading ? 'l' : 'i'}`;
   }
 
   /** 内联凭证编辑状态（未配置时在详情页直接填写） */
@@ -265,13 +291,8 @@ struct ProviderDetail {
           Nav.back();
         })
 
-        Text(this.state(this.ver, this.tick) != null ? this.state(this.ver, this.tick)!.descriptor.title : '')
-          .fontSize(Theme.fsHead)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Theme.text)
-          .layoutWeight(1)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 顶栏不放服务商标题（首张卡片的账号行已带图标 + 名称）
+        Blank()
 
         Button() {
           if (this.state(this.ver, this.tick) != null && this.state(this.ver, this.tick)!.loading) {
@@ -299,11 +320,13 @@ struct ProviderDetail {
       .padding({ left: Theme.pad, right: Theme.pad, top: Theme.gap, bottom: Theme.gapSm })
 
       List({ space: Theme.gap }) {
-        if (this.state(this.ver, this.tick) != null) {
+        ForEach(this.bodyItems(this.ver, this.tick), (s: ProviderState) => {
           ListItem() {
-            this.body(this.state(this.ver, this.tick)!)
+            this.body(s)
           }
-        } else {
+        }, (s: ProviderState) => this.stateKey(s))
+
+        if (this.state(this.ver, this.tick) == null) {
           ListItem() {
             Column({ space: Theme.rowGap }) {
               Text('未找到该服务商')
@@ -487,7 +510,9 @@ struct ProviderDetail {
                 })
             }
           } else {
-            TextInput({ placeholder: s.descriptor.authHint, text: this.credInput })
+            // 不把 text 绑到 @State：本页每秒重渲染，框架回写会把输入框内容改掉
+            // （见 ArkUI TextInput 单向同步行为），凭证只能由本输入框自己持有
+            TextInput({ placeholder: s.descriptor.authHint })
               .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
               .placeholderColor(Theme.textDim)
@@ -500,7 +525,7 @@ struct ProviderDetail {
                 this.credInput = v;
               })
             if (this.needSecond(this.providerId)) {
-              TextInput({ placeholder: this.secondHint(this.providerId), text: this.cred2Input })
+              TextInput({ placeholder: this.secondHint(this.providerId) })
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.text)
                 .placeholderColor(Theme.textDim)
@@ -514,7 +539,7 @@ struct ProviderDetail {
                 })
             }
             ForEach(this.extraFieldList(this.providerId), (f: ExtraField) => {
-              TextInput({ placeholder: f.hint, text: extraValue(this.credExtraJson, f.key) })
+              TextInput({ placeholder: f.hint })
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.text)
                 .placeholderColor(Theme.textDim)

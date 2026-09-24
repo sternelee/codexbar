@@ -12,7 +12,7 @@
 > **两条凭证线并存，按需选用**：既支持 API Key / 访问令牌 / AK-SK 签名直连，也支持网页 Cookie（如 claude.ai `sessionKey`）与应用内「网页登录」OAuth（Codex PKCE 授权 + refresh token 静默续期）。每个服务商的查询与展示逻辑均逐一对照 macOS 版 Swift 源码迁移；同一家服务商可二选一填写凭证（例如 Codex 既可粘贴 PAT，也可网页登录；ClawRouter / OpenCode Go 既能填会话 Cookie，也能填 API Key）。
 
 - **仪表盘**：服务商卡片列表，用量进度条（会话 / 每周 / 每月窗口）、重置倒计时（秒级刷新）、余额展示、下拉刷新与一键全量刷新；列表将已配置凭证的服务商排在前面（已启用优先，组内保持注册表顺序）。窗口名优先取服务商自定义标签，其余由元数据表统一补齐（对照源工程 `ProviderMetadata` 的 `sessionLabel`/`weeklyLabel`/`opusLabel`，如 Codex 的 Session / Weekly、Claude 的 Session / Weekly / Sonnet、Copilot 的 Premium / Chat、Kimi 编码版的 7-day usage / 5-hour usage）。
-- **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新；未配置或凭证失效时可在页内直接配置，保存后立即清除旧的失败提示并以新凭证重新查询。
+- **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新；未配置或凭证失效时可在页内直接配置，保存后立即清除旧的失败提示并以新凭证重新查询。这一页踩过两个 ArkUI 的坑，都已在代码里注明：（1）**状态不更新**——`ProviderState` 是普通类，页面对 `s.snapshot` / `s.setting` / `s.loading` 的读取不会被登记成依赖，写在 `ListItem` 里的内容在 store 变更后不会重建，表现就是「刚保存完凭证仍显示凭证无效或已过期，必须退出重进页面才更新」；现在整块 body 交给 `ForEach` 渲染、`key` 里带上 store 版本（每次状态变更 +1）与编辑/加载态，版本一变整棵重建。（2）**凭证被截断**——本页有每秒重渲染的倒计时定时器，`TextInput` 的 `text` 参数会被框架回写到输入框，粘贴长凭证时可能只提交一部分；输入框现在**不把 `text` 绑到 @State**（内容只由输入框自身持有）且**填写期间定时器整页冻结**，保存时按落盘结果重读凭证再强制重查，保证与之后 `refreshAll` / 冷启动读到的一致。
 - **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效；点击通知可跳回应用（HarmonyOS 经 wantAgent 拉起 EntryAbility，Android/iOS 无该模块时走系统默认行为）。
 - **用量统计**（仪表盘 📊 进入，对标 macOS CostHistoryChartMenuView）：按服务商的每日柱形图——「用量增量（百分点）」与「消费（余额降幅估算）」双指标、近7天/近30天范围切换；峰值日黄色帽、[0, 中点, 最大] 刻度、首末日期轴；今日/近7天/近30天合计。数据为本地刷新采样估算（每日最后样本，保留 62 天），与源工程扫描 CLI 会话的精确统计存在差异。
 - **桌面组件**（对标 macOS WidgetExtension）：HarmonyOS 服务卡片与 **Android 原生 AppWidget** 各两枚——2x2 速览（2 家）与 2x4 列表（4 家），显示用量条 + 重置倒计时，点击进应用，配色随系统深浅色切换。**显示哪几家可在设置页挑选**（点选顺序即卡片上的顺序；鸿蒙 2x2 / 2x4 卡取前 2 / 4 家，安卓组件按自身高度自适应行数、最多 8 行；未挑选时自动按用量排序），改完即时重渲染。安卓组件的选择器预览图随深浅色各一张。应用每次刷新成功即落盘摘要数据：鸿蒙经 Form Kit 即时推送已添加卡片，安卓侧由组件进程内的 FileObserver 监听摘要文件变化后重渲染，两端均有 30 分钟定时更新兜底。
@@ -241,6 +241,13 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（详情页配置凭证后仍报「凭证无效或已过期」的修复）：根因不是查询失败，而是 **详情页 UI 不随 store 更新**——`ProviderState` 是普通类，ArkUI 只对可观察对象做依赖追踪，写在 `ListItem` 里的 `@Builder body(s)` 在 `applySetting` / `refreshOne` 改写 `s.snapshot` / `s.setting` 后不会重建，页面一直停在上一次渲染结果（典型表现：新凭证其实查询成功了，卡片仍显示旧的「凭证无效或已过期」，退出重进页面才对）。
+
+- **整块 body 交给 `ForEach` 渲染**：`key` 里带上 providerId、store 版本（`AppStore.version`，每次状态变更 +1）与页面自身的编辑/加载态，版本一变即重建整个条目，body 内所有普通对象读取都拿到最新值（与首页、设置页既有的 `ForEach` + 变化 key 写法一致）。
+- **填写凭证期间整页冻结**：定时器在 `editingCred` 为真时不推进 store 版本，避免重渲染重建 `TextInput` 打断输入；输入框依旧不把 `text` 绑到 @State。
+- **保存后以落盘结果为准**：`applySetting` 保存后重新读一次 `Settings.provider(providerId)`（多账号 / 旧单凭证键两条读取规则都在里面），本次查询与之后 `refreshAll` / 冷启动读到的严格一致。
+- **验证**：`devecocli check arkts` 0 error（47 文件）；本地单测 55/55；`devecocli build` BUILD SUCCESSFUL。
 
 本轮已完成（Cursor 双凭证接入 + OpenRouter 余额 + 去掉演示模式）：三件事：新增 Cursor 一家（同时支持网页会话与官方 API Key），修好 OpenRouter「看不到剩余额度」，并把演示模式彻底移除。
 

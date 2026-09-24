@@ -13,6 +13,8 @@ import {
   ProviderDetailRow,
   ProviderDetailSection,
   ProviderState,
+  RateWindow,
+  primaryDisplayWindow,
   ReminderConfig,
   secondCredentialHint,
   setExtraValue,
@@ -126,6 +128,17 @@ struct ProviderDetail {
   extraFieldList(pid: string): ExtraField[] {
     return extraFields(pid);
   }
+  /**
+   * 泳道展示窗口：主泳道被更长的绑定泳道卡住时按投影展示（100% + 闸门恢复时间），
+   * 对照 macOS 菜单卡片的 bindingQuotaProjection；其余泳道原样返回（明细行不受影响）。
+   */
+  laneForDisplay(w: NamedRateWindow, s: ProviderState): RateWindow {
+    if (w.id !== 'primary') {
+      return w.window;
+    }
+    return primaryDisplayWindow(s.descriptor.id, s.snapshot, Date.now()) ?? w.window;
+  }
+
   /** 费用卡标题：源工程 ProviderCostSnapshot.period 优先，否则用中性的「余额」 */
   costTitle(cost: ProviderCostSnapshot): string {
     const period = cost.period;
@@ -657,7 +670,7 @@ struct ProviderDetail {
       if (s.snapshot != null && s.snapshot.ok) {
         ForEach(s.allWindows(), (w: NamedRateWindow) => {
           Column({ space: Theme.gapSm }) {
-            WindowBlock({ title: w.title, win: w.window, compact: false })
+            WindowBlock({ title: w.title, win: this.laneForDisplay(w, s), compact: false })
           }
           .width('100%')
           .padding(Theme.cardPad)
@@ -665,7 +678,8 @@ struct ProviderDetail {
           .backgroundColor(Theme.card)
           .border({ width: 1, color: Theme.stroke })
           .shadow(Theme.cardShadow())
-        }, (w: NamedRateWindow) => `${w.id}_${w.window.usedPercent}_${Math.floor(this.tick / 30)}`)
+        }, (w: NamedRateWindow) =>
+          `${w.id}_${this.laneForDisplay(w, s).usedPercent}_${Math.floor(this.tick / 30)}`)
       }
 
       // 余额（providerCost.period 非空时用它作标题，如 "Monthly cap" / "Extra usage"）

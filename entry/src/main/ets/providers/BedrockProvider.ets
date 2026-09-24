@@ -268,7 +268,7 @@ export function bedrockSnapshot(
   const primary: RateWindow | null = budget > 0 ? makeWindow(budgetPercent, resetsAt, true) : null;
 
   const snap = UsageSnapshot.success(primary, null, null);
-  snap.primaryLabel = '月度预算';
+  // 泳道标签用元数据表里的 Budget（对照 BedrockProviderDescriptor.sessionLabel）；重置说明按月
   snap.providerCost = {
     remaining: budget > 0 ? Math.max(0, budget - spend) : 0,
     used: spend,

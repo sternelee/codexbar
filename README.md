@@ -75,7 +75,7 @@
 | Sub2API | API Key | 自托管地址 + Key | 日/周/月 用量 + 余额 |
 | Devin | Bearer Token | 会话令牌 + 组织 | 配额窗口 |
 | Abacus | Web 会话 | apps.abacus.ai 会话 Cookie | 用量/余额窗口 |
-| Command Code | Web 会话 / API Key | commandcode.ai 会话 Cookie 或 API Key | 用量窗口 |
+| Command Code | Web 会话 / API Key | 整段 commandcode.ai 会话 Cookie（`Cookie:` 头 / cURL 抓包 / 裸令牌均可）或 `user_` 开头的 API Key | 用量窗口 |
 | LongCat | Web 会话 | longcat.chat 会话 Cookie | 配额窗口 |
 | ZoomMate | 会话令牌 | zoommate.zoom.us 会话令牌或 Cookie | 用量窗口 |
 | Notion AI | Web 会话 | app.notion.com Cookie（含 `token_v2`） | AI 信用额度 |
@@ -163,8 +163,9 @@ entry/src/main/resources/
 ## 构建与运行（HarmonyOS）
 
 ```bash
-# 1. 静态检查
-devecocli check arkts
+# 1. 静态检查（deveco-cli 1.3.x 把 `check arkts` 换成了 `check lint`；
+#    编译期的 ArkTS 诊断以 `devecocli build` 为准，它会在 BUILD FAILED 前逐条列出）
+devecocli check lint
 
 # 2. 构建 HAP
 devecocli build
@@ -181,7 +182,7 @@ devecocli run
 #   export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 #   /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw --mode module ...
 hvigorw --mode module -p module=entry@default -p isLocalTest=true test
-# 结果：Tests run: 55, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
+# 结果：Tests run: 60, Failure: 0（entry/.test/default/intermediates/test/coverage_data/test_result.txt）
 ```
 
 ## 构建与运行（Android / iOS，经 ArkUI-X，已验证）
@@ -191,7 +192,7 @@ hvigorw --mode module -p module=entry@default -p isLocalTest=true test
 ```bash
 # Android：编译 ArkTS → 拷贝引擎库/资产 → Gradle 打包，一条命令完成
 ace build apk
-# 产物：.arkui-x/android/app/build/outputs/apk/release/app-release.apk (~73MB)
+# 产物：.arkui-x/android/app/build/outputs/apk/release/app-release.apk（77,396,079 B ≈ 73.8 MB）
 # 安装/启动到连接的 Android 设备：
 ace install apk && ace launch apk
 
@@ -226,8 +227,8 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 
 | 平台 | 产物 | 验证 |
 |---|---|---|
-| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check arkts` 0 error + 本地单元测试 54/54 + hvigor BUILD SUCCESSFUL；卡片的 `module.json5` 扩展、`$profile:form_config`（含 `colorMode`/`isDynamic`）与 `ets/widgets.abc` 内的两条卡片页记录已逐项核对，配置与 DevEco 自带卡片模板一致 |
-| Android（arm64-v8a / armeabi-v7a） | `app-release.apk`（73.3 MB，含挑选 + 行数自适应 + 预览图，ArkTS 资产已重建） | 本轮为产物级验证：`ace build apk` BUILD SUCCESSFUL，`classes.dex` 含新版 `WidgetUpdater`（“read widget options failed”分支）、`resources.arsc` 含两张预览图名、release 清单里两个 receiver 齐全、两个 provider 元数据均带 `previewImage`。上一轮在 Android 12（arm64）模拟器上实测：`dumpsys appwidget` 可见两个 provider（2x2 min 110dp / 2x4 min 250dp、30 分钟定时），系统组件选择器列出「CodexBar / 2 widgets」，添加后 `uiautomator` 可读到 `widget_title` / `row_name` / `row_pct` / `row_cd` 等节点，像素采样命中主色 `#0A8471`（用量条与标题）与等级色 `#C08A00`（83% 行）；外部改写摘要文件时 FileObserver 立刻重渲染（日志 `widget data changed` → `updated 1 x WidgetQuickProvider`），无异常；应用启动/交互无回归 |
+| HarmonyOS 7.0（target API 26，最低兼容 API 24） | `entry-default-unsigned.hap` | 本轮重验：`devecocli check lint` 无新增问题（4 条 `await-thenable` 为既有）+ 本地单元测试 **60/60** + `devecocli build` BUILD SUCCESSFUL；卡片的 `module.json5` 扩展、`$profile:form_config`（含 `colorMode`/`isDynamic`）与 `ets/widgets.abc` 内的两条卡片页记录已逐项核对，配置与 DevEco 自带卡片模板一致 |
+| Android（arm64-v8a / armeabi-v7a） | `app-release.apk`（77,396,079 B ≈ 73.8 MB，含挑选 + 行数自适应 + 预览图 + 绑定泳道投影，ArkTS 资产已重建；sha256 `a7a95bbf36365780aac9d80e7f4b802f8a0546e49d0e1fcc3b8056d70bad6b27`） | 本轮为产物级验证：`ace build apk` BUILD SUCCESSFUL，`classes.dex` 含新版 `WidgetUpdater`（“read widget options failed”分支）、`resources.arsc` 含两张预览图名、release 清单里两个 receiver 齐全、两个 provider 元数据均带 `previewImage`。上一轮在 Android 12（arm64）模拟器上实测：`dumpsys appwidget` 可见两个 provider（2x2 min 110dp / 2x4 min 250dp、30 分钟定时），系统组件选择器列出「CodexBar / 2 widgets」，添加后 `uiautomator` 可读到 `widget_title` / `row_name` / `row_pct` / `row_cd` 等节点，像素采样命中主色 `#0A8471`（用量条与标题）与等级色 `#C08A00`（83% 行）；外部改写摘要文件时 FileObserver 立刻重渲染（日志 `widget data changed` → `updated 1 x WidgetQuickProvider`），无异常；应用启动/交互无回归 |
 | iOS（Simulator arm64） | `app.app` | 上一版本产物（iPhone 16 模拟器渲染正常）；本轮需 `ace build ios` 重建 |
 
 ## 图标
@@ -241,6 +242,50 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 凭证仅保存在本机应用数据目录，不经过任何中间服务器；刷新时由设备直连各服务商接口（与 macOS 版 "Privacy-first" 原则一致）。
 
 ## 后续计划
+
+本轮已完成（主/次/第三泳道的映射与标签核对）：按各 `*ProviderDescriptor` 的 `metadata`、`rateWindowLabeler` 与 `presentation.primaryBindingQuotaLanes` 逐条对完端口，修掉 7 处不一致，并把「绑定泳道」从只登记不渲染改成真正参与展示。
+
+- **标签表补齐**（`windowLabelsFor`）：新增 `amp`（`Amp Free` / `Balance`）与 `anthropic-console`（`Session` / `Weekly` / `Sonnet` —— 控制台 Admin API 走 Claude descriptor，同一套泳道标签）；其余已登记服务商逐条比对与源工程 `metadata` 一致。
+- **动态标签**（`rateWindowLabeler` / `primaryLabel` 系列）：Doubao 的 Ark API Key 探测窗口（无窗口长度、重置说明是 `used/limit requests`）按源工程 `DoubaoProviderDescriptor.primaryLabel` 改叫 `Requests`，不再被元数据表盖成 `5-hour`；Amp、Sub2API、Factory 的动态标签此前已对齐，Ollama 的 `Monthly` 哨兵分支与 Grok 的时长推断因端口没有对应窗口而不适用。
+- **端口自定义标签回归描述符**：Bedrock 主泳道 `月度预算` → `Budget`；Azure OpenAI 主泳道 `Deployment` → `Status`（部署信息留在明细行 —— 源工程把它放在窗口描述里）；Cursor 团队预算主泳道 `Budget` → `Total`（源工程这份预算就是 `planPercentUsed`，标签仍取元数据的 `Total`）。
+- **Kimi 编码版**：月度池不再是第三泳道（源工程 `toUsageSnapshot` 的 `tertiary` 恒为 `nil`、标签表也没有 opus 位），改为附加泳道 `kimi-monthly` / 标题 `Total usage`。
+- **阿里云百炼编码计划**：取消「月度值占位主/次泳道」的回退（源工程缺哪档就是 `nil`），补齐周/月度的 `*NextRefreshTime` 重置时间，并加上 5 小时重置时间的归一化（`normalizedFiveHourReset`：已过期就向后推一个 5 小时周期）。
+- **绑定泳道（`primaryBindingQuotaLanes`）落地**：新增 `bindingQuotaLanesFor`（11 处声明的端口子集：Claude / Anthropic 控制台 / Chutes / ClinePass / CommandCode / Doubao / 阿里云百炼 / z.ai / ZenMux，各带 fetcher 写入的窗口长度）+ `bindingQuotaProjection`（对照 `RateWindow+BindingCap.swift`：只有「更长且正在耗尽」的泳道才把主泳道按 100% + 全部闸门的最晚恢复时间展示；任一闸门没有重置时间就不承诺时间，返回 0 不显示倒计时）+ `primaryDisplayWindow`。首页卡片与摘要、详情页主泳道、桌面组件数据都走这个投影，`Reminders` 仍按原始窗口判定。
+- **验证**：`devecocli check lint` 无新增问题（4 条 `await-thenable` 为既有）；`devecocli build` BUILD SUCCESSFUL（顺带修掉编译器新报的 `MoreProviders6.ets` 里 `core` 可能为 null 的收窄问题——函数内部做过 null 判断不会收窄实参，改成显式 `core != null &&`）；本地单测 60/60（新增 `Lane_mapping_and_labels`，覆盖标签表补齐、绑定泳道表、投影的六种分支、展示窗口不被误用、Doubao 探测窗口标签）。
+- **产物**：`ace build apk` BUILD SUCCESSFUL —— `app-release.apk` 77,396,079 B（≈ 73.8 MB），sha256 `a7a95bbf36365780aac9d80e7f4b802f8a0546e49d0e1fcc3b8056d70bad6b27`。
+- **未接（记录原因）**：Groq 的第三泳道来自 Prometheus 指标路径（`promptCacheHitRatePerSecond > 0` 才出 `cache/min` 泳道），端口走的是控制台活动接口，没有该数据源；桌面小组件的 hero 泳道选择（源工程在「主 + 绑定泳道」里取剩余最少的一条当大号数字，其余进列表）仍未接 —— 组件数据模型是「每家一个数字」。
+
+上一轮已完成（已有泳道的服务商补上漏掉的附加泳道）：把源工程的附加窗口（`extraRateWindows` / 插件 `extraWindows`）与端口逐家对完，源工程共 14 处声明，端口有 10 处，本轮补齐了 5 处。
+
+- **NeuralWatt**（对照 `Plugins/neuralwatt.js`）：主泳道由原来的「美元额度」改成**订阅用电量 kWh**（`subscription.kwh_included` / `kwh_used`，重置时间 `current_period_end`），并补上 **key-allowance 附加泳道**（标题 `Key <周期>`，`blocked` 时 100%，否则 `spent_usd / limit_usd`）。同时按插件结构改读 `balance.*` / `subscription.*` / `key.allowance.*`（平铺旧字段仍作回退），补 `period: Neuralwatt prepaid balance` 与身份（`subscription.plan` → 「Scale Plan」、回落 `accounting_method`）。
+- **ElevenLabs**（对照 `Plugins/elevenlabs.js`）：补 **voice-slots** 与 **professional-voices** 两条附加泳道（分子分母都在且分母 > 0 才出），主泳道分母为 0 时按源工程报 0%（原先直接不出泳道），身份改成插件的 `tier`（词首大写、非 `active` 的 `status` 拼在后）。
+- **Sub2API**（对照 `Plugins/sub2api.js`）：有 `subscription` 时改用 **日 / 周 / 月** 三条泳道（`*_usage_usd / *_limit_usd`，只有 limit > 0 才出），没有订阅包才回退 `quota`；并补 **rate_limits[] 附加泳道**（`5h` / `1d` / `7d` → 「5 hour limit」/「Daily limit」/「7 day limit」，带 `reset_at`）。身份对齐插件的 `planName`。
+- **Claude**（对照 `ClaudeWebExtraRateWindowParser` + `ClaudeScopedWeeklyLimitMapper`）：`/usage` 响应的 `limits[]` 里 `kind=weekly_scoped` / `group=weekly` 的**模型限定周额度** → 泳道 `claude-weekly-scoped-<slug>`、标题「<模型名> only」（all-models 范围、重复 id、非数字百分比全部跳过）；另有 **Daily Routines** 泳道（`seven_day_routines` 等 7 个候选键，取第一个形状对的）。顺序与源工程一致：模型限定在前、Routines 在后。
+- **OpenCode / OpenCode Go**（对照 `OpenCodeUsageSnapshot` / `OpenCodeGoUsageSnapshot`）：补 **Renews** 附加泳道（id `renewal`、0%、重置时间为续费日，只有拿到续费时间才出）。
+- **确认无需动**：Amp（amp-free）、Codex（additional rate limits）、Cursor（Grok Bot sand usage）、Doubao、Zai（MCP）、ClinePass、Synthetic、Crof、LiteLLM、LLMProxy、Factory 端口都已有附加泳道。**未补的两处**：Copilot 的附加泳道来自 GitHub 计费预算页面（`CopilotBudgetWebFetcher`，~700 行的 Web 抓取，端口尚未实现该路径）；Mistral 的 `mistral-monthly-plan`（vibe 预算）同前一轮，依赖 React Flight 流解析。Zed / Kiro / Antigravity / Helmcode 端口未接入。Kimi 的「Code 7-day」额外泳道只在它与周额度不一致时才展示，端口已把「Total usage」作为第三泳道给出，故保留现状。
+- **验证**：`devecocli check arkts` 0 error（47 文件）；本地单测 59/59（新增 `Extra_lane_catalog`，覆盖 ElevenLabs 席位泳道与计划名、NeuralWatt kWh 主泳道 / key-allowance / blocked=100% / 字段缺失、Sub2API 订阅三泳道与 rate_limits 命名、Claude slug 与 all-models 判定、模型限定泳道去重与顺序、Routines 候选键优先级）。
+
+本轮已完成（只显示余额的服务商补上源工程泳道）：Command Code 那轮之后按「源工程有百分比泳道、我们端口只有余额」逐家比对了一遍，补齐了三家，其余家确认源工程本来就没有分母（不是漏迁）。
+
+- **Manus（对照 `Plugins/manus.js`）**：原先只显示余额，现在按「月度套餐额度（`proMonthlyCredits`）→ primary、刷新额度（`maxRefreshCredits`）→ secondary」出两条泳道，已用 = 分母 − 剩余（`proMonthlyCredits − periodicCredits` / `maxRefreshCredits − refreshCredits`），刷新泳道带 `nextRefreshTime` 重置时间；**分母为 0/缺失时不出该泳道**（分母未知时报 100% 会把已花掉的额度显示成「未动用」）。明细补 `刷新上限` 与 `Pro 月度已用` / `刷新已用` 行，`loginMethod` 对齐插件的 `Balance: N credits`。
+- **Perplexity（对照 `Plugins/perplexity.js`）**：`credit_grants` 按 `type` 汇总成「周期 / 赠金 / 已购」三池，`total_usage_cents` 按 **周期 → 已购 → 赠金** 顺序依次扣减；赠金只算未过期的（过期赠金不入分母，否则泳道永远显示「未动用」）。三条泳道分别对应元数据表里既有的 `Credits` / `Bonus credits` / `Purchased`；只有赠金/已购时不出主泳道（源工程同样没有），三池全空时主泳道报 100% 并带续费时间，`loginMethod` 按周期额度给 Pro / Max。明细补 `周期额度` / `赠金额度` / `已购额度` 三条已用/总额行。
+- **Nous Portal（对照 `Plugins/nous.js`）**：补上主泳道 `月度授予（monthly_credits）− 剩余（credits_remaining）`，重置时间取订阅的 `current_period_end`；授予额度或剩余额度缺一就不出泳道。顺带对齐插件的 `loginMethod`（`subscription.plan`，没有就用 `has_active_subscription` 回落 `Subscription`）。
+- **确认无需改动**（源工程同样没有分母）：DeepSeek / Moonshot 标了 `balanceOnly`、xAI 插件只回预付余额与近 30 天花费、Fireworks 注释写明「prepaid with no quota windows」、AiAnd 与 Groq 控制台路径 `primary: nil`、Anthropic Console 的 Admin API 快照也是 nil、Ollama 的 API Key 路径（我们端口实现的那条）同为零窗口、SiliconFlow 与 Crof 源工程没有对应实现。**Mistral 暂未补**：它的 API 预算窗口来自 `admin.mistral.ai/organization/subscription` 页面的 React Flight 流（`MistralSubscriptionBudgetParser`，约 170 行流式解析），不是 API 字段，本轮未动，仍只显示钱包/信用余额。
+- **验证**：`devecocli check arkts` 0 error（47 文件）；本地单测 58/58（新增 `Balance_only_lane_catalog`，覆盖 `pct` 的 100% / 截断语义、Manus 两条泳道与分母缺失分支、Nous 缺字段分支、Perplexity 分池与「周期 → 已购 → 赠金」扣减顺序、过期赠金剔除、无周期池时的主泳道缺省、三池全空时的 100% 占位）。
+
+本轮已完成（Command Code 月度额度按套餐总额显示已用/剩余）：`/billing/credits` 只返回**剩余**的 `monthlyCredits`，总额只在定价页上，所以源工程把「套餐 → 月度额度（美元）」做成静态目录 `CommandCodePlanCatalog`（`individual-go` $10 / `individual-pro` $30 / `individual-pro-v1` $80 / `individual-goat` $70 / `individual-max` $150 / `individual-ultra` $300），按 subscriptions 返回的 `planId` 查表，已用 = 总额 − 剩余。本轮照搬这套：
+
+- **新增 `COMMAND_CODE_PLANS` 目录 + `commandCodePlanFor`**（大小写不敏感，未登记的 planId 返回 null）、`commandCodeUSD`（对照 `formatUSD`：< $100 两位小数，否则取整）。
+- **第三窗口补上月度泳道**：`commandCodeMonthlyWindow` 对照 `makeMonthlyWindow` —— 有套餐时百分比 = (总额 − 剩余) / 总额（截断 [0,100]），重置时间用 `currentPeriodEnd`；已验证免费版（订阅查询显式返回 `data: null`）且还有余额时报 0%；**订阅查询失败或返回目录外 planId 时不出泳道**，因为总额不可知，报 0% 会把已花掉的付费额度显示成「未动用」。泳道名由既有元数据表给为 `Monthly`。
+- **明细补行**：命中套餐时 `计划` 改显套餐名（Go / Pro / GOAT / Max / Ultra）并加一行 `月度已用`（`$3.20 of $10.00`）；订阅失败时不再误报「免费版」（旧实现只看 `success` 标志，失败信封也会落到 else 分支）。
+- **验证**：`devecocli check arkts` 0 error（47 文件）；本地单测 57/57（新增 `CommandCode_plan_catalog`，覆盖目录查表、美元文案、截断、免费版与不可知三种分支）。
+
+本轮已完成（Command Code 一直报「凭证无效或已过期」的修复）：对照源工程 `Sources/CodexBarCore/Providers/CommandCode/` 逐行比对后，问题出在凭证形态而不是查询逻辑——旧实现用「串里有没有 `=`」来分流，含 `=` 就当 Cookie 原样塞进 `Cookie` 头、不含 `=` 就当 API Key 发 `Authorization: Bearer`。
+
+- **裸令牌被当成 API Key**：源工程的 `CommandCodeCookieHeader.override(from:)` 对裸令牌是补上生产会话 Cookie 名（`__Secure-better-auth.session_token=<token>`）再发，所以「只复制 Cookie 的值」在 macOS 上是正常的；我们却发 Bearer，better-auth 直接 401。
+- **`Cookie:` 整串粘贴解析错**：源工程先用 `CookieHeaderNormalizer.normalize` 从 `Cookie: …` 头 / cURL 抓包里抽 Cookie 串，我们则把 `Cookie: __Secure-…=xyz` 整串当 Cookie 值发出去，服务端解析出的 Cookie 名变成 `Cookie: __Secure-…`，同样 401。现在按 `CookieHeaderNormalizer` 的九条正则抽串、去首尾引号，再按 `CommandCodeCookieHeader.extractSessionCookie` 优先发命中的已知会话 Cookie（`__Secure-commandcode_prod_.session_token` / `__Host-*` / `better-auth.session_token` 等六种）。
+- **API Key 走另一套端点**：官方 CLI 与 pi 插件的 `usage` 用 `Authorization: Bearer user_xxx` 打 `/alpha/billing/{credits,subscriptions}`，而网页会话的 `/internal/billing/*` 是源工程验证过的路径。现在按 `user_` 前缀分流：会话凭证固定走 `/internal`，API Key 先走 `/alpha`、在 401/403/404 时回退 `/internal`，订阅查询沿用 credits 成功的那个前缀。
+- **验证**：`devecocli check arkts` 0 error（47 文件）；本地单测 56/56（新增 `CommandCode_credential`，覆盖规整、六种会话 Cookie 名、裸令牌、cURL 与 API Key 判定）。
 
 本轮已完成（详情页配置凭证后仍报「凭证无效或已过期」的修复）：根因不是查询失败，而是 **详情页 UI 不随 store 更新**——`ProviderState` 是普通类，ArkUI 只对可观察对象做依赖追踪，写在 `ListItem` 里的 `@Builder body(s)` 在 `applySetting` / `refreshOne` 改写 `s.snapshot` / `s.setting` 后不会重建，页面一直停在上一次渲染结果（典型表现：新凭证其实查询成功了，卡片仍显示旧的「凭证无效或已过期」，退出重进页面才对）。
 
@@ -353,9 +398,9 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 待办（按优先级）：
 
 1. **泳道门控与明细行**：
-   - `primaryBindingQuotaLanes`（Claude/Chutes/ZenMux/z.ai/CommandCode 为 `.secondary`，ClinePass/Doubao/阿里云百炼为 `.secondary + .tertiary`）：源工程语义是「较长的配额泳道有余额时，会话泳道才可用」，目前我们只标注窗口、未渲染该“受限”状态。
+   - `primaryBindingQuotaLanes`（Claude/Chutes/ZenMux/z.ai/CommandCode 为 `.secondary`，ClinePass/Doubao/阿里云百炼为 `.secondary + .tertiary`）：已在本轮落地（见上「主/次/第三泳道的映射与标签核对」小节）；仍缺的是桌面小组件的 hero 泳道选择（`WidgetTilePlan`：在「主 + 绑定泳道」里取剩余最少的一条当大号数字）。
    - `widgetSelectable: false`（如 Doubao / xAI / Perplexity / CommandCode 等）在源工程里不出现在桌面小组件；我们已支持在设置页手选卡片显示哪几家，但尚未接这个开关（这些服务商仍会出现在候选列表里）。
-   - `supportsCredits: true`（Codex / OpenRouter / MiMo / CommandCode / ZoomMate / Amp / Codebuff）对应源工程的 Credits 泳道与 `creditsHint`，我们只在 `providerCost` 存在时展示费用。
+   - `supportsCredits: true`（Codex / OpenRouter / MiMo / ZoomMate / Amp / Codebuff）对应源工程的 Credits 泳道与 `creditsHint`，我们只在 `providerCost` 存在时展示费用（Command Code 已按套餐目录补齐月度泳道，见本轮小节）。
    - **明细行剩余项**：Venice 的网页版 `Credits` 六行（`Bank cap`/`Next refill`）与其 `Used this cycle` 进度条——需要平台网页会话而非 API Key（源工程的 `progress` 只来自 VeniceWebUsageFetcher 与 Copilot，Copilot 已接）；HuggingFace 的 `Credits` 分组（Billing 页 HTML 抓余额）；Poe 的 `Daily points` 图表（源工程也未给 Poe 配 chart，其“每日点数”只在用量项里展示）；IBMBob 的 `teams/{id}/users/{userID}` 逐人预算端点；MiniMax 的平台网页版配额（HTML 抓取，我们仍用 API Token）（DeepSeek 未带平台令牌时已按 macOS 的 `webSessionRequired` 提示处理）；`costSummaryTitles` 目前只作为策略表保留（源工程用它把分组从“用量项选择器”里排除，我们没有该选择器）。图表已覆盖源工程全部 5 处 `makeChart`（Claude Admin / Groq / MiniMax / DeepSeek / ZoomMate），其余服务商源工程本就不画图。
 2. **Bedrock 成本日线**：源工程 `fetchDailyReport`（Cost Explorer DAILY 粒度）用于成本历史曲线，当前仅取本月汇总，统计页暂无 Bedrock 成本曲线。
 3. **iOS 重验证**：Android 已用 `ace build apk` 重建并在模拟器上实测桌面组件（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商（iOS 侧同样没有 Form Kit，桌面组件需按 WidgetKit 另写）。

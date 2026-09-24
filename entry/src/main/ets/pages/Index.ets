@@ -3,7 +3,7 @@
  * 服务商用量卡片列表：用量条 + 重置倒计时 + 余额 + 下拉刷新。
  */
 
-import { ProviderState } from '../model/Models';
+import { primaryDisplayWindow, ProviderState, RateWindow } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
@@ -76,9 +76,16 @@ struct Index {
       return `余额 ${snap.providerCost.displayText}`;
     }
     if (snap.primary != null) {
-      return Format.percent(snap.primary.usedPercent);
+      // 主泳道被更长的绑定泳道卡住时按投影展示（对照菜单卡片的 bindingQuotaProjection）
+      const shown = primaryDisplayWindow(s.descriptor.id, snap, Date.now());
+      return Format.percent(shown != null ? shown.usedPercent : snap.primary.usedPercent);
     }
     return '已更新';
+  }
+
+  /** 主泳道的展示窗口（命中绑定泳道投影时替换百分比与重置时间） */
+  private primaryWindow(s: ProviderState): RateWindow | null {
+    return primaryDisplayWindow(s.descriptor.id, s.snapshot, Date.now());
   }
 
   build() {
@@ -189,7 +196,7 @@ struct Index {
         if (s.snapshot.primary != null) {
           WindowBlock({
             title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : '会话',
-            win: s.snapshot.primary,
+            win: this.primaryWindow(s) ?? s.snapshot.primary,
             compact: true
           })
         }

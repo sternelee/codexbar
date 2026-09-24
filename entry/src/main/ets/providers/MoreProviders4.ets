@@ -11,7 +11,8 @@
  * Cookie/令牌类：
  * - Devin:      GET app.devin.ai/api/{org}/billing/quota/usage（Bearer）
  * - Abacus:     GET apps.abacus.ai/api/_getBillingInfo（Cookie）
- * - CommandCode:GET api.commandcode.ai/internal/billing/{credits,subscriptions}（Cookie）
+ * - CommandCode:GET api.commandcode.ai/internal/billing/{credits,subscriptions}（Cookie，对照 macOS）
+ *               或 api.commandcode.ai/alpha/billing/{credits,subscriptions}（user_ API Key，对照官方 CLI）
  * - LongCat:    GET longcat.chat/api/...（Cookie，token lots）
  * - ZoomMate:   GET zoommate.zoom.us/ai-computer/api/v1/credits/status（Bearer/Cookie）
  * - Notion:     POST app.notion.com/api/v3/{getSpaces,getCreditRateLimitStatus}（Cookie token_v2）
@@ -22,6 +23,8 @@ import { asArray, asObj, bool, Json, num, optNum, optStr, str } from '../net/Jso
 import {
   AuthKind,
   makeWindow,
+  NamedRateWindow,
+  pct,
   ProviderCostSnapshot,
   ProviderDescriptor,
   ProviderDetailRow,
@@ -71,6 +74,51 @@ function getNum3(o: Record<string, Json>, keys: string[]): number | null {
 // ElevenLabs
 // ---------------------------------------------------------------------------
 
+/**
+ * 词首大写（对照插件里的 title()）：下划线换成空格后把每个词的首字母大写。
+ * NeuralWatt 的 plan / accounting_method / allowance.period 与 ElevenLabs 的 tier 都用它。
+ */
+export function titleCaseWords(value: string): string {
+  const words = value.replace(/_/g, ' ').toLowerCase().split(' ');
+  const out: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    out.push(w.length === 0 ? w : `${w.charAt(0).toUpperCase()}${w.slice(1)}`);
+  }
+  return out.join(' ');
+}
+
+/** ElevenLabs 的一条席位泳道（对照插件 elevenlabs.js 的 voice-slots / professional-voices） */
+export class ElevenLabsSlot {
+  id: string = '';
+  title: string = '';
+  used: number | null = null;
+  limit: number | null = null;
+}
+
+/** 席位泳道：分子分母都拿到且分母 > 0 才出泳道（其余情况源工程也不给泳道） */
+export function elevenLabsSlotWindows(slots: ElevenLabsSlot[]): NamedRateWindow[] {
+  const out: NamedRateWindow[] = [];
+  for (let i = 0; i < slots.length; i++) {
+    const s = slots[i];
+    if (s.used != null && s.limit != null && s.limit > 0) {
+      out.push({ id: s.id, title: s.title, window: makeWindow(pct(s.used, s.limit), 0) });
+    }
+  }
+  return out;
+}
+
+/** 计划名（对照插件：tier 词首大写；status 不是 active 时拼在后面） */
+export function elevenLabsLoginMethod(tier: string | null, status: string | null): string {
+  const suffix = status != null && status.length > 0 && status.toLowerCase() !== 'active'
+    ? ` · ${status}`
+    : '';
+  if (tier != null && tier.length > 0) {
+    return `${titleCaseWords(tier)}${suffix}`;
+  }
+  return status != null ? status : '';
+}
+
 class ElevenLabsProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'elevenlabs',
@@ -98,17 +146,45 @@ class ElevenLabsProvider implements UsageProvider {
     const used = num(root, 'character_count', 0);
     const limit = num(root, 'character_limit', 0);
     const resetSec = optNum(root, 'next_character_count_reset_unix');
-    let primary: RateWindow | null = null;
-    if (limit > 0) {
-      primary = makeWindow(Math.min(100, (used / limit) * 100), resetSec != null && resetSec > 0 ? resetSec * 1000 : 0, true);
-    }
+    // 主泳道：分母为 0 时报 0%（对照插件：character_limit > 0 ? pct : 0）
+    const primary = makeWindow(
+      limit > 0 ? pct(used, limit) : 0,
+      resetSec != null && resetSec > 0 ? resetSec * 1000 : 0,
+      true
+    );
+    const slots: ElevenLabsSlot[] = [];
+    const voiceSlot = new ElevenLabsSlot();
+    voiceSlot.id = 'voice-slots';
+    voiceSlot.title = 'Voice slots';
+    voiceSlot.used = optNum(root, 'voice_slots_used');
+    voiceSlot.limit = optNum(root, 'voice_limit');
+    slots.push(voiceSlot);
+    const proSlot = new ElevenLabsSlot();
+    proSlot.id = 'professional-voices';
+    proSlot.title = 'Professional voices';
+    proSlot.used = optNum(root, 'professional_voice_slots_used');
+    proSlot.limit = optNum(root, 'professional_voice_limit');
+    slots.push(proSlot);
+    const slotsWindows = elevenLabsSlotWindows(slots);
+
     const snap = UsageSnapshot.success(primary, null, null);
+    snap.extraRateWindows = slotsWindows;
+    const tier = optStr(root, 'tier');
+    snap.identity = {
+      accountEmail: '', accountOrganization: '',
+      loginMethod: elevenLabsLoginMethod(tier, optStr(root, 'status')),
+    };
     const rows: ProviderDetailRow[] = [
       { label: '字符用量', value: `${Format.compact(used)} / ${Format.compact(limit)}` },
     ];
-    const tier = optStr(root, 'tier');
     if (tier != null) {
       rows.push({ label: '套餐', value: tier });
+    }
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (s.used != null && s.limit != null && s.limit > 0) {
+        rows.push({ label: s.title, value: `${s.used} / ${s.limit}` });
+      }
     }
     const section: ProviderDetailSection = { title: '订阅', rows: rows };
     snap.details = [section];
@@ -210,6 +286,99 @@ class FireworksProvider implements UsageProvider {
 // NeuralWatt
 // ---------------------------------------------------------------------------
 
+/** NeuralWatt `/v1/quota` 的解析结果（对照插件 neuralwatt.js 的 balance / subscription / key.allowance） */
+export class NeuralWattQuota {
+  remainingUSD: number = 0;
+  usedUSD: number = 0;
+  totalUSD: number = 0;
+  kwhIncluded: number = 0;
+  kwhConsumed: number = 0;
+  periodEndMs: number = 0;
+  allowanceLimitUSD: number | null = null;
+  allowanceSpentUSD: number | null = null;
+  allowanceBlocked: boolean = false;
+  allowancePeriod: string = '';
+  plan: string = '';
+  accountingMethod: string = '';
+}
+
+/** 非负数字（对照插件 nonnegative：只在有限且 >= 0 时算数） */
+function nonneg(value: number | null): number | null {
+  return value != null && isFinite(value) && value >= 0 ? value : null;
+}
+
+/** 正数（对照插件 positive） */
+function positive(value: number | null): number | null {
+  return value != null && isFinite(value) && value > 0 ? value : null;
+}
+
+export function neuralWattQuota(root: Record<string, Json>): NeuralWattQuota {
+  const q = new NeuralWattQuota();
+  const balance = asObj(root['balance']) ?? root;
+  const subscription = asObj(root['subscription']);
+  const keyObj = asObj(root['key']);
+  const allowance = keyObj != null ? asObj(keyObj['allowance']) : asObj(root['allowance']);
+
+  // 余额：remaining / used 互陀（对照插件）
+  const rawRemaining = nonneg(getNum3(balance, ['credits_remaining_usd']));
+  const rawUsed = nonneg(getNum3(balance, ['credits_used_usd']));
+  const rawTotal = positive(getNum3(balance, ['total_credits_usd'])) ??
+    (rawUsed != null && rawRemaining != null ? rawUsed + rawRemaining : null);
+  q.totalUSD = rawTotal ?? 0;
+  q.usedUSD = rawUsed ?? (rawTotal != null && rawRemaining != null ? Math.max(0, rawTotal - rawRemaining) : 0);
+  q.remainingUSD = rawRemaining ?? (rawTotal != null && rawUsed != null ? Math.max(0, rawTotal - rawUsed) : 0);
+
+  if (subscription != null) {
+    const kwhUsed = nonneg(getNum3(subscription, ['kwh_used']));
+    const kwhRemaining = nonneg(getNum3(subscription, ['kwh_remaining']));
+    const included = positive(getNum3(subscription, ['kwh_included'])) ??
+      (kwhUsed != null && kwhRemaining != null ? kwhUsed + kwhRemaining : null);
+    q.kwhIncluded = included ?? 0;
+    q.kwhConsumed = kwhUsed ?? (included != null && kwhRemaining != null ? Math.max(0, included - kwhRemaining) : 0);
+    q.periodEndMs = isoMs3(optStr(subscription, 'current_period_end'));
+    q.plan = optStr(subscription, 'plan') ?? '';
+  }
+  q.accountingMethod = str(balance, 'accounting_method', '');
+
+  if (allowance != null) {
+    q.allowanceLimitUSD = nonneg(getNum3(allowance, ['limit_usd']));
+    q.allowanceSpentUSD = nonneg(getNum3(allowance, ['spent_usd']));
+    q.allowanceBlocked = bool(allowance, 'blocked');
+    q.allowancePeriod = optStr(allowance, 'period') ?? '';
+  }
+  return q;
+}
+
+/** NeuralWatt 的主泳道（订阅 kWh）与附加泳道（密钥限额） */
+export class NeuralWattWindows {
+  primary: RateWindow | null = null;
+  extras: NamedRateWindow[] = [];
+}
+
+export function neuralWattWindows(q: NeuralWattQuota): NeuralWattWindows {
+  const windows = new NeuralWattWindows();
+  // 主泳道是订阅用电量（kWh），不是美元余额（对照插件 neuralwatt.js 的 primary）
+  if (q.kwhIncluded > 0) {
+    windows.primary = makeWindow(pct(q.kwhConsumed, q.kwhIncluded), q.periodEndMs);
+  }
+  // 密钥限额：被封锁时直接报 100%，否则要求 spent 与 limit 都在且 limit > 0（对照插件）
+  let allowancePercent: number | null = null;
+  if (q.allowanceBlocked) {
+    allowancePercent = 100;
+  } else if (q.allowanceSpentUSD != null && q.allowanceLimitUSD != null && q.allowanceLimitUSD > 0) {
+    allowancePercent = pct(q.allowanceSpentUSD, q.allowanceLimitUSD);
+  }
+  if (allowancePercent != null) {
+    const period = q.allowancePeriod.length > 0 ? q.allowancePeriod : 'allowance';
+    windows.extras.push({
+      id: 'key-allowance',
+      title: `Key ${titleCaseWords(period)}`,
+      window: makeWindow(allowancePercent, 0),
+    });
+  }
+  return windows;
+}
+
 class NeuralWattProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'neuralwatt',
@@ -237,24 +406,41 @@ class NeuralWattProvider implements UsageProvider {
     if (root == null) {
       return UsageSnapshot.failure('响应解析失败');
     }
-    const remaining = getNum3(root, ['credits_remaining_usd']) ?? 0;
-    const used = getNum3(root, ['credits_used_usd']) ?? 0;
-    const allowance = getNum3(root, ['allowance']) ?? 0;
-    let primary: RateWindow | null = null;
-    if (allowance > 0) {
-      primary = makeWindow(Math.min(100, (used / allowance) * 100), isoMs3(optStr(root, 'current_period_end')), true);
-    }
-    const snap = UsageSnapshot.success(primary, null, null);
+    // /v1/quota 的结构（对照插件 neuralwatt.js）：余额在 balance.*、订阅额度在 subscription.*、
+    // 密钥限额在 key.allowance.*；root 上平铺的旧字段作为回退，兼容早期部署。
+    const q = neuralWattQuota(root);
+    const windows = neuralWattWindows(q);
+    const snap = UsageSnapshot.success(windows.primary, null, null);
+    snap.extraRateWindows = windows.extras;
     snap.providerCost = {
-      remaining: remaining, used: used, currency: 'USD',
-      displayText: Format.money(remaining, 'USD'),
+      remaining: q.remainingUSD, used: q.usedUSD, currency: 'USD',
+      displayText: Format.money(q.remainingUSD, 'USD'),
+      period: 'Neuralwatt prepaid balance',
+    };
+    snap.identity = {
+      accountEmail: '', accountOrganization: '',
+      loginMethod: q.plan.length > 0
+        ? `${titleCaseWords(q.plan)} plan`
+        : (q.accountingMethod.length > 0 ? titleCaseWords(q.accountingMethod) : ''),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '额度余量', value: Format.money(remaining, 'USD') },
-      { label: '已使用', value: Format.money(used, 'USD') },
+      { label: '额度余量', value: Format.money(q.remainingUSD, 'USD') },
+      { label: '已使用', value: Format.money(q.usedUSD, 'USD') },
     ];
-    if (allowance > 0) {
-      rows.push({ label: '周期额度', value: Format.money(allowance, 'USD') });
+    if (q.totalUSD > 0) {
+      rows.push({ label: '总额度', value: Format.money(q.totalUSD, 'USD') });
+    }
+    if (q.kwhIncluded > 0) {
+      rows.push({
+        label: '订阅用电',
+        value: `${q.kwhConsumed} / ${q.kwhIncluded} kWh`,
+      });
+    }
+    if (q.allowanceLimitUSD != null && q.allowanceLimitUSD > 0) {
+      rows.push({
+        label: '密钥限额',
+        value: `${Format.money(q.allowanceSpentUSD ?? 0, 'USD')} / ${Format.money(q.allowanceLimitUSD, 'USD')}`,
+      });
     }
     const section: ProviderDetailSection = { title: '配额', rows: rows };
     snap.details = [section];
@@ -528,6 +714,72 @@ class CodebuffProvider implements UsageProvider {
 // Sub2API（自托管）
 // ---------------------------------------------------------------------------
 
+/** Sub2API 的泳道集合（对照插件 sub2api.js）：主泳道优先取订阅包、其次配额，另有 rate_limits 附加泳道 */
+export class Sub2APIWindows {
+  primary: RateWindow | null = null;
+  secondary: RateWindow | null = null;
+  tertiary: RateWindow | null = null;
+  extras: NamedRateWindow[] = [];
+}
+
+/** rate_limits[].window 的分钟/标题映射（对照插件 sub2api.js） */
+const SUB2API_MINUTES: string[] = ['5h', '1d', '7d'];
+const SUB2API_TITLES: string[] = ['5 hour limit', 'Daily limit', '7 day limit'];
+
+export function sub2APIWindows(root: Record<string, Json>): Sub2APIWindows {
+  const windows = new Sub2APIWindows();
+  const sub = asObj(root['subscription']);
+  const quota = asObj(root['quota']);
+  if (sub != null) {
+    // 订阅包：日 / 周 / 月 三条泳道（只有 limit > 0 才出，否则该条为 null）
+    windows.primary = sub2APILane(sub, 'daily_usage_usd', 'daily_limit_usd');
+    windows.secondary = sub2APILane(sub, 'weekly_usage_usd', 'weekly_limit_usd');
+    windows.tertiary = sub2APILane(sub, 'monthly_usage_usd', 'monthly_limit_usd');
+  } else if (quota != null) {
+    const used = num(quota, 'used', 0);
+    const limit = optNum(quota, 'limit');
+    if (limit != null && limit > 0) {
+      windows.primary = makeWindow(pct(used, limit), 0);
+    }
+  }
+  const rates = asArray(root['rate_limits']);
+  if (rates != null) {
+    for (let i = 0; i < rates.length; i++) {
+      const rate = asObj(rates[i]);
+      if (rate == null) {
+        continue;
+      }
+      const key = optStr(rate, 'window');
+      const limit = optNum(rate, 'limit');
+      const used = optNum(rate, 'used');
+      if (key == null || key.length === 0 || limit == null || used == null) {
+        continue;
+      }
+      let title = `${key} limit`;
+      for (let j = 0; j < SUB2API_MINUTES.length; j++) {
+        if (SUB2API_MINUTES[j] === key.toLowerCase()) {
+          title = SUB2API_TITLES[j];
+          break;
+        }
+      }
+      windows.extras.push({
+        id: key,
+        title: title,
+        window: makeWindow(pct(used, limit), isoMs3(optStr(rate, 'reset_at'))),
+      });
+    }
+  }
+  return windows;
+}
+
+function sub2APILane(sub: Record<string, Json>, usedKey: string, limitKey: string): RateWindow | null {
+  const limit = optNum(sub, limitKey);
+  if (limit == null || limit <= 0) {
+    return null;
+  }
+  return makeWindow(pct(num(sub, usedKey, 0), limit), 0);
+}
+
 class Sub2ApiProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'sub2api',
@@ -560,14 +812,12 @@ class Sub2ApiProvider implements UsageProvider {
       return UsageSnapshot.failure('API Key 无效或未分配分组');
     }
     const unit = str(root, 'unit', 'USD');
-    const snap = UsageSnapshot.success(null, null, null);
-    const quota = asObj(root['quota']);
-    if (quota != null) {
-      const qUsed = num(quota, 'used', 0);
-      const qLimit = optNum(quota, 'limit');
-      if (qLimit != null && qLimit > 0) {
-        snap.primary = makeWindow(Math.min(100, (qUsed / qLimit) * 100), 0, true);
-      }
+    const windows = sub2APIWindows(root);
+    const snap = UsageSnapshot.success(windows.primary, windows.secondary, windows.tertiary);
+    snap.extraRateWindows = windows.extras;
+    if (windows.primary != null) {
+      // 主泳道标签（对照 Sub2APIProviderDescriptor.primaryLabel）：有订阅包（日/周/月）时叫 "Daily quota"
+      snap.primaryLabel = windows.secondary != null ? 'Daily quota' : 'Quota';
     }
     const balance = optNum(root, 'balance');
     if (balance != null) {
@@ -581,6 +831,8 @@ class Sub2ApiProvider implements UsageProvider {
     const planName = optStr(root, 'planName');
     if (planName != null) {
       rows.push({ label: '套餐', value: planName });
+      // 身份（对照插件：organization 与 loginMethod 都是 planName）
+      snap.identity = { accountEmail: '', accountOrganization: planName, loginMethod: planName };
     }
     if (sub != null) {
       const pairs: string[][] = [
@@ -789,9 +1041,132 @@ class AbacusProvider implements UsageProvider {
 // ---------------------------------------------------------------------------
 
 const CC_API = 'https://api.commandcode.ai';
+/** API Key（Provider API）侧的计费端点前缀，对照官方 CLI `usage` 与 pi 插件 */
+const CC_ALPHA = 'https://api.commandcode.ai/alpha';
 const CC_WEB = 'https://commandcode.ai';
 
-function ccHeaders(credential: string): Record<string, string> {
+/**
+ * 对照 macOS CookieHeaderNormalizer.headerPatterns：用户往往整段粘贴 `Cookie: …` 头或
+ * devtools 的 cURL 抓包，而不是裸的 `name=value`。直接把这坨文本塞进 Cookie 头，服务端解析
+ * 出来的 Cookie 名会变成 `Cookie: __Secure-…`，better-auth 认不出 → 一律 401「凭证无效」。
+ */
+const CC_HEADER_PATTERNS: RegExp[] = [
+  /-h\s*'cookie:\s*([^']+)'/i,
+  /-h\s*"cookie:\s*([^"]+)"/i,
+  /\bcookie:\s*'([^']+)'/i,
+  /\bcookie:\s*"([^"]+)"/i,
+  /\bcookie:\s*([^\r\n]+)/i,
+  /(?:^|\s)(?:--cookie|-b)\s*'([^']+)'/i,
+  /(?:^|\s)(?:--cookie|-b)\s*"([^"]+)"/i,
+  /(?:^|\s)-b([^\s=]+=[^\s]+)/i,
+  /(?:^|\s)(?:--cookie|-b)\s+([^\s]+)/i,
+];
+
+/** better-auth 在生产 / 开发下用过的会话 Cookie 名（对照 CommandCodeCookieHeader.supportedSessionCookieNames） */
+const CC_SESSION_COOKIE_NAMES: string[] = [
+  '__Secure-commandcode_prod_.session_token',
+  'commandcode_prod_.session_token',
+  '__Host-commandcode_prod_.session_token',
+  '__Host-better-auth.session_token',
+  '__Secure-better-auth.session_token',
+  'better-auth.session_token',
+];
+
+/** 裸令牌默认按生产会话 Cookie 名补齐（对照 CommandCodeCookieHeader.override 的 bare token 分支） */
+const CC_DEFAULT_SESSION_COOKIE = '__Secure-better-auth.session_token';
+
+/** 去首尾成对引号 */
+function ccStripQuotes(text: string): string {
+  if (text.length < 2) {
+    return text;
+  }
+  const head = text.charAt(0);
+  const tail = text.charAt(text.length - 1);
+  if ((head === '\'' && tail === '\'') || (head === '"' && tail === '"')) {
+    return text.substring(1, text.length - 1);
+  }
+  return text;
+}
+
+/**
+ * 规整用户粘贴的凭证：从 cURL / `Cookie:` 头里抽出 Cookie 串，再去引号
+ * （对照 macOS CookieHeaderNormalizer.normalize）。
+ */
+export function commandCodeNormalize(raw: string): string {
+  let value = raw == null ? '' : raw.trim();
+  if (value.length === 0) {
+    return '';
+  }
+  for (let i = 0; i < CC_HEADER_PATTERNS.length; i++) {
+    const m = CC_HEADER_PATTERNS[i].exec(value);
+    if (m != null && m.length > 1 && m[1] != null) {
+      const captured = m[1].trim();
+      if (captured.length > 0) {
+        value = captured;
+        break;
+      }
+    }
+  }
+  if (value.toLowerCase().startsWith('cookie:')) {
+    value = value.substring('cookie:'.length).trim();
+  }
+  return ccStripQuotes(value).trim();
+}
+
+/**
+ * 把粘贴内容组装成可用的 Cookie 头（对照 CommandCodeCookieHeader.override）。
+ * 已知会话 Cookie 命中时只发那一条；都没有但确实像 `name=value` 串时整串照发；
+ * 裸令牌（既无 `=` 也无 `;`）按生产会话 Cookie 名补齐 —— macOS 就是这么处理裸令牌的，
+ * 旧实现把它当 API Key 发 `Authorization: Bearer`，服务端必然 401。
+ */
+export function commandCodeCookieHeader(raw: string): string {
+  const text = commandCodeNormalize(raw);
+  if (text.length === 0) {
+    return '';
+  }
+  if (text.indexOf('=') < 0 && text.indexOf(';') < 0) {
+    return `${CC_DEFAULT_SESSION_COOKIE}=${text}`;
+  }
+  const parts = text.split(';');
+  const pairs: string[] = [];
+  const names: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    const eq = part.indexOf('=');
+    if (eq <= 0) {
+      continue;
+    }
+    const name = part.substring(0, eq).trim();
+    const value = part.substring(eq + 1).trim();
+    if (name.length === 0 || value.length === 0) {
+      continue;
+    }
+    pairs.push(`${name}=${value}`);
+    names.push(name.toLowerCase());
+  }
+  for (let i = 0; i < CC_SESSION_COOKIE_NAMES.length; i++) {
+    const idx = names.indexOf(CC_SESSION_COOKIE_NAMES[i].toLowerCase());
+    if (idx >= 0) {
+      return pairs[idx];
+    }
+  }
+  return pairs.join('; ');
+}
+
+/**
+ * 是否为官方 Provider API Key（形如 `user_xxx`，见官方 CLI 与 pi 插件的 COMMAND_CODE_API_KEY）。
+ * 其余一律按网页会话凭证处理：裸串是会话令牌，含 `=` / `;` 是 Cookie 头。
+ */
+export function commandCodeIsApiKey(raw: string): boolean {
+  const text = raw == null ? '' : raw.trim();
+  if (text.length === 0 || text.indexOf('=') >= 0 || text.indexOf(';') >= 0) {
+    return false;
+  }
+  return /^user_[\w.-]+$/.test(text);
+}
+
+/** 凭证请求头：网页会话走 Cookie，API Key 走 Authorization */
+function ccHeaders(credential: string, apiKey: boolean): Record<string, string> {
   // 对照 macOS：浏览器 UA + Origin/Referer 为服务端必需校验头
   const h: Record<string, string> = {
     'accept': 'application/json, text/plain, */*',
@@ -800,13 +1175,17 @@ function ccHeaders(credential: string): Record<string, string> {
     'origin': CC_WEB,
     'referer': `${CC_WEB}/`,
   };
-  if (credential.indexOf('=') >= 0) {
-    h['cookie'] = credential;
-  } else {
-    // API Key 模式
+  if (apiKey) {
     h['authorization'] = `Bearer ${credential}`;
+  } else {
+    h['cookie'] = commandCodeCookieHeader(credential);
   }
   return h;
+}
+
+/** 计费端点换用 alpha 前缀重试的场合：凭证类型不对或路径不存在的可恢复错误 */
+function ccShouldRetryAlpha(code: number): boolean {
+  return code === 401 || code === 403 || code === 404;
 }
 
 /** 数值兼容数字/字符串（对照 macOS double(from:)） */
@@ -841,6 +1220,76 @@ function ccDateMs(v: Json | null): number {
   return 0;
 }
 
+/**
+ * 套餐 → 月度额度总额（美元）的静态目录（对照 macOS CommandCodePlanCatalog.plans）。
+ *
+ * `/billing/credits` 只给出**剩余**的 monthlyCredits，总额只发布在定价页上，按 subscriptions
+ * 返回的 planId 查表；没有它就无法算月度泳道的已用百分比。
+ */
+export interface CommandCodePlan {
+  id: string;
+  displayName: string;
+  monthlyCreditsUSD: number;
+}
+
+export const COMMAND_CODE_PLANS: CommandCodePlan[] = [
+  { id: 'individual-go', displayName: 'Go', monthlyCreditsUSD: 10 },
+  { id: 'individual-goat', displayName: 'GOAT', monthlyCreditsUSD: 70 },
+  { id: 'individual-pro', displayName: 'Pro', monthlyCreditsUSD: 30 },
+  { id: 'individual-pro-v1', displayName: 'Pro', monthlyCreditsUSD: 80 },
+  { id: 'individual-max', displayName: 'Max', monthlyCreditsUSD: 150 },
+  { id: 'individual-ultra', displayName: 'Ultra', monthlyCreditsUSD: 300 },
+];
+
+/** planId → 套餐（大小写不敏感；未知套餐返回 null，对照 CommandCodePlanCatalog.plan(forID:)） */
+export function commandCodePlanFor(planId: string | null): CommandCodePlan | null {
+  if (planId == null || planId.length === 0) {
+    return null;
+  }
+  const want = planId.toLowerCase();
+  for (let i = 0; i < COMMAND_CODE_PLANS.length; i++) {
+    if (COMMAND_CODE_PLANS[i].id === want) {
+      return COMMAND_CODE_PLANS[i];
+    }
+  }
+  return null;
+}
+
+/** 美元文案（对照 CommandCodeUsageSnapshot.formatUSD：< $100 保留两位，否则取整） */
+export function commandCodeUSD(value: number): string {
+  return value < 100 ? `$${value.toFixed(2)}` : `$${Math.round(value)}`;
+}
+
+/**
+ * 月度泳道（对照 CommandCodeUsageSnapshot.makeMonthlyWindow）：总额取自套餐目录，
+ * 已用 = 总额 − 剩余，截断在 [0, 总额]，重置时间用账期截止。
+ *
+ * `freeTierConfirmed` 只在订阅查询**显式成功且 data 为 null** 时为真；查询超时/失败、或返回了
+ * 本目录不认识的 planId 时为假——这两种情况总额都不可知，宁可不出泳道，也不要报 0% 把已经花掉的
+ * 付费额度显示成「未动用」。
+ */
+export function commandCodeMonthlyWindow(
+  plan: CommandCodePlan | null,
+  monthlyRemaining: number,
+  purchased: number,
+  periodEndMs: number,
+  freeTierConfirmed: boolean
+): RateWindow | null {
+  if (plan != null && plan.monthlyCreditsUSD > 0) {
+    const total = plan.monthlyCreditsUSD;
+    const used = Math.max(0, Math.min(total, total - monthlyRemaining));
+    return makeWindow(Math.max(0, Math.min(100, (used / total) * 100)), periodEndMs, true);
+  }
+  if (!freeTierConfirmed) {
+    return null;
+  }
+  // 免费版：没有月度额度可消耗，只要还有可花费余额就报 0%
+  if (monthlyRemaining > 0 || purchased > 0) {
+    return makeWindow(0, periodEndMs, true);
+  }
+  return null;
+}
+
 function ccWindow(limit: Record<string, Json> | null): RateWindow | null {
   if (limit == null) {
     return null;
@@ -859,7 +1308,7 @@ class CommandCodeProvider implements UsageProvider {
     title: 'Command Code',
     authKind: AuthKind.SESSION,
     accentColor: '#A04DFD',
-    authHint: '粘贴 commandcode.ai 的会话 Cookie，或 API Key',
+    authHint: '粘贴 commandcode.ai 的会话 Cookie（整段 Cookie 头 / cURL 抓包 / 裸令牌均可），或 user_ 开头的 API Key',
     authUrl: 'https://commandcode.ai/settings/billing',
   };
 
@@ -868,10 +1317,24 @@ class CommandCodeProvider implements UsageProvider {
     if (credential.length === 0) {
       return UsageSnapshot.failure('未配置会话 Cookie 或 API Key');
     }
-    const headers = ccHeaders(credential);
+    const apiKey = commandCodeIsApiKey(credential);
+    const headers = ccHeaders(credential, apiKey);
 
     // credits（必需；结构对照 macOS parseCredits）
-    const creditsResp = await Http.get(`${CC_API}/internal/billing/credits`, headers);
+    // 网页会话（Cookie）走 macOS 用的 /internal/billing；API Key 走官方 CLI / pi 插件的
+    // /alpha/billing，并在 401/403/404 时回退到 /internal（两种部署都见过的端点前缀）。
+    let creditsBase = CC_API;
+    let creditsResp: HttpResult;
+    if (apiKey) {
+      creditsBase = CC_ALPHA;
+      creditsResp = await Http.get(`${CC_ALPHA}/billing/credits`, headers);
+      if (!creditsResp.ok && ccShouldRetryAlpha(creditsResp.code)) {
+        creditsBase = CC_API;
+        creditsResp = await Http.get(`${CC_API}/internal/billing/credits`, headers);
+      }
+    } else {
+      creditsResp = await Http.get(`${CC_API}/internal/billing/credits`, headers);
+    }
     if (!creditsResp.ok) {
       return UsageSnapshot.failure(creditsResp.errorText());
     }
@@ -892,10 +1355,33 @@ class CommandCodeProvider implements UsageProvider {
     const opensource = ccNum(credits['opensourceMonthlyCredits']) ?? 0;
     const wl = asObj(cRoot['windowLimits']) ?? asObj(credits['windowLimits']);
 
+    // subscriptions（失败不阻断主数据；但月度泳道的总额要从这里拿，所以必须先问）
+    // 只有「显式成功且 data 为 null」才表示免费版，失败信封是短暂状态，不能当成免费版
+    let subscriptionAnswered = false;
+    let planId: string | null = null;
+    let subStatus: string | null = null;
+    let periodEnd = 0;
+    const subResp = await Http.get(`${creditsBase}/billing/subscriptions`, headers);
+    if (subResp.ok) {
+      const sRoot = asObj(subResp.json());
+      if (sRoot != null && sRoot['success'] === true) {
+        subscriptionAnswered = true;
+        const sData = asObj(sRoot['data']);
+        if (sData != null) {
+          planId = optStr(sData, 'planId');
+          subStatus = optStr(sData, 'status');
+          periodEnd = ccDateMs(sData['currentPeriodEnd']);
+        }
+      }
+    }
+    const plan = commandCodePlanFor(planId);
+    // 只有「查询成功 + 明确没有订阅」才是已验证的免费版；回了个目录外 planId 不算
+    const freeTier = subscriptionAnswered && (planId == null || planId.length === 0);
+
     const snap = UsageSnapshot.success(
       ccWindow(wl != null ? asObj(wl['fiveHour']) : null),
       ccWindow(wl != null ? asObj(wl['weekly']) : null),
-      null
+      commandCodeMonthlyWindow(plan, monthly, purchased, periodEnd, freeTier)
     );
     const balance = monthly + purchased;
     snap.providerCost = {
@@ -903,35 +1389,31 @@ class CommandCodeProvider implements UsageProvider {
       displayText: `${Math.round(balance * 100) / 100} credits`,
     };
 
-    // subscriptions（增强信息，失败不阻断）
     const rows: ProviderDetailRow[] = [
       { label: '月度额度', value: `${monthly}` },
       { label: '已购额度', value: `${purchased}` },
       { label: '高级月度', value: `${premium}` },
       { label: '开源月度', value: `${opensource}` },
     ];
-    const subResp = await Http.get(`${CC_API}/internal/billing/subscriptions`, headers);
-    if (subResp.ok) {
-      const sRoot = asObj(subResp.json());
-      if (sRoot != null && sRoot['success'] === true) {
-        const sData = asObj(sRoot['data']);
-        if (sData != null) {
-          const planId = optStr(sData, 'planId');
-          if (planId != null && planId.length > 0) {
-            rows.push({ label: '计划', value: planId });
-          }
-          const status = optStr(sData, 'status');
-          if (status != null) {
-            rows.push({ label: '状态', value: status });
-          }
-          const period = ccDateMs(sData['currentPeriodEnd']);
-          if (period > 0) {
-            rows.push({ label: '账期截止', value: Format.dateTime(period) });
-          }
-        } else {
-          rows.push({ label: '状态', value: '免费版' });
-        }
-      }
+    if (plan != null) {
+      // 总额来自套餐目录，credits 端点只给剩余（对照 CommandCodeUsageSnapshot.makeLoginMethod）
+      const used = Math.max(0, Math.min(plan.monthlyCreditsUSD, plan.monthlyCreditsUSD - monthly));
+      rows.push({ label: '计划', value: plan.displayName });
+      rows.push({
+        label: '月度已用',
+        value: `${commandCodeUSD(used)} of ${commandCodeUSD(plan.monthlyCreditsUSD)}`,
+      });
+    } else if (planId != null && planId.length > 0) {
+      // 目录外的 planId：总额不可知（对照 macOS unknownPlan，但保留 credits 主数据不报错）
+      rows.push({ label: '计划', value: planId });
+    } else if (subscriptionAnswered && subStatus == null) {
+      rows.push({ label: '状态', value: '免费版' });
+    }
+    if (subStatus != null) {
+      rows.push({ label: '状态', value: subStatus });
+    }
+    if (periodEnd > 0) {
+      rows.push({ label: '账期截止', value: Format.dateTime(periodEnd) });
     }
     snap.details = [{ title: '订阅', rows: rows }];
     return snap;
@@ -1454,14 +1936,12 @@ class NotionProvider implements UsageProvider {
     if (statusRoot == null) {
       return UsageSnapshot.failure('响应解析失败');
     }
-    // 容错定位额度对象
-    const rateLimit = NotionProvider.findRateLimit(statusRoot);
-    if (rateLimit == null) {
+    // 两条泳道（对照 NotionUsageSnapshot.toUsageSnapshot）：滚动窗口 + 计费周期窗口
+    const windows = notionWindows(statusRoot, Date.now());
+    if (windows.primary == null && windows.secondary == null) {
       return UsageSnapshot.failure('该套餐不适用额度限制');
     }
-    const percent = num(rateLimit, 'value', 0) * 100;
-    const snap = UsageSnapshot.success(makeWindow(Math.max(0, Math.min(100, percent)), 0, true), null, null);
-    return snap;
+    return UsageSnapshot.success(windows.primary, windows.secondary, null);
   }
 
   private static findSpaceId(value: Json): string | null {
@@ -1484,25 +1964,112 @@ class NotionProvider implements UsageProvider {
     return null;
   }
 
-  private static findRateLimit(value: Json): Record<string, Json> | null {
-    const o = asObj(value);
-    if (o == null) {
-      return null;
-    }
-    const rl = o['rate_limit'] ?? o['rateLimit'];
-    const rlObj = rl != null ? asObj(rl) : null;
-    if (rlObj != null && rlObj['value'] != null) {
-      return rlObj;
-    }
-    const keys = Object.keys(o);
-    for (let i = 0; i < keys.length; i++) {
-      const found = NotionProvider.findRateLimit(o[keys[i]]);
-      if (found != null) {
-        return found;
-      }
-    }
+}
+
+/** Notion 的两条泳道（对照 NotionUsageSnapshot.toUsageSnapshot） */
+export class NotionWindows {
+  /** 滚动窗口（rate_limit 的 value 比例，或源工程模型里的 window.used/limit） */
+  primary: RateWindow | null = null;
+  /** 计费周期窗口（billingPeriodWindow.used/limit，重置取 periodEndMs） */
+  secondary: RateWindow | null = null;
+}
+
+/** 递归定位额度对象（原有容错逻辑：优先 rate_limit / rateLimit 且带 value） */
+export function notionFindRateLimit(value: Json): Record<string, Json> | null {
+  const o = asObj(value);
+  if (o == null) {
     return null;
   }
+  const rl = o['rate_limit'] ?? o['rateLimit'];
+  const rlObj = rl != null ? asObj(rl) : null;
+  if (rlObj != null && rlObj['value'] != null) {
+    return rlObj;
+  }
+  const keys = Object.keys(o);
+  for (let i = 0; i < keys.length; i++) {
+    const found = notionFindRateLimit(o[keys[i]]);
+    if (found != null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/** 递归定位计费周期窗口对象（billingPeriodWindow / billing_period_window） */
+export function notionFindBillingPeriod(value: Json): Record<string, Json> | null {
+  const o = asObj(value);
+  if (o == null) {
+    return null;
+  }
+  const direct = o['billingPeriodWindow'] ?? o['billing_period_window'];
+  const directObj = direct != null ? asObj(direct) : null;
+  if (directObj != null) {
+    return directObj;
+  }
+  const keys = Object.keys(o);
+  for (let i = 0; i < keys.length; i++) {
+    const found = notionFindBillingPeriod(o[keys[i]]);
+    if (found != null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/** 递归找滚动窗口的重置秒数（resetsInSeconds / resets_in_seconds） */
+function notionFindResetsInSeconds(value: Json): number | null {
+  const o = asObj(value);
+  if (o == null) {
+    return null;
+  }
+  const secs = optNum(o, 'resetsInSeconds') ?? optNum(o, 'resets_in_seconds');
+  if (secs != null) {
+    return secs;
+  }
+  const keys = Object.keys(o);
+  for (let i = 0; i < keys.length; i++) {
+    const found = notionFindResetsInSeconds(o[keys[i]]);
+    if (found != null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+export function notionWindows(root: Json, now: number): NotionWindows {
+  const windows = new NotionWindows();
+  const rateLimit = notionFindRateLimit(root);
+  if (rateLimit != null) {
+    let percent: number | null = null;
+    const value = optNum(rateLimit, 'value');
+    if (value != null) {
+      percent = value * 100;
+    } else {
+      // 源工程模型：window.used / window.limit
+      const w = asObj(rateLimit['window']);
+      const used = w != null ? optNum(w, 'used') : null;
+      const limit = w != null ? optNum(w, 'limit') : null;
+      if (used != null && limit != null && limit > 0) {
+        percent = (used / limit) * 100;
+      }
+    }
+    if (percent != null) {
+      const secs = notionFindResetsInSeconds(rateLimit);
+      const resetsAt = secs != null && secs > 0 ? now + secs * 1000 : 0;
+      windows.primary = makeWindow(Math.max(0, Math.min(100, percent)), resetsAt, true);
+    }
+  }
+  const billing = notionFindBillingPeriod(root);
+  if (billing != null) {
+    const used = optNum(billing, 'used');
+    const limit = optNum(billing, 'limit');
+    if (used != null && limit != null && limit > 0) {
+      const endRaw = optNum(billing, 'periodEndMs') ?? optNum(billing, 'period_end_ms');
+      const endMs = endRaw != null && endRaw > 0 ? (endRaw > 1e12 ? endRaw : endRaw * 1000) : 0;
+      windows.secondary = makeWindow(Math.max(0, Math.min(100, (used / limit) * 100)), endMs, true);
+    }
+  }
+  return windows;
 }
 
 export function createElevenLabsProvider(): UsageProvider {

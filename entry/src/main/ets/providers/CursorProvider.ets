@@ -615,7 +615,9 @@ class CursorProvider implements UsageProvider {
     const snapshot = UsageSnapshot.success(null, null, null);
     if (budgetDollars > 0) {
       snapshot.primary = makeWindow(Math.min(100, (cents(spendCents) / budgetDollars) * 100), 0, true);
-      snapshot.primaryLabel = 'Budget';
+      // 团队预算也走主泳道（对照 CursorStatusProbe+UsageSummary：teamBudget 喂给 planPercentUsed），
+      // 标签跟元数据表一致用 Total，预算金额在明细行里（Monthly budget）。
+      snapshot.primaryLabel = 'Total';
     }
 
     const rows: ProviderDetailRow[] = [

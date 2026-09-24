@@ -50,6 +50,27 @@ const ALIBABA_CN: AlibabaRegion = {
 };
 
 /** 递归查找第一个包含任一 key 的字典（对照 Swift findFirstDictionary(matchingAnyKey:)） */
+/**
+ * 取重置时间（对照源工程 anyDate）：支持 epoch 秒 / epoch 毫秒 / ISO8601 三种形态；
+ * 全部候选键都取不到时返回 0（UI 视为未知，不显示倒计时）。
+ */
+function alibabaResetFrom(o: Record<string, Json>, keys: string[]): number {
+  for (let i = 0; i < keys.length; i++) {
+    const secondsOrMs = optNum(o, keys[i]);
+    if (secondsOrMs != null && secondsOrMs > 1e9) {
+      return secondsOrMs > 1e12 ? secondsOrMs : secondsOrMs * 1000;
+    }
+    const iso = optStr(o, keys[i]);
+    if (iso != null) {
+      const parsed = Date.parse(iso);
+      if (!isNaN(parsed)) {
+        return parsed;
+      }
+    }
+  }
+  return 0;
+}
+
 function findDictWithAnyKey(value: Json, keys: string[], depth: number): Record<string, Json> | null {
   if (depth > 8) {
     return null;
@@ -151,25 +172,40 @@ class AlibabaCodingPlanProvider implements UsageProvider {
     const weekly = windowFrom('perWeekUsedQuota', 'perWeekTotalQuota');
     const monthly = windowFrom('perBillMonthUsedQuota', 'perBillMonthTotalQuota');
 
-    // 数值/字符串双形态重置时间
-    let resets = 0;
-    const refreshNum = optNum(quota, 'per5HourQuotaNextRefreshTime');
-    if (refreshNum != null && refreshNum > 1e9) {
-      resets = refreshNum > 1e12 ? refreshNum : refreshNum * 1000;
-    } else {
-      const refreshIso = optStr(quota, 'per5HourQuotaNextRefreshTime');
-      if (refreshIso != null) {
-        const parsed = Date.parse(refreshIso);
-        if (!isNaN(parsed)) {
-          resets = parsed;
+    const now = Date.now();
+    if (fiveHour != null) {
+      // 对照 normalizedFiveHourReset：已过期/即将过期的重置时间向后推一个 5 小时周期，
+      // 推不动则按「现在 + 5 小时」兜底，避免泳道显示一个已经过去的重置时间。
+      let resets = alibabaResetFrom(quota,
+        ['per5HourQuotaNextRefreshTime', 'perFiveHourQuotaNextRefreshTime']);
+      if (resets > 0) {
+        if (resets - now < 60000) {
+          const shifted = resets + 5 * 60 * 60 * 1000;
+          resets = shifted - now >= 60000 ? shifted : now + 5 * 60 * 60 * 1000;
         }
+        fiveHour.resetsAt = resets;
       }
     }
-    if (fiveHour != null && resets > 0) {
-      fiveHour.resetsAt = resets;
+    if (weekly != null) {
+      const weeklyReset = alibabaResetFrom(quota, ['perWeekQuotaNextRefreshTime']);
+      if (weeklyReset > 0) {
+        weekly.resetsAt = weeklyReset;
+      }
+    }
+    if (monthly != null) {
+      const monthlyReset = alibabaResetFrom(quota,
+        ['perBillMonthQuotaNextRefreshTime', 'perMonthQuotaNextRefreshTime']);
+      if (monthlyReset > 0) {
+        monthly.resetsAt = monthlyReset;
+      }
     }
 
-    const snap = UsageSnapshot.success(fiveHour ?? monthly, weekly ?? monthly, monthly);
+    // 泳道绑定对照 AlibabaCodingPlanUsageSnapshot.toUsageSnapshot：主=5 小时、次=周、第三=月；
+    // 某一档没有配额就是 nil（源工程不用月度值占位，避免同一窗口出现三次）。
+    const snap = UsageSnapshot.success(fiveHour, weekly, monthly);
+    snap.primaryLabel = '5-hour';
+    snap.secondaryLabel = 'Weekly';
+    snap.tertiaryLabel = 'Monthly';
     const rows: ProviderDetailRow[] = [];
     const planName = optStr(quota, 'planName') ?? optStr(quota, 'instanceName');
     if (planName != null) {
@@ -212,6 +248,11 @@ function factoryWindowMs(v: Json): number {
   return 0;
 }
 
+/**
+ * 单个计费窗口（对照 FactoryBillingWindow）：
+ * resetsAt 优先用 secondsRemaining，其次用还没过期的 windowEnd；
+ * 滚动窗口过期而服务端仍留旧值时按已重置处理（对照 effectiveUsedPercent）。
+ */
 function factoryWindow(o: Record<string, Json> | null, now: number): RateWindow | null {
   if (o == null) {
     return null;
@@ -220,14 +261,41 @@ function factoryWindow(o: Record<string, Json> | null, now: number): RateWindow 
   if (pct == null) {
     return null;
   }
-  let reset = 0;
   const secs = optNum(o, 'secondsRemaining');
+  const windowEnd = factoryWindowMs(o['windowEnd']);
+  let reset = 0;
   if (secs != null && secs > 0) {
     reset = now + secs * 1000;
-  } else {
-    reset = factoryWindowMs(o['windowEnd']);
+  } else if (windowEnd > now) {
+    reset = windowEnd;
   }
-  return makeWindow(Math.max(0, Math.min(100, pct)), reset, true);
+  let percent = pct;
+  if (reset === 0 && o['windowEnd'] != null && secs == null) {
+    percent = 0;
+  }
+  return makeWindow(Math.max(0, Math.min(100, percent)), reset, true);
+}
+
+/** 该限额池是否有可用数据（对照 FactoryLimitPool.hasUsageData） */
+function factoryPoolHasUsageData(pool: Record<string, Json> | null): boolean {
+  if (pool == null) {
+    return false;
+  }
+  const keys: string[] = ['fiveHour', 'weekly', 'monthly'];
+  for (let i = 0; i < keys.length; i++) {
+    const w = asObj(pool[keys[i]]);
+    if (w == null) {
+      continue;
+    }
+    const pct = optNum(w, 'usedPercent');
+    if (pct != null && pct > 0) {
+      return true;
+    }
+    if (w['windowEnd'] != null || w['secondsRemaining'] != null) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class FactoryProvider implements UsageProvider {
@@ -266,25 +334,36 @@ class FactoryProvider implements UsageProvider {
       const limits = root != null ? asObj(root['limits']) : null;
       const std = limits != null ? asObj(limits['standard']) : null;
       if (std != null) {
+        // 三条主泳道（对照 tokenRateLimitsUsageSnapshot）：5 小时 / 每周 / 月度
         snap.primary = factoryWindow(asObj(std['fiveHour']), now);
         snap.secondary = factoryWindow(asObj(std['weekly']), now);
-        const monthly = factoryWindow(asObj(std['monthly']), now);
+        snap.tertiary = factoryWindow(asObj(std['monthly']), now);
         const extra: NamedRateWindow[] = [];
-        if (monthly != null) {
-          extra.push({ id: 'factory_monthly', title: '月度', window: monthly });
-        }
+        // core 池的附加泳道：只在真的有用量数据时才出（对照 hasUsageData 门控）
         const core = limits != null ? asObj(limits['core']) : null;
-        if (core != null) {
+        // core 非空判断要写在这里：编译器不会因为函数内部做过 null 检查而收窄实参类型
+        if (core != null && factoryPoolHasUsageData(core)) {
           const c5 = factoryWindow(asObj(core['fiveHour']), now);
           const cw = factoryWindow(asObj(core['weekly']), now);
+          const cm = factoryWindow(asObj(core['monthly']), now);
           if (c5 != null) {
-            extra.push({ id: 'core_5h', title: 'Core 5小时', window: c5 });
+            extra.push({ id: 'factory-core-5h', title: 'Core 5h', window: c5 });
           }
           if (cw != null) {
-            extra.push({ id: 'core_weekly', title: 'Core 每周', window: cw });
+            extra.push({ id: 'factory-core-7d', title: 'Core 7-day', window: cw });
+          }
+          if (cm != null) {
+            extra.push({ id: 'factory-core-monthly', title: 'Core Monthly', window: cm });
           }
         }
         snap.extraRateWindows = extra;
+        // 泳道标签（对照 FactoryProviderDescriptor.rateWindowLabeler）：
+        // 有月度泳道时用 5-hour / Weekly / Monthly，否则回落元数据表的 Standard / Premium
+        if (snap.tertiary != null) {
+          snap.primaryLabel = '5-hour';
+          snap.secondaryLabel = 'Weekly';
+          snap.tertiaryLabel = 'Monthly';
+        }
       }
       const cents = root != null ? optNum(root, 'extraUsageBalanceCents') : null;
       if (cents != null && cents > 0) {

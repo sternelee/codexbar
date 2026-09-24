@@ -627,6 +627,11 @@ export function windowLabelsFor(providerId: string): WindowLabels {
     l.primary = 'Premium'; l.secondary = 'Chat';
   } else if (providerId === 'v0') {
     l.primary = 'Billing'; l.secondary = 'Rate limit';
+  } else if (providerId === 'amp') {
+    l.primary = 'Amp Free'; l.secondary = 'Balance';
+  } else if (providerId === 'anthropic-console') {
+    // 控制台 Admin API 走 Claude descriptor（同一套泳道标签）
+    l.primary = 'Session'; l.secondary = 'Weekly'; l.tertiary = 'Sonnet';
   }
   return l;
 }
@@ -646,6 +651,161 @@ export function applyWindowLabels(snap: UsageSnapshot, providerId: string): void
   if (snap.tertiary != null && snap.tertiaryLabel.length === 0) {
     snap.tertiaryLabel = l.tertiary;
   }
+}
+
+/** 泳道槽位（对照 macOS ProviderUsageLane 的 primary / secondary / tertiary） */
+export const LANE_PRIMARY: string = 'primary';
+export const LANE_SECONDARY: string = 'secondary';
+export const LANE_TERTIARY: string = 'tertiary';
+
+/** 主泳道兜底窗口长度：源工程把主泳道当「会话」= 5 小时（RateWindow+BindingCap.sessionWindowMinutes） */
+export const SESSION_WINDOW_MINUTES: number = 5 * 60;
+/** 周泳道长度（分钟），对照各 fetcher 写入的 RateWindow.windowMinutes */
+export const WEEKLY_WINDOW_MINUTES: number = 7 * 24 * 60;
+/** 月度泳道长度（分钟）：源工程用 30 天哨兵值（ProviderPaceCapability.monthlyWindowSentinelMinutes） */
+export const MONTHLY_WINDOW_MINUTES: number = 30 * 24 * 60;
+
+/**
+ * 绑定泳道：主泳道之外、必须先有余额才能继续用主泳道的更长窗口。
+ * 对照 macOS ProviderUsagePresentation.primaryBindingQuotaLanes + 各 fetcher 写入的 windowMinutes。
+ */
+export interface BindingQuotaLane {
+  /** 槽位：secondary / tertiary */
+  slot: string;
+  /** 该泳道窗口长度（分钟） */
+  minutes: number;
+}
+
+/**
+ * 绑定泳道表：逐条抄自源工程 11 处 primaryBindingQuotaLanes 声明（端口已接入的服务商）。
+ * 只有更长的泳道才能卡住主泳道，所以这里带上各插件/fetcher 写入的窗口长度；
+ * 未登记的泳道保持空数组 = 主泳道不被任何更长窗口绑定。
+ */
+export function bindingQuotaLanesFor(providerId: string): BindingQuotaLane[] {
+  if (providerId === 'claude' || providerId === 'anthropic-console') {
+    return [{ slot: LANE_SECONDARY, minutes: WEEKLY_WINDOW_MINUTES }];
+  }
+  if (providerId === 'alibaba-coding' || providerId === 'clinepass' || providerId === 'doubao') {
+    return [
+      { slot: LANE_SECONDARY, minutes: WEEKLY_WINDOW_MINUTES },
+      { slot: LANE_TERTIARY, minutes: MONTHLY_WINDOW_MINUTES },
+    ];
+  }
+  if (providerId === 'chutes') {
+    return [{ slot: LANE_SECONDARY, minutes: MONTHLY_WINDOW_MINUTES }];
+  }
+  if (providerId === 'commandcode' || providerId === 'zai' || providerId === 'zenmux') {
+    return [{ slot: LANE_SECONDARY, minutes: WEEKLY_WINDOW_MINUTES }];
+  }
+  return [];
+}
+
+/** 取快照里某槽位的窗口（primary / secondary / tertiary） */
+export function laneWindow(snap: UsageSnapshot, slot: string): RateWindow | null {
+  if (slot === LANE_PRIMARY) {
+    return snap.primary;
+  }
+  if (slot === LANE_SECONDARY) {
+    return snap.secondary;
+  }
+  if (slot === LANE_TERTIARY) {
+    return snap.tertiary;
+  }
+  return null;
+}
+
+/** 主指标被更长泳道卡住时的投影（对照 Swift RateWindowBindingQuotaProjection） */
+export interface BindingQuotaProjection {
+  /** 恒为 100：绑定的泳道已经耗尽，主泳道此刻不可用 */
+  usedPercent: number;
+  /** 全部闸门恢复后才可用；0 表示没有可承诺的恢复时间 */
+  resetsAt: number;
+}
+
+/** 是否「正在耗尽」：没有剩余用量，且还没到重置时间（无重置时间视为一直耗尽） */
+function isActivelyExhausted(w: RateWindow, now: number): boolean {
+  if (w.usedPercent < 100) {
+    return false;
+  }
+  return w.resetsAt > 0 ? w.resetsAt > now : true;
+}
+
+/**
+ * 卡住主泳道的恢复时间：所有闸门都恢复后主泳道才可用。
+ * 任一闸门没有重置时间时不承诺更早的时间（返回 0），与源工程 effectiveReset 一致。
+ */
+function bindingEffectiveReset(blockers: RateWindow[]): number {
+  let latest = 0;
+  for (let i = 0; i < blockers.length; i++) {
+    const at = blockers[i].resetsAt;
+    if (at <= 0) {
+      return 0;
+    }
+    if (at > latest) {
+      latest = at;
+    }
+  }
+  return latest;
+}
+
+/**
+ * 主泳道投影（对照 RateWindow.bindingQuotaProjection）：
+ * 只有当某个**更长**的绑定泳道正在耗尽时，主泳道按 100% + 闸门恢复时间展示；
+ * 否则返回 null（按原样展示）。laneMinutes 与 laneWindows 一一对应。
+ */
+export function bindingQuotaProjection(
+  primary: RateWindow,
+  laneWindows: RateWindow[],
+  laneMinutes: number[],
+  now: number,
+  primaryMinutes: number = SESSION_WINDOW_MINUTES
+): BindingQuotaProjection | null {
+  const blockers: RateWindow[] = [];
+  for (let i = 0; i < laneWindows.length; i++) {
+    const minutes = i < laneMinutes.length ? laneMinutes[i] : 0;
+    if (minutes <= primaryMinutes) {
+      continue;
+    }
+    if (isActivelyExhausted(laneWindows[i], now)) {
+      blockers.push(laneWindows[i]);
+    }
+  }
+  if (blockers.length === 0) {
+    return null;
+  }
+  if (isActivelyExhausted(primary, now)) {
+    blockers.push(primary);
+  }
+  return { usedPercent: 100, resetsAt: bindingEffectiveReset(blockers) };
+}
+
+/**
+ * 主泳道的展示窗口：命中绑定泳道占用时按投影渲染（100% + 更晚的恢复时间）。
+ * 首页卡片、详情页泳道都走这里，未登记的泳道或未命中时原样返回。
+ */
+export function primaryDisplayWindow(
+  providerId: string,
+  snap: UsageSnapshot | null,
+  now: number
+): RateWindow | null {
+  if (snap == null || snap.primary == null) {
+    return null;
+  }
+  const lanes = bindingQuotaLanesFor(providerId);
+  const wins: RateWindow[] = [];
+  const mins: number[] = [];
+  for (let i = 0; i < lanes.length; i++) {
+    const w = laneWindow(snap, lanes[i].slot);
+    if (w != null) {
+      wins.push(w);
+      mins.push(lanes[i].minutes);
+    }
+  }
+  const projection = bindingQuotaProjection(snap.primary, wins, mins, now);
+  if (projection == null) {
+    return snap.primary;
+  }
+  return makeWindow(projection.usedPercent, projection.resetsAt, snap.primary.usageKnown);
 }
 
 /**
@@ -862,6 +1022,17 @@ export class ProviderState {
     }
     return list;
   }
+}
+
+/**
+ * 百分比换算（对照源工程插件运行时的 ctx.pct）：
+ * 分母非正或非法时返回 100（「分母不可用」时的占位），否则截断到 [0, 100]。
+ */
+export function pct(used: number, limit: number): number {
+  if (!isFinite(used) || !isFinite(limit) || limit <= 0) {
+    return 100;
+  }
+  return Math.min(100, Math.max(0, (used / limit) * 100));
 }
 
 /** 构造 RateWindow 的工具 */

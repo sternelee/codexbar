@@ -15,6 +15,7 @@ import { asArray, asObj, bool, Json, num, optNum, optStr, str } from '../net/Jso
 import {
   AuthKind,
   makeWindow,
+  NamedRateWindow,
   ProviderChartPoint,
   ProviderCostSnapshot,
   ProviderDescriptor,
@@ -410,6 +411,11 @@ class OpenCodeBaseProvider implements UsageProvider {
       resets = isoMs5(renewIso);
     }
     const snap = UsageSnapshot.success(makeWindow(Math.max(0, Math.min(100, percent)), resets, true), null, null);
+    if (resets > 0) {
+      // 「Renews」附加泳道（对照 OpenCodeUsageSnapshot / OpenCodeGoUsageSnapshot：id renewal、usedPercent 0）
+      const renewal: NamedRateWindow[] = [{ id: 'renewal', title: 'Renews', window: makeWindow(0, resets, true) }];
+      snap.extraRateWindows = renewal;
+    }
     const balance = optNum(usage, 'balance');
     if (balance != null) {
       snap.providerCost = {

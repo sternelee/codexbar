@@ -10,7 +10,7 @@
  */
 
 import common from '@ohos.app.ability.common';
-import { ProviderState, RateWindow, UsageSnapshot } from '../model/Models';
+import { primaryDisplayWindow, ProviderState, RateWindow, UsageSnapshot } from '../model/Models';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Settings } from './Settings';
@@ -81,7 +81,10 @@ function itemFor(s: ProviderState, now: number): WidgetItem | null {
   if (!s.setting.enabled || s.snapshot == null || !s.snapshot.ok) {
     return null;
   }
-  const win: RateWindow | null = s.snapshot.primary != null ? s.snapshot.primary : firstWindow(s.snapshot);
+  // 主泳道记录绑定泳道投影（更长泳道耗尽时按 100% + 闸门恢复时间展示），与 App 内卡片一致
+  const win: RateWindow | null = s.snapshot.primary != null
+    ? primaryDisplayWindow(s.descriptor.id, s.snapshot, now)
+    : firstWindow(s.snapshot);
   if (win == null) {
     return null;
   }

@@ -575,7 +575,8 @@ class AzureOpenAIProvider implements UsageProvider {
     const detail = model.length > 0 ? `Deployment: ${deployment} · Model: ${model}` : `Deployment: ${deployment}`;
 
     const snap = UsageSnapshot.success(makeWindow(0, 0, true), null, null);
-    snap.primaryLabel = 'Deployment';
+    // 泳道标签走元数据表（对照 AzureOpenAIProviderDescriptor.sessionLabel = Status）：
+    // 源工程这个 0% 窗口把 "Deployment: …" 放在窗口描述里，这里改为明细行。
     const rows: ProviderDetailRow[] = [
       { label: 'Deployment', value: deployment },
       { label: 'Endpoint', value: host },

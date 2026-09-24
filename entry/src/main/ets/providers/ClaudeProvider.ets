@@ -14,6 +14,7 @@ import { Http } from '../net/Http';
 import { asArray, asObj, Json, optNum, optStr, str } from '../net/Json';
 import {
   makeWindow,
+  NamedRateWindow,
   ProviderCostSnapshot,
   ProviderDescriptor,
   ProviderSetting,
@@ -131,6 +132,8 @@ class ClaudeWebProvider implements UsageProvider {
     }
 
     const snap = UsageSnapshot.success(primary, weekly, opus);
+    // 附加泳道：模型限定周额度（"X only"）在前、Daily Routines 在后（对照 ClaudeWebExtraRateWindowParser）
+    snap.extraRateWindows = claudeExtraRateWindows(root);
     snap.identity = { accountEmail: email, accountOrganization: orgName, loginMethod: 'sessionKey' };
     if (cost != null) {
       snap.providerCost = cost;
@@ -159,6 +162,141 @@ class ClaudeWebProvider implements UsageProvider {
     }
     return makeWindow(percent, resets, true);
   }
+}
+
+/** ISO8601 → 毫秒；缺失或解析失败为 0 */
+function claudeIsoMs(iso: string | null): number {
+  if (iso == null || iso.length === 0) {
+    return 0;
+  }
+  const parsed = Date.parse(iso);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * 泳道 ID 用的 slug（对照 ClaudeScopedWeeklyLimitMapper.slug）：非字母数字压成单个 "-"，去掉首尾 "-"。
+ * 例："Claude 3.5 Sonnet" → "claude-3-5-sonnet"。
+ */
+export function claudeSlug(value: string): string {
+  const lower = value.toLowerCase();
+  let out = '';
+  let lastDash = false;
+  for (let i = 0; i < lower.length; i++) {
+    const ch = lower.charAt(i);
+    const isAlnum = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9');
+    if (isAlnum) {
+      out += ch;
+      lastDash = false;
+    } else if (!lastDash) {
+      out += '-';
+      lastDash = true;
+    }
+  }
+  while (out.length > 0 && out.charAt(0) === '-') {
+    out = out.slice(1);
+  }
+  while (out.length > 0 && out.charAt(out.length - 1) === '-') {
+    out = out.slice(0, out.length - 1);
+  }
+  return out;
+}
+
+/** "All models" 范围不算模型限定泳道（标题等价 all-models，或 modelID 以 -all-models 结尾） */
+export function claudeIsAllModelsScope(modelID: string, modelName: string): boolean {
+  if (claudeSlug(modelName) === 'all-models') {
+    return true;
+  }
+  if (modelID.length === 0) {
+    return false;
+  }
+  const idSlug = claudeSlug(modelID);
+  return idSlug === 'all-models' || idSlug.endsWith('-all-models');
+}
+
+/** Daily Routines 在响应里的候选键（对照 ClaudeWebExtraRateWindowParser.definitions） */
+const CLAUDE_ROUTINES_KEYS: string[] = [
+  'seven_day_routines',
+  'seven_day_claude_routines',
+  'claude_routines',
+  'routines',
+  'routine',
+  'seven_day_cowork',
+  'cowork',
+];
+
+/**
+ * /usage 响应的附加泳道（对照 ClaudeWebExtraRateWindowParser.parse）：
+ * 1. limits[] 里 kind=weekly_scoped / group=weekly 的模型限定周额度 → id `claude-weekly-scoped-<slug>`、标题 `"<模型名> only"`；
+ *    all-models 范围与重复 id 跳过。
+ * 2. Daily Routines（seven_day_routines 等候选键，取第一个形状对的）。
+ */
+export function claudeExtraRateWindows(root: Record<string, Json>): NamedRateWindow[] {
+  const out: NamedRateWindow[] = [];
+  const limits = asArray(root['limits']);
+  if (limits != null) {
+    const seen: string[] = [];
+    for (let i = 0; i < limits.length; i++) {
+      const entry = asObj(limits[i]);
+      if (entry == null) {
+        continue;
+      }
+      if (optStr(entry, 'group') !== 'weekly' || optStr(entry, 'kind') !== 'weekly_scoped') {
+        continue;
+      }
+      const percent = optNum(entry, 'percent');
+      if (percent == null || !isFinite(percent)) {
+        continue;
+      }
+      const scope = asObj(entry['scope']);
+      const model = scope != null ? asObj(scope['model']) : null;
+      const modelName = model != null ? optStr(model, 'display_name') : null;
+      const modelID = model != null ? optStr(model, 'id') : null;
+      if (modelName == null || modelName.length === 0) {
+        continue;
+      }
+      if (claudeIsAllModelsScope(modelID ?? '', modelName)) {
+        continue;
+      }
+      const slug = claudeSlug(modelID != null && modelID.length > 0 ? modelID : modelName);
+      if (slug.length === 0) {
+        continue;
+      }
+      const id = `claude-weekly-scoped-${slug}`;
+      let duplicated = false;
+      for (let j = 0; j < seen.length; j++) {
+        if (seen[j] === id) {
+          duplicated = true;
+          break;
+        }
+      }
+      if (duplicated) {
+        continue;
+      }
+      seen.push(id);
+      out.push({
+        id: id,
+        title: `${modelName} only`,
+        window: makeWindow(percent, claudeIsoMs(optStr(entry, 'resets_at'))),
+      });
+    }
+  }
+  for (let i = 0; i < CLAUDE_ROUTINES_KEYS.length; i++) {
+    const w = asObj(root[CLAUDE_ROUTINES_KEYS[i]]);
+    if (w == null) {
+      continue;
+    }
+    const utilization = optNum(w, 'utilization');
+    if (utilization == null) {
+      continue;
+    }
+    out.push({
+      id: 'claude-routines',
+      title: 'Daily Routines',
+      window: makeWindow(utilization, claudeIsoMs(optStr(w, 'resets_at'))),
+    });
+    break;
+  }
+  return out;
 }
 
 /**

@@ -3,13 +3,15 @@ import { Format } from '../main/ets/common/Format';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../main/ets/net/Json';
 import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderDetailSection, ProviderSetting,
-  ProviderState, AuthKind, applyWindowLabels, defaultReminder, extraFields, extraValue,
-  isDefaultEnabledProvider, isPrimaryProvider, makeChart, needsSecondCredential, optionalDetailsFor, parseExtra,
+  ProviderState, AuthKind, applyWindowLabels, bindingQuotaLanesFor, bindingQuotaProjection, defaultReminder,
+  extraFields, extraValue, isDefaultEnabledProvider, isPrimaryProvider, makeChart, MONTHLY_WINDOW_MINUTES,
+  needsSecondCredential, optionalDetailsFor, parseExtra, pct, primaryDisplayWindow,
   progressPercent, ProviderCostSnapshot, replacedDetailRowsFor, rowProgress, setExtraValue, visibleDetails,
-  windowLabelsFor
+  WEEKLY_WINDOW_MINUTES, windowLabelsFor
 } from '../main/ets/model/Models';
 import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
-import { chutesWindow } from '../main/ets/providers/MoreProviders';
+import { chutesWindow, manusLanes, perplexityLanes, perplexityPools } from '../main/ets/providers/MoreProviders';
+import { nousLane } from '../main/ets/providers/MoreProviders3';
 import { deepseekCostText, deepseekCountText, deepseekDetailSections, deepseekMonthlyUsage,
   deepseekPlatformUsage } from '../main/ets/providers/ApiKeyProviders';
 import { copilotCreditRows, copilotSeatEntitlement } from '../main/ets/providers/ApiKeyProviders2';
@@ -23,6 +25,19 @@ import {
   zaiLimitWindow
 } from '../main/ets/providers/MoreProviders2';
 import {
+  elevenLabsLoginMethod,
+  elevenLabsSlotWindows,
+  ElevenLabsSlot,
+  neuralWattQuota,
+  neuralWattWindows,
+  sub2APIWindows,
+  titleCaseWords,
+  commandCodeCookieHeader,
+  commandCodeIsApiKey,
+  commandCodeMonthlyWindow,
+  commandCodeNormalize,
+  commandCodePlanFor,
+  commandCodeUSD,
   zoomMateCreditStatus,
   zoomMateDailyBreakdown,
   zoomMateHistoryRecords,
@@ -41,9 +56,12 @@ import {
   cursorPlanName,
 } from '../main/ets/providers/CursorProvider';
 import {
+  claudeExtraRateWindows,
   claudeExtraUsageCost,
+  claudeIsAllModelsScope,
   claudeOverageSpendLimitCost,
   claudePrepaidBalanceCost,
+  claudeSlug,
 } from '../main/ets/providers/ClaudeProvider';
 import {
   clawRouterBaseURL,
@@ -120,6 +138,7 @@ import {
   doubaoEpochMs,
   doubaoParseProbe,
   doubaoParseResetHeader,
+  doubaoProbeSnapshot,
   doubaoQuotasFromAgentPlan,
   doubaoQuotasFromCodingPlan,
   doubaoSignedSnapshot,
@@ -1883,6 +1902,390 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       // 缺 date 的行丢弃
       expect(cursorParseDailyUsage(parseJson('{"data":[{"subscriptionIncludedReqs":1}]}')).length)
         .assertEqual(0);
+    });
+
+    it('CommandCode_credential', 0, () => {
+      // 规整：整段 Cookie 头 / Cookie: 前缀 / cURL 抓包 / 引号（对照 CookieHeaderNormalizer.normalize）
+      expect(commandCodeNormalize('Cookie: a=1; b=2')).assertEqual('a=1; b=2');
+      expect(commandCodeNormalize("  curl -H 'Cookie: __Secure-better-auth.session_token=abc; _ga=x' " +
+        "-H 'accept: application/json' https://api.commandcode.ai/internal/billing/credits  "))
+        .assertEqual('__Secure-better-auth.session_token=abc; _ga=x');
+      expect(commandCodeNormalize("-b 'a=1; b=2'")).assertEqual('a=1; b=2');
+      expect(commandCodeNormalize('--cookie "__Secure-better-auth.session_token=x"'))
+        .assertEqual('__Secure-better-auth.session_token=x');
+      // 首尾成对引号去掉
+      expect(commandCodeNormalize("'a=1'")).assertEqual('a=1');
+      expect(commandCodeNormalize('  __Secure-better-auth.session_token=abc  '))
+        .assertEqual('__Secure-better-auth.session_token=abc');
+      expect(commandCodeNormalize('')).assertEqual('');
+
+      // 组装 Cookie 头（对照 CommandCodeCookieHeader.override）
+      expect(commandCodeCookieHeader('_ga=GA1.2.123; __Secure-better-auth.session_token=abc123; foo=bar'))
+        .assertEqual('__Secure-better-auth.session_token=abc123');
+      expect(commandCodeCookieHeader('_ga=1; __Secure-commandcode_prod_.session_token=abc123'))
+        .assertEqual('__Secure-commandcode_prod_.session_token=abc123');
+      expect(commandCodeCookieHeader('better-auth.session_token=plain-token'))
+        .assertEqual('better-auth.session_token=plain-token');
+      // 裸令牌按生产会话 Cookie 名补齐（旧实现把它当 API Key 发 Bearer，必然 401）
+      expect(commandCodeCookieHeader('bare-value'))
+        .assertEqual('__Secure-better-auth.session_token=bare-value');
+      // Cookie: 前缀 / cURL 抓包不再整串塞进 Cookie 头
+      expect(commandCodeCookieHeader('Cookie: __Secure-better-auth.session_token=abc'))
+        .assertEqual('__Secure-better-auth.session_token=abc');
+      expect(commandCodeCookieHeader('')).assertEqual('');
+      // 无已知会话 Cookie 名时整串照发（对照 importer 的「sending all domain cookies」）
+      expect(commandCodeCookieHeader('foo=1; bar=2')).assertEqual('foo=1; bar=2');
+
+      // API Key 判定：仅 user_ 前缀走 Bearer（官方 CLI 的 COMMAND_CODE_API_KEY）
+      expect(commandCodeIsApiKey('user_abc123')).assertTrue();
+      expect(commandCodeIsApiKey('bare-value')).assertFalse();
+      expect(commandCodeIsApiKey('__Secure-better-auth.session_token=abc')).assertFalse();
+      expect(commandCodeIsApiKey('user_a=b')).assertFalse();
+      expect(commandCodeIsApiKey('')).assertFalse();
+
+      // 窗口标签（对照 CommandCodeProviderDescriptor 的 session/weekly/opusLabel）
+      const labels = windowLabelsFor('commandcode');
+      expect(labels.primary).assertEqual('5-hour');
+      expect(labels.secondary).assertEqual('Weekly');
+      expect(labels.tertiary).assertEqual('Monthly');
+    });
+
+    it('CommandCode_plan_catalog', 0, () => {
+      // 套餐目录（对照 CommandCodePlanCatalog.plans）
+      expect(commandCodePlanFor('individual-go')!.monthlyCreditsUSD).assertEqual(10);
+      expect(commandCodePlanFor('individual-go')!.displayName).assertEqual('Go');
+      expect(commandCodePlanFor('individual-goat')!.monthlyCreditsUSD).assertEqual(70);
+      expect(commandCodePlanFor('individual-pro')!.monthlyCreditsUSD).assertEqual(30);
+      expect(commandCodePlanFor('individual-pro-v1')!.monthlyCreditsUSD).assertEqual(80);
+      expect(commandCodePlanFor('individual-max')!.monthlyCreditsUSD).assertEqual(150);
+      expect(commandCodePlanFor('individual-ultra')!.monthlyCreditsUSD).assertEqual(300);
+      // 大小写不敏感；未登记的 planId 不得当成免费版
+      expect(commandCodePlanFor('Individual-Max')!.monthlyCreditsUSD).assertEqual(150);
+      expect(commandCodePlanFor('individual-future')).assertEqual(null);
+      expect(commandCodePlanFor('')).assertEqual(null);
+      expect(commandCodePlanFor(null)).assertEqual(null);
+
+      // 美元文案（对照 formatUSD：< $100 两位小数，否则取整）
+      expect(commandCodeUSD(10)).assertEqual('$10.00');
+      expect(commandCodeUSD(3.2)).assertEqual('$3.20');
+      expect(commandCodeUSD(150)).assertEqual('$150');
+
+      const periodEnd = Date.parse('2026-10-01T00:00:00.000Z');
+      // 有套餐：已用 = 总额 − 剩余，百分比按总额算
+      const go = commandCodeMonthlyWindow(commandCodePlanFor('individual-go'), 6.4, 0, periodEnd, true);
+      expect(go != null).assertTrue();
+      expect(go!.usedPercent).assertEqual(36);
+      expect(go!.resetsAt).assertEqual(periodEnd);
+      // 剩余超过总额（预算内的已购额度）：截断到 0%
+      expect(commandCodeMonthlyWindow(commandCodePlanFor('individual-go'), 25, 0, periodEnd, true)!
+        .usedPercent).assertEqual(0);
+      // 欠费透支：截断到 100%
+      expect(commandCodeMonthlyWindow(commandCodePlanFor('individual-go'), -4, 0, periodEnd, true)!
+        .usedPercent).assertEqual(100);
+
+      // 免费版（订阅查询显式返回 null）：仍有余额时报 0%
+      const free = commandCodeMonthlyWindow(null, 0, 5, periodEnd, true);
+      expect(free != null).assertTrue();
+      expect(free!.usedPercent).assertEqual(0);
+      // 完全没额度：不出泳道
+      expect(commandCodeMonthlyWindow(null, 0, 0, periodEnd, true)).assertEqual(null);
+
+      // 订阅查询失败：总额不可知，宁可不出月度泳道（不得报 0% 假装未动用）
+      expect(commandCodeMonthlyWindow(null, 7.5, 0, 0, false)).assertEqual(null);
+      // 目录外 planId：同样不可定尺寸（fetch 里 freeTier 也为假）
+      expect(commandCodeMonthlyWindow(commandCodePlanFor('individual-future'), 7.5, 0, 0, false))
+        .assertEqual(null);
+    });
+
+    it('Balance_only_lane_catalog', 0, () => {
+      // pct（对照插件运行时的 ctx.pct）：分母非正/非法一律 100%，其余截断到 [0, 100]
+      expect(pct(50, 100)).assertEqual(50);
+      expect(pct(0, 0)).assertEqual(100);
+      expect(pct(5, -1)).assertEqual(100);
+      expect(pct(5, NaN)).assertEqual(100);
+      expect(pct(250, 100)).assertEqual(100);
+      expect(pct(-5, 100)).assertEqual(0);
+
+      // Manus（对照插件 manus.js）：月度套餐额度与刷新额度各一条泳道
+      const nextRefresh = Date.parse('2026-10-01T00:00:00.000Z');
+      const manus = manusLanes(1000, 400, 30, 100, nextRefresh);
+      expect(manus.primary!.usedPercent).assertEqual(60);
+      expect(manus.secondary!.usedPercent).assertEqual(70);
+      expect(manus.secondary!.resetsAt).assertEqual(nextRefresh);
+      // 分母为 0/缺失时不出泳道（不得报 0% 假装未动用）
+      const noMonthly = manusLanes(0, 0, 30, 100, nextRefresh);
+      expect(noMonthly.primary).assertEqual(null);
+      expect(noMonthly.secondary != null).assertTrue();
+      expect(manusLanes(1000, 400, 0, 0, 0).secondary).assertEqual(null);
+      // 周期额度超过月度额度（跨期结算）时截断到 0%
+      expect(manusLanes(100, 180, 0, 0, 0).primary!.usedPercent).assertEqual(0);
+
+      // Nous（对照插件 nous.js）：月度授予是分母、剩余是分子，缺一不出泳道
+      expect(nousLane(100, 25, nextRefresh)!.usedPercent).assertEqual(75);
+      expect(nousLane(100, 25, nextRefresh)!.resetsAt).assertEqual(nextRefresh);
+      expect(nousLane(100, 150, 0)!.usedPercent).assertEqual(0);
+      expect(nousLane(null, 25, 0)).assertEqual(null);
+      expect(nousLane(0, 25, 0)).assertEqual(null);
+      expect(nousLane(100, null, 0)).assertEqual(null);
+
+      // Perplexity（对照插件 perplexity.js）：分池 + 周期 → 已购 → 赠金 的扣减顺序
+      const nowSec = 1780000000;
+      const grants: Json[] = asArray(parseJson(`[
+        {"type":"recurring","amount_cents":2000},
+        {"type":"purchased","amount_cents":300},
+        {"type":"promotional","amount_cents":500,"expires_at_ts":${nowSec + 3600}},
+        {"type":"promotional","amount_cents":400,"expires_at_ts":${nowSec - 3600}}
+      ]`))!;
+      const pools = perplexityPools(grants, 1200, 1000, nowSec);
+      expect(pools.recurring).assertEqual(2000);
+      // 过期赠金不入分母
+      expect(pools.promo).assertEqual(500);
+      // 已购池取 grants 汇总与 current_period_purchased_cents 的较大值
+      expect(pools.purchased).assertEqual(1000);
+      expect(pools.recurringUsed).assertEqual(1200);
+      expect(pools.purchasedUsed).assertEqual(0);
+      expect(pools.promoUsed).assertEqual(0);
+      expect(pools.promoExpiry).assertEqual(nowSec + 3600);
+      // 周期池被吃满后溢出到已购池，再到赠金池
+      const spill = perplexityPools(grants, 2400, 0, nowSec);
+      expect(spill.recurringUsed).assertEqual(2000);
+      expect(spill.purchasedUsed).assertEqual(300);
+      expect(spill.promoUsed).assertEqual(100);
+
+      const lanes = perplexityLanes(pools, nextRefresh);
+      expect(lanes.primary!.usedPercent).assertEqual(60);
+      expect(lanes.primary!.resetsAt).assertEqual(nextRefresh);
+      expect(lanes.secondary!.usedPercent).assertEqual(0);
+      expect(lanes.tertiary!.usedPercent).assertEqual(0);
+      // 只有赠金/已购时不出主泳道（源工程同样没有主泳道）
+      const paidOnlyGrants: Json[] = asArray(parseJson(`[
+        {"type":"purchased","amount_cents":300},
+        {"type":"promotional","amount_cents":500,"expires_at_ts":${nowSec + 3600}}
+      ]`))!;
+      // 扣减顺序是 周期 → 已购 → 赠金：已购池先被吃掉，赠金池这时仍是 0%
+      const noRecurring = perplexityLanes(perplexityPools(paidOnlyGrants, 100, 0, nowSec), 0);
+      expect(noRecurring.primary).assertEqual(null);
+      expect(noRecurring.secondary!.usedPercent).assertEqual(0);
+      expect(Math.round(noRecurring.tertiary!.usedPercent)).assertEqual(33);
+      // 只有未过期赠金时（没有周期/已购池）：赠金泳道才出比例
+      const promoOnlyGrants: Json[] = asArray(parseJson(`[
+        {"type":"promotional","amount_cents":500,"expires_at_ts":${nowSec + 3600}}
+      ]`))!;
+      const promoOnly = perplexityLanes(perplexityPools(promoOnlyGrants, 100, 0, nowSec), 0);
+      expect(promoOnly.primary).assertEqual(null);
+      expect(promoOnly.secondary!.usedPercent).assertEqual(20);
+      expect(promoOnly.tertiary!.usedPercent).assertEqual(100);
+      // 三池全空：主泳道 100%（空额度条）+ 续费时间，赠金/已购泳道也是 100%
+      const noGrants: Json[] = asArray(parseJson('[]'))!;
+      const empty = perplexityLanes(perplexityPools(noGrants, 0, 0, nowSec), nextRefresh);
+      expect(empty.primary!.usedPercent).assertEqual(100);
+      expect(empty.primary!.resetsAt).assertEqual(nextRefresh);
+      expect(empty.secondary!.usedPercent).assertEqual(100);
+      expect(empty.tertiary!.usedPercent).assertEqual(100);
+    });
+
+    it('Extra_lane_catalog', 0, () => {
+      // 词首大写（对照插件 title()）：下划线换空格 + 每词首字母大写
+      expect(titleCaseWords('neural_watt')).assertEqual('Neural Watt');
+      expect(titleCaseWords('day')).assertEqual('Day');
+      expect(titleCaseWords('PRO')).assertEqual('Pro');
+
+      // ElevenLabs 席位泳道（对照插件 elevenlabs.js）：分子分母都在且分母 > 0 才出
+      const voiceSlot = new ElevenLabsSlot();
+      voiceSlot.id = 'voice-slots';
+      voiceSlot.title = 'Voice slots';
+      voiceSlot.used = 3;
+      voiceSlot.limit = 10;
+      const missingLimit = new ElevenLabsSlot();
+      missingLimit.id = 'professional-voices';
+      missingLimit.title = 'Professional voices';
+      missingLimit.used = 1;
+      const zeroLimit = new ElevenLabsSlot();
+      zeroLimit.id = 'zero';
+      zeroLimit.title = 'Zero';
+      zeroLimit.used = 1;
+      zeroLimit.limit = 0;
+      const slots = elevenLabsSlotWindows([voiceSlot, missingLimit, zeroLimit]);
+      expect(slots.length).assertEqual(1);
+      expect(slots[0].id).assertEqual('voice-slots');
+      expect(slots[0].window.usedPercent).assertEqual(30);
+      // 计划名：tier 词首大写，非 active 的 status 拼在后面
+      expect(elevenLabsLoginMethod('creator_pro', null)).assertEqual('Creator Pro');
+      expect(elevenLabsLoginMethod('free', 'trialing')).assertEqual('Free · trialing');
+      expect(elevenLabsLoginMethod('free', 'active')).assertEqual('Free');
+      expect(elevenLabsLoginMethod(null, 'past_due')).assertEqual('past_due');
+
+      // NeuralWatt（对照插件 neuralwatt.js）：主泳道是订阅 kWh，密钥限额是附加泳道
+      const quotaJson = '{"balance":{"credits_remaining_usd":12.5,"credits_used_usd":7.5,' +
+        '"accounting_method":"prepaid"},"subscription":{"kwh_included":40,"kwh_used":10,' +
+        '"current_period_end":"2026-10-01T00:00:00.000Z","plan":"scale_plan"},' +
+        '"key":{"allowance":{"limit_usd":5,"spent_usd":2,"period":"daily"}}}';
+      const quota = neuralWattQuota(asObj(parseJson(quotaJson))!);
+      expect(quota.totalUSD).assertEqual(20);
+      expect(quota.usedUSD).assertEqual(7.5);
+      expect(quota.remainingUSD).assertEqual(12.5);
+      expect(quota.kwhIncluded).assertEqual(40);
+      expect(quota.kwhConsumed).assertEqual(10);
+      const watt = neuralWattWindows(quota);
+      expect(watt.primary!.usedPercent).assertEqual(25);
+      expect(watt.primary!.resetsAt).assertEqual(Date.parse('2026-10-01T00:00:00.000Z'));
+      expect(watt.extras.length).assertEqual(1);
+      expect(watt.extras[0].id).assertEqual('key-allowance');
+      expect(watt.extras[0].title).assertEqual('Key Daily');
+      expect(watt.extras[0].window.usedPercent).assertEqual(40);
+      // 密钥被封锁 → 100%
+      const blockedRoot = asObj(parseJson(
+        '{"key":{"allowance":{"limit_usd":5,"spent_usd":1,"blocked":true}}}'))!;
+      const blocked = neuralWattQuota(blockedRoot);
+      expect(neuralWattWindows(blocked).extras[0].window.usedPercent).assertEqual(100);
+      expect(neuralWattWindows(blocked).extras[0].title).assertEqual('Key Allowance');
+      // 额度字段缺失：不出主泳道也不出附加泳道
+      const bare = neuralWattQuota(asObj(parseJson('{}'))!);
+      expect(neuralWattWindows(bare).primary).assertEqual(null);
+      expect(neuralWattWindows(bare).extras.length).assertEqual(0);
+
+      // Sub2API（对照插件 sub2api.js）：有订阅包时用日/周/月，否则回退配额；rate_limits 是附加泳道
+      const subJson = '{"balance":12,"subscription":{"daily_usage_usd":3,"daily_limit_usd":10,' +
+        '"weekly_usage_usd":20,"weekly_limit_usd":40,"monthly_usage_usd":50},' +
+        '"rate_limits":[{"window":"5h","limit":5,"used":1,"remaining":4},' +
+        '{"window":"7d","limit":20,"used":5,"remaining":15}]}';
+      const subWindows = sub2APIWindows(asObj(parseJson(subJson))!);
+      expect(subWindows.primary!.usedPercent).assertEqual(30);
+      expect(subWindows.secondary!.usedPercent).assertEqual(50);
+      // 月度只有 used、没有 limit：不出泳道
+      expect(subWindows.tertiary).assertEqual(null);
+      expect(subWindows.extras.length).assertEqual(2);
+      expect(subWindows.extras[0].id).assertEqual('5h');
+      expect(subWindows.extras[0].title).assertEqual('5 hour limit');
+      expect(subWindows.extras[0].window.usedPercent).assertEqual(20);
+      expect(subWindows.extras[1].title).assertEqual('7 day limit');
+      const quotaOnly = sub2APIWindows(asObj(parseJson(
+        '{"quota":{"used":25,"limit":100,"remaining":75}}'))!);
+      expect(quotaOnly.primary!.usedPercent).assertEqual(25);
+      expect(quotaOnly.secondary).assertEqual(null);
+      expect(quotaOnly.extras.length).assertEqual(0);
+
+      // Claude（对照 ClaudeWebExtraRateWindowParser + ClaudeScopedWeeklyLimitMapper）
+      expect(claudeSlug('Claude 3.5 Sonnet')).assertEqual('claude-3-5-sonnet');
+      expect(claudeSlug('--Opus--')).assertEqual('opus');
+      expect(claudeIsAllModelsScope('', 'All models')).assertTrue();
+      expect(claudeIsAllModelsScope('claude-all-models', 'Everything')).assertTrue();
+      expect(claudeIsAllModelsScope('claude-sonnet', 'Sonnet')).assertFalse();
+      const claudeJson = '{"limits":[' +
+        '{"kind":"weekly_scoped","group":"weekly","percent":42,' +
+        '"resets_at":"2026-10-01T00:00:00.000Z","scope":{"model":{"id":"claude-sonnet-4","display_name":"Sonnet 4"}}},' +
+        '{"kind":"weekly_scoped","group":"weekly","percent":10,' +
+        '"scope":{"model":{"id":"claude-all-models","display_name":"All models"}}},' +
+        '{"kind":"weekly_scoped","group":"weekly","percent":5,' +
+        '"scope":{"model":{"id":"claude-sonnet-4","display_name":"Sonnet 4"}}},' +
+        '{"kind":"session","group":"weekly","percent":90,' +
+        '"scope":{"model":{"id":"claude-opus","display_name":"Opus"}}}],' +
+        '"seven_day_routines":{"utilization":7,"resets_at":"2026-09-30T00:00:00.000Z"}}';
+      const claudeWindows = claudeExtraRateWindows(asObj(parseJson(claudeJson))!);
+      // 模型限定周额度在前（重复 id 与 all-models 跳过），Daily Routines 在后
+      expect(claudeWindows.length).assertEqual(2);
+      expect(claudeWindows[0].id).assertEqual('claude-weekly-scoped-claude-sonnet-4');
+      expect(claudeWindows[0].title).assertEqual('Sonnet 4 only');
+      expect(claudeWindows[0].window.usedPercent).assertEqual(42);
+      expect(claudeWindows[0].window.resetsAt).assertEqual(Date.parse('2026-10-01T00:00:00.000Z'));
+      expect(claudeWindows[1].id).assertEqual('claude-routines');
+      expect(claudeWindows[1].title).assertEqual('Daily Routines');
+      expect(claudeWindows[1].window.usedPercent).assertEqual(7);
+      // 候选键的先后顺序：seven_day_routines 优先于 cowork
+      const coworkOnly = claudeExtraRateWindows(asObj(parseJson('{"cowork":{"utilization":3}}'))!);
+      expect(coworkOnly.length).assertEqual(1);
+      expect(coworkOnly[0].id).assertEqual('claude-routines');
+      expect(claudeExtraRateWindows(asObj(parseJson('{}'))!).length).assertEqual(0);
+    });
+
+    it('Lane_mapping_and_labels', 0, () => {
+      // 标签表补齐（对照 ProviderDescriptor.metadata）：Amp 与控制台 Admin API（同上 Claude descriptor）
+      const ampLabels = windowLabelsFor('amp');
+      expect(ampLabels.primary).assertEqual('Amp Free');
+      expect(ampLabels.secondary).assertEqual('Balance');
+      const consoleLabels = windowLabelsFor('anthropic-console');
+      expect(consoleLabels.primary).assertEqual('Session');
+      expect(consoleLabels.secondary).assertEqual('Weekly');
+      expect(consoleLabels.tertiary).assertEqual('Sonnet');
+      // 未登记的服务商仍返回全空（UI 回落中文默认名）
+      expect(windowLabelsFor('siliconflow').primary).assertEqual('');
+
+      // 绑定泳道表（对照 primaryBindingQuotaLanes + 各 fetcher 的 windowMinutes）
+      const claudeLanes = bindingQuotaLanesFor('claude');
+      expect(claudeLanes.length).assertEqual(1);
+      expect(claudeLanes[0].slot).assertEqual('secondary');
+      expect(claudeLanes[0].minutes).assertEqual(WEEKLY_WINDOW_MINUTES);
+      expect(bindingQuotaLanesFor('anthropic-console').length).assertEqual(1);
+      const triLanes = bindingQuotaLanesFor('clinepass');
+      expect(triLanes.length).assertEqual(2);
+      expect(triLanes[1].slot).assertEqual('tertiary');
+      expect(triLanes[1].minutes).assertEqual(MONTHLY_WINDOW_MINUTES);
+      // 四小时的 chutes 主泳道绑定月度池
+      expect(bindingQuotaLanesFor('chutes')[0].minutes).assertEqual(MONTHLY_WINDOW_MINUTES);
+      // 未声明的服务商不受任何更长泳道绑定
+      expect(bindingQuotaLanesFor('openrouter').length).assertEqual(0);
+      expect(bindingQuotaLanesFor('kimi-coding').length).assertEqual(0);
+
+      const now = Date.parse('2026-09-24T12:00:00.000Z');
+      const weekReset = now + 3 * 24 * 60 * 60 * 1000;
+      const hourReset = now + 2 * 60 * 60 * 1000;
+
+      // 周额度还有剩余 → 不投影
+      expect(bindingQuotaProjection(
+        makeWindow(20, hourReset), [makeWindow(60, weekReset)], [WEEKLY_WINDOW_MINUTES], now))
+        .assertEqual(null);
+      // 周额度耗尽 → 主泳道按 100% + 周重置时间展示
+      const capped = bindingQuotaProjection(
+        makeWindow(20, hourReset), [makeWindow(100, weekReset)], [WEEKLY_WINDOW_MINUTES], now)!;
+      expect(capped.usedPercent).assertEqual(100);
+      expect(capped.resetsAt).assertEqual(weekReset);
+      // 更短的泳道不能卡住主泳道（源工程用 minutes > primaryMinutes 过滤）
+      expect(bindingQuotaProjection(
+        makeWindow(20, hourReset), [makeWindow(100, hourReset)], [60], now)).assertEqual(null);
+      // 耗尽但重置时间已过 → 视为已恢复，不投影
+      expect(bindingQuotaProjection(
+        makeWindow(20, hourReset), [makeWindow(100, now - 1000)], [WEEKLY_WINDOW_MINUTES], now))
+        .assertEqual(null);
+      // 无重置时间的闸门：不承诺时间（0 = 不显示倒计时）
+      const unknownReset = bindingQuotaProjection(
+        makeWindow(20, hourReset), [makeWindow(100, 0)], [WEEKLY_WINDOW_MINUTES], now)!;
+      expect(unknownReset.resetsAt).assertEqual(0);
+      // 主泳道自己也没了 + 周额度也没了 → 取更晚的那个重置时间
+      const bothOut = bindingQuotaProjection(
+        makeWindow(100, weekReset + 86400000), [makeWindow(100, weekReset)],
+        [WEEKLY_WINDOW_MINUTES], now)!;
+      expect(bothOut.resetsAt).assertEqual(weekReset + 86400000);
+      // 非有限/未知用量：usageKnown=false 的 0% 占位不算耗尽
+      expect(bindingQuotaProjection(
+        makeWindow(0, 0, false), [makeWindow(0, 0, false)], [WEEKLY_WINDOW_MINUTES], now))
+        .assertEqual(null);
+
+      // 展示窗口：只有真的命中绑定泳道才替换百分比与重置时间
+      const snap = UsageSnapshot.success(makeWindow(20, hourReset), makeWindow(100, weekReset), null);
+      const shown = primaryDisplayWindow('claude', snap, now)!;
+      expect(shown.usedPercent).assertEqual(100);
+      expect(shown.resetsAt).assertEqual(weekReset);
+      // 同一条快照对未声明绑定泳道的服务商原样输出
+      expect(primaryDisplayWindow('openrouter', snap, now)!.usedPercent).assertEqual(20);
+      // 绑定泳道但快照里没有该泳道（如 Claude 只有主泳道）→ 原样输出
+      const primaryOnly = UsageSnapshot.success(makeWindow(20, hourReset), null, null);
+      expect(primaryDisplayWindow('claude', primaryOnly, now)!.usedPercent).assertEqual(20);
+      // 没有快照 / 没有主泳道 → null
+      expect(primaryDisplayWindow('claude', null, now)).assertEqual(null);
+      expect(primaryDisplayWindow('claude', UsageSnapshot.success(null, makeWindow(100, weekReset), null), now))
+        .assertEqual(null);
+      // 主泳道被卡住时明细行不受影响：快照本身未被改写
+      expect(snap.primary!.usedPercent).assertEqual(20);
+
+      // Doubao 请求桶探测窗口的泳道名（对照 DoubaoProviderDescriptor.primaryLabel）
+      const probe = doubaoParseProbe(200, {
+        'x-ratelimit-limit-requests': '100',
+        'x-ratelimit-remaining-requests': '40',
+        'x-ratelimit-reset-requests': '60s',
+      }, now);
+      const probeSnap = doubaoProbeSnapshot(probe);
+      expect(probeSnap.primaryLabel).assertEqual('Requests');
+      expect(probeSnap.primary!.usedPercent).assertEqual(60);
     });
 
     it('Row_progress_bar', 0, () => {

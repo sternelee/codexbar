@@ -385,7 +385,11 @@ export function doubaoParseProbe(
 /** 探测结果 → 快照：限额可靠才给主窗口；Key 有效但无限额时给出说明行 */
 export function doubaoProbeSnapshot(r: DoubaoProbeResult): UsageSnapshot {
   if (r.window != null) {
-    return UsageSnapshot.success(r.window, null, null);
+    const snap = UsageSnapshot.success(r.window, null, null);
+    // 泳道标签（对照 DoubaoProviderDescriptor.primaryLabel）：探测到的请求桶没有窗口长度、
+    // 重置描述是 "used/limit requests"，所以叫 Requests，而不是元数据表里的 5-hour。
+    snap.primaryLabel = 'Requests';
+    return snap;
   }
   if (r.keyValid) {
     const snap = UsageSnapshot.success(null, null, null);

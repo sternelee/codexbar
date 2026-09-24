@@ -18,6 +18,7 @@ import {
   AuthKind,
   makeWindow,
   NamedRateWindow,
+  pct,
   ProviderCostSnapshot,
   ProviderDescriptor,
   ProviderDetailRow,
@@ -426,12 +427,24 @@ class NousProvider implements UsageProvider {
       return UsageSnapshot.failure('未返回额度信息');
     }
     const renewable = sub != null ? optStr(sub, 'current_period_end') : null;
+    const renewalMs = renewable != null ? Date.parse(renewable) : 0;
 
-    const snap = UsageSnapshot.success(null, null, null);
+    const primary = nousLane(monthly, remaining, isNaN(renewalMs) ? 0 : renewalMs);
+
+    const snap = UsageSnapshot.success(primary, null, null);
     const balance = remaining ?? 0;
     snap.providerCost = {
       remaining: balance, used: 0, currency: 'CREDITS',
       displayText: `${balance} credits`,
+    };
+    // 计划名（对照插件：subscription.plan，没有就用 has_active_subscription 兜底）
+    const planName = sub != null ? optStr(sub, 'plan') : null;
+    const hasActive = access != null && bool(access, 'has_active_subscription');
+    snap.identity = {
+      accountEmail: '', accountOrganization: '',
+      loginMethod: planName != null && planName.length > 0
+        ? planName
+        : (hasActive ? 'Subscription' : ''),
     };
 
     // Subscription / Credits 两组（对照插件：订阅额度、月度授予、滚存、续期、充值、可用总额）
@@ -471,6 +484,17 @@ class NousProvider implements UsageProvider {
     }
     return snap;
   }
+}
+
+/**
+ * Nous Portal 主泳道（对照插件 nous.js）：月度授予额度（monthly_credits）是分母，
+ * 剩余额度（credits_remaining）是分子；两者缺一时不出泳道。
+ */
+export function nousLane(monthly: number | null, remaining: number | null, renewalMs: number): RateWindow | null {
+  if (monthly == null || monthly <= 0 || remaining == null) {
+    return null;
+  }
+  return makeWindow(pct(Math.max(0, monthly - Math.max(0, remaining)), monthly), renewalMs);
 }
 
 // ---------------------------------------------------------------------------

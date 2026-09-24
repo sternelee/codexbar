@@ -13,6 +13,7 @@ import {
   AuthKind,
   makeWindow,
   NamedRateWindow,
+  pct,
   ProviderCostSnapshot,
   ProviderDescriptor,
   ProviderDetailRow,
@@ -129,6 +130,33 @@ class ZenMuxProvider implements UsageProvider {
 // Manus
 // ---------------------------------------------------------------------------
 
+/** Manus 的两条泳道（对照插件 manus.js 的 primary/secondary） */
+export class ManusLanes {
+  primary: RateWindow | null = null;
+  secondary: RateWindow | null = null;
+}
+
+/**
+ * 月度套餐额度（proMonthlyCredits）与刷新额度（maxRefreshCredits）各一条泳道；
+ * 分母 <= 0 时该条泳道不出——分母未知时报 100% 会把已花掉的额度显示成「未动用」。
+ */
+export function manusLanes(
+  monthly: number,
+  periodic: number,
+  refresh: number,
+  maxRefresh: number,
+  nextRefreshMs: number
+): ManusLanes {
+  const lanes = new ManusLanes();
+  if (monthly > 0) {
+    lanes.primary = makeWindow(pct(monthly - periodic, monthly), 0);
+  }
+  if (maxRefresh > 0) {
+    lanes.secondary = makeWindow(pct(maxRefresh - refresh, maxRefresh), nextRefreshMs);
+  }
+  return lanes;
+}
+
 class ManusProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'manus',
@@ -172,9 +200,16 @@ class ManusProvider implements UsageProvider {
       return UsageSnapshot.failure('响应解析失败');
     }
     const total = num(credits, 'totalCredits', 0);
+    const monthly = num(credits, 'proMonthlyCredits', 0);
+    const periodic = num(credits, 'periodicCredits', 0);
+    const refresh = num(credits, 'refreshCredits', 0);
+    const maxRefresh = num(credits, 'maxRefreshCredits', 0);
+    const refreshInterval = optStr(credits, 'refreshInterval');
     const rows: ProviderDetailRow[] = [];
-    const labels: string[] = ['免费额度', '周期额度', '加购额度', '刷新额度', 'Pro 月度额度'];
-    const keys: string[] = ['freeCredits', 'periodicCredits', 'addonCredits', 'refreshCredits', 'proMonthlyCredits'];
+    const labels: string[] = ['免费额度', '周期额度', '加购额度', '刷新额度', 'Pro 月度额度', '刷新上限'];
+    const keys: string[] = [
+      'freeCredits', 'periodicCredits', 'addonCredits', 'refreshCredits', 'proMonthlyCredits', 'maxRefreshCredits',
+    ];
     for (let i = 0; i < keys.length; i++) {
       const v = optNum(credits, keys[i]);
       if (v != null) {
@@ -186,7 +221,22 @@ class ManusProvider implements UsageProvider {
       rows.push({ label: '下次刷新', value: `${Format.dateTime(nextRefresh)}（${Format.countdown(nextRefresh - Date.now())}后）` });
     }
 
-    const snap = UsageSnapshot.success(null, null, null);
+    const lanes = manusLanes(monthly, periodic, refresh, maxRefresh, nextRefresh);
+    if (lanes.primary != null) {
+      rows.push({ label: 'Pro 月度已用', value: `${Math.round(Math.max(0, monthly - periodic))} / ${Math.round(monthly)}` });
+    }
+    if (lanes.secondary != null) {
+      const prefix = refreshInterval != null && refreshInterval.length > 0
+        ? `${refreshInterval.charAt(0).toUpperCase()}${refreshInterval.slice(1)}: `
+        : '';
+      rows.push({ label: '刷新已用', value: `${prefix}${Math.round(refresh)} / ${Math.round(maxRefresh)}` });
+    }
+
+    const snap = UsageSnapshot.success(lanes.primary, lanes.secondary, null);
+    snap.identity = {
+      accountEmail: '', accountOrganization: '',
+      loginMethod: `Balance: ${Math.round(total)} credits`,
+    };
     snap.providerCost = {
       remaining: total, used: 0, currency: 'CREDITS',
       displayText: `${total.toFixed(0)} credits`,
@@ -272,6 +322,84 @@ class DeepInfraProvider implements UsageProvider {
 // Perplexity
 // ---------------------------------------------------------------------------
 
+/**
+ * Perplexity 三个额度池（对照插件 perplexity.js）：
+ * credit_grants 按 type 汇总成「周期 / 赠金 / 已购」三池，
+ * total_usage_cents 再按 周期 → 已购 → 赠金 的顺序依次扣减。
+ * 赠金只算未过期的（过期赠金不入分母，否则泳道会永远显示「未动用」）。
+ */
+export class PerplexityPools {
+  recurring: number = 0;
+  promo: number = 0;
+  purchased: number = 0;
+  promoExpiry: number = 0;
+  recurringUsed: number = 0;
+  purchasedUsed: number = 0;
+  promoUsed: number = 0;
+}
+
+export function perplexityPools(
+  grants: Json[] | null,
+  totalUsageCents: number,
+  purchasedCents: number,
+  nowSec: number
+): PerplexityPools {
+  const pools = new PerplexityPools();
+  let purchasedGrants = 0;
+  if (grants != null) {
+    for (let i = 0; i < grants.length; i++) {
+      const grant = asObj(grants[i]);
+      if (grant == null) {
+        continue;
+      }
+      const amountCents = num(grant, 'amount_cents', 0);
+      const kind = str(grant, 'type', '');
+      if (kind === 'recurring') {
+        pools.recurring += amountCents;
+      } else if (kind === 'promotional') {
+        const expires = optNum(grant, 'expires_at_ts');
+        if (expires != null && expires > nowSec) {
+          pools.promo += amountCents;
+          if (pools.promoExpiry === 0 || expires < pools.promoExpiry) {
+            pools.promoExpiry = expires;
+          }
+        }
+      } else if (kind === 'purchased') {
+        purchasedGrants += amountCents;
+      }
+    }
+  }
+  // 已购池取「grants 汇总」与 current_period_purchased_cents 的较大值（对照插件）
+  pools.purchased = Math.max(purchasedGrants, purchasedCents);
+  let left = totalUsageCents;
+  pools.recurringUsed = Math.min(left, pools.recurring);
+  left -= pools.recurringUsed;
+  pools.purchasedUsed = Math.min(left, pools.purchased);
+  left -= pools.purchasedUsed;
+  pools.promoUsed = Math.min(left, pools.promo);
+  return pools;
+}
+
+/** Perplexity 的三条泳道（对照插件 perplexity.js 的 primary/secondary/tertiary） */
+export class PerplexityLanes {
+  primary: RateWindow | null = null;
+  secondary: RateWindow | null = null;
+  tertiary: RateWindow | null = null;
+}
+
+export function perplexityLanes(pools: PerplexityPools, renewalMs: number): PerplexityLanes {
+  const lanes = new PerplexityLanes();
+  // 周期池有额度时 primary 是周期池；只剩赠金/已购时不出 primary（源工程这时也没有主泳道）；
+  // 三池全空时 primary 报 100%（空额度条）并带上续费时间。
+  lanes.primary = pools.recurring > 0
+    ? makeWindow(pct(pools.recurringUsed, pools.recurring), renewalMs)
+    : (pools.promo > 0 || pools.purchased > 0 ? null : makeWindow(100, renewalMs));
+  // 分母为 0 时 pct 报 100%，与源工程一致（空额度条而不是满格）
+  lanes.secondary = makeWindow(pct(pools.promoUsed, pools.promo), 0);
+  lanes.tertiary = makeWindow(pct(pools.purchasedUsed, pools.purchased), 0);
+  return lanes;
+}
+
 class PerplexityProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'perplexity',
@@ -304,20 +432,46 @@ class PerplexityProvider implements UsageProvider {
     const balanceCents = num(root, 'balance_cents', 0);
     const usedCents = num(root, 'total_usage_cents', 0);
     const renewal = optNum(root, 'renewal_date_ts');
+    const renewalMs = renewal != null && renewal > 0 ? (renewal > 1e12 ? renewal : renewal * 1000) : 0;
 
-    const snap = UsageSnapshot.success(null, null, null);
+    const grants = asArray(root['credit_grants']);
+    const pools = perplexityPools(
+      grants,
+      usedCents,
+      num(root, 'current_period_purchased_cents', 0),
+      Date.now() / 1000
+    );
+    const lanes = perplexityLanes(pools, renewalMs);
+    const recurring = pools.recurring;
+    const promo = pools.promo;
+    const purchased = pools.purchased;
+    const whole = (value: number): string => `${Math.round(value)}`;
+
+    const snap = UsageSnapshot.success(lanes.primary, lanes.secondary, lanes.tertiary);
     snap.providerCost = {
       remaining: balanceCents / 100, used: usedCents / 100, currency: 'USD',
       displayText: Format.money(balanceCents / 100, 'USD'),
     };
+    snap.identity = {
+      accountEmail: '', accountOrganization: '',
+      loginMethod: recurring <= 0 ? '' : (recurring < 5000 ? 'Pro' : 'Max'),
+    };
     const rows: ProviderDetailRow[] = [];
     rows.push({ label: '本期已购', value: Format.money(num(root, 'current_period_purchased_cents', 0) / 100, 'USD') });
     rows.push({ label: '累计使用', value: Format.money(usedCents / 100, 'USD') });
-    if (renewal != null && renewal > 0) {
-      const renewalMs = renewal > 1e12 ? renewal : renewal * 1000;
+    if (renewalMs > 0) {
       rows.push({ label: '下次续费', value: Format.dateTime(renewalMs) });
     }
-    const grants = asArray(root['credit_grants']);
+    if (recurring > 0) {
+      rows.push({ label: '周期额度', value: `${whole(pools.recurringUsed)}/${whole(recurring)} credits` });
+    }
+    let promoLine = `${whole(pools.promoUsed)}/${whole(promo)} bonus`;
+    if (pools.promoExpiry > 0) {
+      promoLine += ` · exp. ${Format.dateTime(pools.promoExpiry * 1000)}`;
+    }
+    rows.push({ label: '赠金额度', value: promoLine });
+    rows.push({ label: '已购额度', value: `${whole(pools.purchasedUsed)}/${whole(purchased)} credits` });
+    const grantRows: ProviderDetailRow[] = [];
     if (grants != null && grants.length > 0) {
       for (let i = 0; i < grants.length && i < 3; i++) {
         const g = asObj(grants[i]);
@@ -331,10 +485,10 @@ class PerplexityProvider implements UsageProvider {
           const expMs = exp > 1e12 ? exp : exp * 1000;
           line += `（${Format.dateTime(expMs)} 过期）`;
         }
-        rows.push({ label: `赠金 #${i + 1}`, value: line });
+        grantRows.push({ label: `赠金 #${i + 1}`, value: line });
       }
     }
-    const section: ProviderDetailSection = { title: '余额明细', rows: rows };
+    const section: ProviderDetailSection = { title: '余额明细', rows: rows.concat(grantRows) };
     snap.details = [section];
     return snap;
   }
@@ -374,15 +528,19 @@ class KimiCodingProvider implements UsageProvider {
     }
     // 泳道绑定对照 macOS KimiProviderDescriptor：primary=.weekly(7 天)、secondary=.session(5 小时)，
     // 标签同源（sessionLabel "7-day usage" / weeklyLabel "5-hour usage"），故主窗口放 7 天池；
-    // 月度池源工程未命名，这里显式标为 Monthly。
+    // 月度池不是第三泳道：源工程 toUsageSnapshot 的 tertiary 恒为 nil，月度池走附加泳道
+    // id "kimi-monthly"、标题 "Total usage"（第三泳道只留给语义上的 opus 位）。
     const snap = UsageSnapshot.success(
       KimiCodingProvider.windowOf(pools, 'limit_7d'),
       KimiCodingProvider.windowOf(pools, 'limit_5h'),
-      KimiCodingProvider.windowOf(pools, 'limit_month_total')
+      null
     );
     snap.primaryLabel = '7-day usage';
     snap.secondaryLabel = '5-hour usage';
-    snap.tertiaryLabel = 'Monthly';
+    const monthlyPool = KimiCodingProvider.windowOf(pools, 'limit_month_total');
+    if (monthlyPool != null) {
+      snap.extraRateWindows = [{ id: 'kimi-monthly', title: 'Total usage', window: monthlyPool }];
+    }
     // 会员等级 → 计划名（对照 macOS planName 映射）
     const user = asObj(root['user']);
     const membership = user != null ? asObj(user['membership']) : null;
@@ -469,15 +627,18 @@ class KimiCodingProvider implements UsageProvider {
     if (target == null) {
       return UsageSnapshot.failure('响应解析失败');
     }
-    // 与 API Key 路径同序：主窗口 = 7 天池（sessionLabel "7-day usage"）
+    // 与 API Key 路径同序：主窗口 = 7 天池（sessionLabel "7-day usage"），月度池仍走附加泳道
     const snap = UsageSnapshot.success(
       KimiCodingProvider.windowOf(target, 'limit_7d'),
       KimiCodingProvider.windowOf(target, 'limit_5h'),
-      KimiCodingProvider.windowOf(target, 'limit_month_total')
+      null
     );
     snap.primaryLabel = '7-day usage';
     snap.secondaryLabel = '5-hour usage';
-    snap.tertiaryLabel = 'Monthly';
+    const monthlyPool = KimiCodingProvider.windowOf(target, 'limit_month_total');
+    if (monthlyPool != null) {
+      snap.extraRateWindows = [{ id: 'kimi-monthly', title: 'Total usage', window: monthlyPool }];
+    }
     return snap;
   }
 }

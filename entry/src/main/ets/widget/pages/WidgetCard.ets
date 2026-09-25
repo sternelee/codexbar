@@ -15,6 +15,8 @@ interface WidgetCardItem {
   barPct: number;
   level: string;
   cd: string;
+  /** hero 泳道名（绑定泳道比主泳道更紧时标注，如 "Weekly"）；主泳道为空 */
+  lane?: string;
 }
 
 @Entry
@@ -52,8 +54,10 @@ struct WidgetCard {
       .borderRadius(2)
       .backgroundColor($r('app.color.stroke'))
 
-      if (item.cd.length > 0) {
-        Text(item.cd)
+      if (item.cd.length > 0 || (item.lane != null && item.lane.length > 0)) {
+        Text(item.lane != null && item.lane.length > 0
+          ? (item.cd.length > 0 ? `${item.lane} · ${item.cd}` : item.lane)
+          : item.cd)
           .fontSize(9)
           .fontColor($r('app.color.text_dim'))
           .maxLines(1)

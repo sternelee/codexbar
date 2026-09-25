@@ -3,11 +3,11 @@ import { Format } from '../main/ets/common/Format';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../main/ets/net/Json';
 import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderDetailSection, ProviderSetting,
-  ProviderState, AuthKind, applyWindowLabels, bindingQuotaLanesFor, bindingQuotaProjection, defaultReminder,
-  extraFields, extraValue, isDefaultEnabledProvider, isPrimaryProvider, makeChart, MONTHLY_WINDOW_MINUTES,
+  ProviderState, AuthKind, applyWindowLabels, bindingQuotaLanesFor, bindingQuotaProjection, creditsHintFor, defaultReminder,
+  extraFields, extraValue, isDefaultEnabledProvider, isPrimaryProvider, isWidgetSelectable, makeChart, MONTHLY_WINDOW_MINUTES,
   needsSecondCredential, optionalDetailsFor, parseExtra, pct, primaryDisplayWindow,
-  progressPercent, ProviderCostSnapshot, replacedDetailRowsFor, rowProgress, setExtraValue, visibleDetails,
-  WEEKLY_WINDOW_MINUTES, windowLabelsFor
+  progressPercent, ProviderCostSnapshot, replacedDetailRowsFor, rowProgress, setExtraValue, supportsCredits,
+  visibleDetails, WEEKLY_WINDOW_MINUTES, widgetHeroLane, windowLabelsFor
 } from '../main/ets/model/Models';
 import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow, manusLanes, perplexityLanes, perplexityPools } from '../main/ets/providers/MoreProviders';
@@ -124,6 +124,8 @@ import { AwsCredentials, signAwsRequest } from '../main/ets/common/AwsSign';
 import {
   bedrockClaudeActivity,
   bedrockCloudWatchEndpoint,
+  bedrockDailyCostList,
+  bedrockDailyRange,
   bedrockDataUnavailable,
   bedrockMonthEnd,
   bedrockMonthRange,
@@ -1192,6 +1194,203 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(noBudget.primary).assertEqual(null);
       expect(noBudget.providerCost!.displayText).assertEqual('$7.50');
       expect(noBudget.identity!.loginMethod).assertEqual('Spend: $7.50');
+
+      // 成本历史日线：区间近 30 天整日；逐日解析只累加 Bedrock 分组、保留两位小数
+      const dailyRange = bedrockDailyRange(now);
+      expect(dailyRange.start).assertEqual('2026-08-24');
+      expect(dailyRange.end).assertEqual('2026-09-23');
+      const dailyJson = parseJson('{"ResultsByTime":[' +
+        '{"TimePeriod":{"Start":"2026-09-21"},"Groups":[' +
+        '{"Keys":["Amazon Bedrock"],"Metrics":{"UnblendedCost":{"Amount":"1.005"}}},' +
+        '{"Keys":["Amazon EC2"],"Metrics":{"UnblendedCost":{"Amount":"8"}}}]},' +
+        '{"TimePeriod":{"Start":"2026-09-22"},"Groups":[' +
+        '{"Keys":["Bedrock"],"Metrics":{"UnblendedCost":{"Amount":"2.34"}}}]}],' +
+        '"NextPageToken":"d-2"}');
+      const daily = bedrockDailyCostList(dailyJson);
+      expect(daily.length).assertEqual(2);
+      expect(daily[0].date).assertEqual('2026-09-21');
+      expect(daily[0].cost).assertEqual(1.01);
+      expect(daily[1].cost).assertEqual(2.34);
+      expect(bedrockDailyCostList(parseJson('{"ResultsByTime":[]}')).length).assertEqual(0);
+      expect(bedrockDailyCostList(parseJson('{}')).length).assertEqual(0);
+
+      // 展示映射：dailyPoints 非空时附加 Cost history 图表分节；为空 / null 时不出现
+      const withDaily = bedrockSnapshot(20, 100, null, 'us-east-1', now,
+        [{ label: '09-21', value: 1.01 }, { label: '09-22', value: 2.34 }]);
+      expect(withDaily.details.length).assertEqual(2);
+      expect(withDaily.details[1].title).assertEqual('Cost history');
+      expect(withDaily.details[1].chart != null).assertTrue();
+      expect(withDaily.details[1].chart!.points.length).assertEqual(2);
+      expect(withDaily.details[1].chart!.points[0].value).assertEqual(1.01);
+      expect(bedrockSnapshot(20, 100, null, 'us-east-1', now).details.length).assertEqual(1);
+      expect(bedrockSnapshot(20, 100, null, 'us-east-1', now, []).details.length).assertEqual(1);
+    });
+
+    it('Widget_metadata_and_hero_lane', 0, () => {
+      // widgetSelectable：false 名单不出现在桌面小组件（对照源工程 ProviderMetadata）
+      expect(isWidgetSelectable('claude')).assertTrue();
+      expect(isWidgetSelectable('codex')).assertTrue();
+      expect(isWidgetSelectable('cursor')).assertTrue();
+      expect(isWidgetSelectable('deepseek')).assertTrue();
+      expect(isWidgetSelectable('openrouter')).assertTrue();
+      expect(isWidgetSelectable('kimi-coding')).assertTrue();
+      expect(isWidgetSelectable('doubao')).assertFalse();
+      expect(isWidgetSelectable('xai')).assertFalse();
+      expect(isWidgetSelectable('perplexity')).assertFalse();
+      expect(isWidgetSelectable('commandcode')).assertFalse();
+      expect(isWidgetSelectable('bedrock')).assertFalse();
+      expect(isWidgetSelectable('moonshot')).assertFalse();
+
+      // supportsCredits / creditsHint（对照源工程 metadata）
+      expect(supportsCredits('codex')).assertTrue();
+      expect(supportsCredits('openrouter')).assertTrue();
+      expect(supportsCredits('mimo')).assertTrue();
+      expect(supportsCredits('zoommate')).assertTrue();
+      expect(supportsCredits('amp')).assertTrue();
+      expect(supportsCredits('codebuff')).assertTrue();
+      expect(supportsCredits('commandcode')).assertTrue();
+      expect(supportsCredits('claude')).assertFalse();
+      expect(creditsHintFor('openrouter')).assertEqual('Credit balance from OpenRouter API');
+      expect(creditsHintFor('claude')).assertEqual('');
+
+      // hero 泳道（对照 WidgetTilePlan.bindingLane）：主 + 绑定泳道里剩余最少的一条
+      const now = 1758000000000;
+      // 无绑定泳道 / 无快照：沿用主泳道或 null，不标注窗口名
+      expect(widgetHeroLane('groq', null)).assertEqual(null);
+      const plain = UsageSnapshot.success(makeWindow(30, now, true), null, null);
+      const plainHero = widgetHeroLane('groq', plain);
+      expect(plainHero != null).assertTrue();
+      expect(plainHero!.isPrimary).assertTrue();
+      expect(plainHero!.label).assertEqual('');
+      expect(plainHero!.window.usedPercent).assertEqual(30);
+      // 主泳道更紧：hero = 主泳道（不换数字，不标注）
+      const claudeTight = UsageSnapshot.success(makeWindow(90, now, true), makeWindow(40, now, true), null);
+      applyWindowLabels(claudeTight, 'claude');
+      const heroA = widgetHeroLane('claude', claudeTight);
+      expect(heroA != null).assertTrue();
+      expect(heroA!.isPrimary).assertTrue();
+      expect(heroA!.label).assertEqual('');
+      expect(heroA!.window.usedPercent).assertEqual(90);
+      // 周泳道更紧：hero = Weekly，标注窗口名
+      const claudeWeeklyTight = UsageSnapshot.success(makeWindow(20, now, true), makeWindow(96, now, true), null);
+      applyWindowLabels(claudeWeeklyTight, 'claude');
+      const heroB = widgetHeroLane('claude', claudeWeeklyTight);
+      expect(heroB != null).assertTrue();
+      expect(heroB!.isPrimary).assertFalse();
+      expect(heroB!.label).assertEqual('Weekly');
+      expect(heroB!.window.usedPercent).assertEqual(96);
+      // 并列（都 100%）：主泳道优先（渲染端再套绑定投影给出闸门恢复时间）
+      const claudeBothOut = UsageSnapshot.success(makeWindow(100, now, true), makeWindow(100, now, true), null);
+      const heroC = widgetHeroLane('claude', claudeBothOut);
+      expect(heroC != null).assertTrue();
+      expect(heroC!.isPrimary).assertTrue();
+      // usageKnown=false 的窗口不参与度量；三槽都在时取剩余最少的（月度窗）
+      const doubao = UsageSnapshot.success(
+        makeWindow(30, now, true), makeWindow(50, now, true), makeWindow(80, now, true));
+      applyWindowLabels(doubao, 'doubao');
+      const heroD = widgetHeroLane('doubao', doubao);
+      expect(heroD != null).assertTrue();
+      expect(heroD!.isPrimary).assertFalse();
+      expect(heroD!.label).assertEqual('Monthly');
+      expect(heroD!.window.usedPercent).assertEqual(80);
+      const doubaoMonthly = UsageSnapshot.success(
+        makeWindow(30, now, true), makeWindow(20, now, true), makeWindow(99, now, true));
+      applyWindowLabels(doubaoMonthly, 'doubao');
+      const heroE = widgetHeroLane('doubao', doubaoMonthly);
+      expect(heroE != null).assertTrue();
+      expect(heroE!.isPrimary).assertFalse();
+      expect(heroE!.label).assertEqual('Monthly');
+      expect(heroE!.window.usedPercent).assertEqual(99);
+      const unknownLanes = UsageSnapshot.success(makeWindow(0, 0, false), makeWindow(0, 0, false), null);
+      const heroF = widgetHeroLane('claude', unknownLanes);
+      expect(heroF != null).assertTrue();
+      expect(heroF!.isPrimary).assertTrue();
+      // 主泳道缺失：回退次窗口 / 附加窗口，不标注
+      const noPrimary = UsageSnapshot.success(null, makeWindow(55, now, true), null);
+      const heroG = widgetHeroLane('groq', noPrimary);
+      expect(heroG != null).assertTrue();
+      expect(heroG!.isPrimary).assertFalse();
+      expect(heroG!.label).assertEqual('');
+      expect(heroG!.window.usedPercent).assertEqual(55);
+      expect(widgetHeroLane('groq', UsageSnapshot.success(null, null, null))).assertEqual(null);
+
+      // 卡片数据行：不可挑选的服务商不出现在自动与挑选两种模式里
+      const pick = stateWith(makeWindow(42, 0, true), 'Doubao', true, 'doubao');
+      expect(buildWidgetItems([pick], 1758000000000).length).assertEqual(0);
+      expect(buildWidgetItems([pick], 1758000000000, ['doubao']).length).assertEqual(0);
+      // hero 泳道接管卡片行：周泳道 96% 比主泳道 20% 更紧，卡片显示 96% + Weekly 标注
+      const claudeState = stateWith(makeWindow(20, now + 3600000, true), 'Claude', true, 'claude');
+      claudeState.snapshot = claudeWeeklyTight;
+      const heroRows = buildWidgetItems([claudeState], now);
+      expect(heroRows.length).assertEqual(1);
+      expect(heroRows[0].pct).assertEqual('96%');
+      expect(heroRows[0].lane).assertEqual('Weekly');
+      // hero 为主泳道时不标注
+      const claudeState2 = stateWith(makeWindow(90, now + 3600000, true), 'Claude', true, 'claude');
+      claudeState2.snapshot = claudeTight;
+      const heroRows2 = buildWidgetItems([claudeState2], now);
+      expect(heroRows2.length).assertEqual(1);
+      expect(heroRows2[0].pct).assertEqual('90%');
+      expect(heroRows2[0].lane).assertEqual('');
+    });
+
+    it('Widget_balance_fallback_hero', 0, () => {
+      // 余额回退（对照 macOS WidgetFallbackHero + providerBalance）：
+      // 无配额泳道但快照成功的服务商不上 100% 误导条，也不整条消失——余额当大号数字
+      const now = 1758000000000;
+
+      // DeepSeek 型：无窗口、providerCost.displayText 即余额
+      const deep = stateWith(makeWindow(0, 0, true), 'DeepSeek', true, 'deepseek');
+      deep.snapshot = UsageSnapshot.success(null, null, null);
+      deep.snapshot.providerCost = {
+        remaining: 110, used: 0, currency: 'CNY', displayText: '¥110.00',
+      };
+      const deepRows = buildWidgetItems([deep], now);
+      expect(deepRows.length).assertEqual(1);
+      expect(deepRows[0].pct).assertEqual('¥110.00');
+      expect(deepRows[0].lane).assertEqual('Balance');
+      expect(deepRows[0].cd).assertEqual('');
+      expect(deepRows[0].barPct).assertEqual(0);
+      expect(deepRows[0].level).assertEqual('unknown');
+
+      // OpenRouter 未设上限型：大号数字是花费、余额在 balanceText，回退取余额
+      const or = stateWith(makeWindow(0, 0, true), 'OpenRouter', true, 'openrouter');
+      or.snapshot = UsageSnapshot.success(null, null, null);
+      or.snapshot.providerCost = {
+        remaining: 0, used: 5, currency: 'USD', displayText: '$5.00',
+        balanceText: '$12.34', period: 'This month (API key)', limit: 0,
+      };
+      const orRows = buildWidgetItems([or], now);
+      expect(orRows.length).assertEqual(1);
+      expect(orRows[0].pct).assertEqual('$12.34');
+      expect(orRows[0].lane).assertEqual('Balance');
+
+      // 无窗口且拿不到任何余额数字：仍然不上卡片
+      const none = stateWith(makeWindow(0, 0, true), 'None', true, 'groq');
+      none.snapshot = UsageSnapshot.success(null, null, null);
+      expect(buildWidgetItems([none], now).length).assertEqual(0);
+      const spendOnly = stateWith(makeWindow(0, 0, true), 'SpendOnly', true, 'groq');
+      spendOnly.snapshot = UsageSnapshot.success(null, null, null);
+      spendOnly.snapshot.providerCost = {
+        remaining: 0, used: 5, currency: 'USD', displayText: '$5.00', limit: 0,
+      };
+      expect(buildWidgetItems([spendOnly], now).length).assertEqual(0);
+
+      // 挑选模式同样受益：DeepSeek / OpenRouter 可挑选且出现在卡片行里
+      const picked = buildWidgetItems([deep, or], now, ['openrouter', 'deepseek']);
+      expect(picked.length).assertEqual(2);
+      expect(picked[0].pct).assertEqual('$12.34');
+      expect(picked[1].pct).assertEqual('¥110.00');
+
+      // 有配额泳道的服务商不受回退影响：仍按百分比展示
+      const capped = stateWith(makeWindow(35, now + 3600000, true), 'OpenRouter', true, 'openrouter');
+      capped.snapshot = UsageSnapshot.success(makeWindow(35, now + 3600000, true), null, null);
+      capped.snapshot.providerCost = {
+        remaining: 12, used: 3, currency: 'USD', displayText: '$12.00', balanceText: '$12.00',
+      };
+      const cappedRows = buildWidgetItems([capped], now);
+      expect(cappedRows.length).assertEqual(1);
+      expect(cappedRows[0].pct).assertEqual('35%');
     });
 
     it('Snapshot_from_stored_cache', 0, () => {

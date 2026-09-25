@@ -10,7 +10,13 @@
  */
 
 import common from '@ohos.app.ability.common';
-import { primaryDisplayWindow, ProviderState, RateWindow, UsageSnapshot } from '../model/Models';
+import {
+  isWidgetSelectable,
+  primaryDisplayWindow,
+  ProviderState,
+  RateWindow,
+  widgetHeroLane
+} from '../model/Models';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Settings } from './Settings';
@@ -31,6 +37,11 @@ export interface WidgetItem {
   level: string;
   /** 重置倒计时文本，如 "2小时后重置"；未知为空 */
   cd: string;
+  /**
+   * hero 泳道名（如 "Weekly"）：大号数字来自比主泳道更紧的绑定泳道时标注窗口名，
+   * 主泳道自身为空串（沿用原展示）。安卓组件把它与倒计时拼在同一行。
+   */
+  lane?: string;
 }
 
 export interface WidgetData {
@@ -43,7 +54,7 @@ export interface WidgetData {
 /**
  * 数据行上限。
  *
- * 鸿蒙服务卡片尺寸固定（2x2 取前 2 条、2x4 取前 4 条，由卡片页自行截断）；
+ * 鸿蒙两张卡片（2x2 / 2x4）都通过 Swiper 轮播渲染全部行、按页切换，不截断；
  * 安卓原生组件可任意拉伸，行数按实例高度自适应（见 widget/WidgetUpdater.java），
  * 所以这里留足余量，多出来的行由各端按自己的容量截断。
  */
@@ -76,18 +87,41 @@ export function parseWidgetSelection(text: string): string[] {
   }
 }
 
-/** 单个服务商的状态 → 卡片行数据；不可展示（未启用 / 快照失败 / 无窗口）时返回 null */
+/** 单个服务商的状态 → 卡片行数据；不可展示（未启用 / 不可挑选 / 快照失败 / 无窗口）时返回 null */
 function itemFor(s: ProviderState, now: number): WidgetItem | null {
-  if (!s.setting.enabled || s.snapshot == null || !s.snapshot.ok) {
+  if (!s.setting.enabled || !isWidgetSelectable(s.descriptor.id) ||
+    s.snapshot == null || !s.snapshot.ok) {
     return null;
   }
-  // 主泳道记录绑定泳道投影（更长泳道耗尽时按 100% + 闸门恢复时间展示），与 App 内卡片一致
-  const win: RateWindow | null = s.snapshot.primary != null
-    ? primaryDisplayWindow(s.descriptor.id, s.snapshot, now)
-    : firstWindow(s.snapshot);
-  if (win == null) {
-    return null;
+  // hero 泳道（对照 macOS WidgetTilePlan）：主 + 绑定泳道里剩余最少的一条当大号数字；
+  // hero 为主泳道时沿用绑定投影（更长泳道耗尽时按 100% + 闸门恢复时间展示），与 App 内卡片一致
+  const hero = widgetHeroLane(s.descriptor.id, s.snapshot);
+  if (hero == null) {
+    // 回退大号数字（对照 macOS WidgetFallbackHero + WidgetBalanceFormatter.providerBalance）：
+    // 余额型（DeepSeek）/ 未设支出上限的 OpenRouter 没有配额泳道，但不会从组件上整条消失——
+    // 余额文本当大号数字、灰阶进度条、lane 标注 "Balance"。
+    const cost = s.snapshot.providerCost;
+    const balance = cost != null
+      ? (cost.balanceText != null && cost.balanceText.length > 0
+        ? cost.balanceText
+        : (cost.remaining > 0 ? cost.displayText : ''))
+      : '';
+    if (balance.length === 0) {
+      return null;
+    }
+    const fallback: WidgetItem = {
+      name: s.descriptor.title,
+      pct: balance,
+      barPct: 0,
+      level: Theme.barLevel(0, false),
+      cd: '',
+      lane: 'Balance',
+    };
+    return fallback;
   }
+  // hero 为主泳道时沿用绑定投影（更长泳道耗尽时按 100% + 闸门恢复时间展示），与 App 内卡片一致
+  const projected = hero.isPrimary ? primaryDisplayWindow(s.descriptor.id, s.snapshot, now) : null;
+  const win: RateWindow = projected != null ? projected : hero.window;
   const cd = win.resetsAt > now ? Format.resetIn(win.resetsAt - now) : '';
   const item: WidgetItem = {
     name: s.descriptor.title,
@@ -95,6 +129,7 @@ function itemFor(s: ProviderState, now: number): WidgetItem | null {
     barPct: Math.max(0, Math.min(100, win.usedPercent)),
     level: Theme.barLevel(win.usedPercent, win.usageKnown),
     cd: cd,
+    lane: hero.label,
   };
   return item;
 }
@@ -110,10 +145,11 @@ function stateById(states: ProviderState[], id: string): ProviderState | null {
 
 /**
  * 纯函数：从状态列表构建卡片行数据。
- * 只取快照成功的服务商，主窗口用量优先（否则第一个可用窗口），最多 MAX_ITEMS 条。
+ * 只取快照成功且可挑选（isWidgetSelectable，对照源工程 widgetSelectable: false 不上卡片）的服务商，
+ * hero 泳道用量优先，最多 MAX_ITEMS 条。
  *
  * - `selected` 为空：自动模式，按用量降序取前 N 家；
- * - `selected` 非空：只取指定服务商，且按用户挑选的顺序排列。
+ * - `selected` 非空：只取指定服务商，且按用户挑选的顺序排列（不可挑选的 ID 一律跳过）。
  *
  * 各端再按自身容量截断：鸿蒙 2x2 / 2x4 卡取前 2 / 4 条，安卓组件按高度取若干条。
  */
@@ -140,17 +176,6 @@ export function buildWidgetItems(states: ProviderState[], now: number, selected:
   }
   rows.sort((a: WidgetItem, b: WidgetItem) => b.barPct - a.barPct);
   return rows.slice(0, MAX_ITEMS);
-}
-
-/** 主窗口缺失时取第一个可用窗口（次窗口 → 附加窗口） */
-function firstWindow(snapshot: UsageSnapshot): RateWindow | null {
-  if (snapshot.secondary != null) {
-    return snapshot.secondary;
-  }
-  if (snapshot.extraRateWindows.length > 0) {
-    return snapshot.extraRateWindows[0].window;
-  }
-  return null;
 }
 
 export class WidgetDataStore {

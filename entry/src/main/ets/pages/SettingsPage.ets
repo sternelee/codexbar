@@ -8,6 +8,7 @@ import {
   extraFields,
   extraValue,
   ExtraField,
+  isWidgetSelectable,
   needsSecondCredential,
   ProviderAccount,
   ProviderDescriptor,
@@ -345,18 +346,30 @@ struct SettingsPage {
   aboutToAppear(): void {
     this.ver = AppStore.get().version;
     this.showOptional = Settings.showOptionalDetails();
-    this.widgetSel = WidgetDataStore.selectedIds();
+    // 旧版本挑选过、如今按源工程 widgetSelectable: false 不再上卡片的服务商：一次性剔除并落盘
+    const saved = WidgetDataStore.selectedIds();
+    const kept: string[] = [];
+    for (let i = 0; i < saved.length; i++) {
+      if (isWidgetSelectable(saved[i])) {
+        kept.push(saved[i]);
+      }
+    }
+    if (kept.length !== saved.length) {
+      WidgetDataStore.setSelectedIds(kept);
+    }
+    this.widgetSel = kept;
   }
 
   /**
-   * 桌面组件的可选项 = 已启用的服务商（未启用不产生数据，选了也显示不出来），
-   * 外加已挑选但当前被关掉的服务商——否则它们在 chip 列表里消失，只能靠「恢复自动」清掉。
+   * 桌面组件的可选项 = 已启用且可挑选（isWidgetSelectable，对照源工程 widgetSelectable: false
+   * 的服务商在桌面小组件里本就不出现）的服务商，外加已挑选但当前被关掉的可挑选服务商——
+   * 否则它们在 chip 列表里消失，只能靠「恢复自动」清掉。
    */
   widgetCandidates(): string[] {
     const list: string[] = [];
     const states = AppStore.get().states;
     for (let i = 0; i < states.length; i++) {
-      if (states[i].setting.enabled) {
+      if (states[i].setting.enabled && isWidgetSelectable(states[i].descriptor.id)) {
         list.push(states[i].descriptor.id);
       }
     }

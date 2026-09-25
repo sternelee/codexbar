@@ -31,13 +31,16 @@ final class WidgetData {
         final int barPct;
         final String level;
         final String cd;
+        /** hero 泳道名（绑定泳道比主泳道更紧时标注，如 "Weekly"）；主泳道为空串 */
+        final String lane;
 
-        Item(String name, String pct, int barPct, String level, String cd) {
+        Item(String name, String pct, int barPct, String level, String cd, String lane) {
             this.name = name;
             this.pct = pct;
             this.barPct = barPct;
             this.level = level;
             this.cd = cd;
+            this.lane = lane == null ? "" : lane;
         }
     }
 
@@ -99,7 +102,8 @@ final class WidgetData {
                             o.optString("pct", ""),
                             Math.max(0, Math.min(100, bar)),
                             o.optString("level", "unknown"),
-                            o.optString("cd", "")));
+                            o.optString("cd", ""),
+                            o.optString("lane", "")));
                 }
             }
             return new WidgetData(root.optString("updatedAt", ""), items);

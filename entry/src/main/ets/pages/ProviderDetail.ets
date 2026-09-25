@@ -4,6 +4,7 @@
  */
 
 import {
+  creditsHintFor,
   extraFields,
   ExtraField,
   NamedRateWindow,
@@ -18,6 +19,7 @@ import {
   ReminderConfig,
   secondCredentialHint,
   setExtraValue,
+  supportsCredits,
   visibleDetails
 } from '../model/Models';
 import { AppStore } from '../store/AppStore';
@@ -728,6 +730,33 @@ struct ProviderDetail {
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding(Theme.cardPad)
+        .borderRadius(Theme.radius)
+        .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
+      }
+
+      // Credits 提示（对照 macOS creditsLine：支持 Credits 的服务商在费用卡不可见时，
+      // 用源工程 metadata.creditsHint 告诉用户这块数据本来该是什么，而不是悄悄空着）
+      if (s.snapshot != null && s.snapshot.ok && s.snapshot.providerCost == null &&
+        supportsCredits(s.descriptor.id) && creditsHintFor(s.descriptor.id).length > 0) {
+        Column({ space: Theme.gapSm }) {
+          Text('Credits')
+            .fontSize(Theme.fsCaption)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(Theme.text)
+            .letterSpacing(Theme.tracking)
+          Divider()
+            .width('100%')
+            .strokeWidth(1)
+            .color(Theme.stroke)
+          Text(creditsHintFor(s.descriptor.id))
+            .fontSize(Theme.fsBody)
+            .fontColor(Theme.textDim)
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')

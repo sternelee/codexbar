@@ -498,6 +498,103 @@ export function isPrimaryProvider(providerId: string): boolean {
 }
 
 /**
+ * 桌面小组件可挑选（对照 macOS ProviderMetadata.widgetSelectable，默认 true）。
+ * 源工程里 44 家已迁移服务商显式声明 false（余额型 / 花费型没有「用量进度」语义，上卡片只会是一行灰数）；
+ * DeepSeek / OpenRouter 显式 true，Claude / Codex / Cursor / Kimi 编码版 / MiniMax / z.ai /
+ * Copilot / Devin / OpenCode / OpenCode Go / 阿里云百炼 / Kilo / Mistral 等未声明走默认 true。
+ * false 名单同时约束两处：设置页「桌面组件显示」的候选列表与自动模式的数据行。
+ */
+export function isWidgetSelectable(providerId: string): boolean {
+  switch (providerId) {
+    case 'abacus':
+    case 'aiand':
+    case 'amp':
+    case 'azure-openai':
+    case 'bedrock':
+    case 'chutes':
+    case 'clawrouter':
+    case 'clinepass':
+    case 'codebuff':
+    case 'commandcode':
+    case 'deepgram':
+    case 'deepinfra':
+    case 'doubao':
+    case 'elevenlabs':
+    case 'factory':
+    case 'fireworks':
+    case 'groq':
+    case 'huggingface':
+    case 'ibmbob':
+    case 'litellm':
+    case 'llmproxy':
+    case 'longcat':
+    case 'manus':
+    case 'mimo':
+    case 'moonshot':
+    case 'muse':
+    case 'neuralwatt':
+    case 'notion':
+    case 'nous':
+    case 'ollama':
+    case 'openai':
+    case 'perplexity':
+    case 'poe':
+    case 'qoder':
+    case 'sub2api':
+    case 'synthetic':
+    case 't3chat':
+    case 'v0':
+    case 'venice':
+    case 'warp':
+    case 'xai':
+    case 'zenmux':
+    case 'zoommate':
+      return false;
+    default:
+      return true;
+  }
+}
+
+/**
+ * 是否支持 Credits 泳道（对照 macOS ProviderMetadata.supportsCredits，默认 false）。
+ * 已迁移服务商里源工程声明 true 的 7 家。
+ */
+export function supportsCredits(providerId: string): boolean {
+  return providerId === 'codex' || providerId === 'openrouter' || providerId === 'mimo' ||
+    providerId === 'zoommate' || providerId === 'amp' || providerId === 'codebuff' ||
+    providerId === 'commandcode';
+}
+
+/**
+ * Credits 提示文案（对照 macOS ProviderMetadata.creditsHint，逐条抄自源工程）。
+ * 详情页在「支持 Credits 但费用卡不可见」时展示，告诉用户这块数据本来该是什么。
+ */
+export function creditsHintFor(providerId: string): string {
+  if (providerId === 'codex') {
+    return 'Credits unavailable; keep Codex running to refresh.';
+  }
+  if (providerId === 'openrouter') {
+    return 'Credit balance from OpenRouter API';
+  }
+  if (providerId === 'mimo') {
+    return 'Token plan credits usage.';
+  }
+  if (providerId === 'zoommate') {
+    return 'Shows used/remaining credits against your ZoomMate budget cap.';
+  }
+  if (providerId === 'amp') {
+    return 'Individual and workspace credit balances from Amp.';
+  }
+  if (providerId === 'codebuff') {
+    return 'Credit balance from the Codebuff API';
+  }
+  if (providerId === 'commandcode') {
+    return 'Monthly USD credits and rolling usage limits from Command Code billing.';
+  }
+  return '';
+}
+
+/**
  * 窗口标签（对照 macOS ProviderMetadata 的 sessionLabel / weeklyLabel / opusLabel）。
  * 空串表示源工程未定义该窗口。
  */
@@ -806,6 +903,78 @@ export function primaryDisplayWindow(
     return snap.primary;
   }
   return makeWindow(projection.usedPercent, projection.resetsAt, snap.primary.usageKnown);
+}
+
+/**
+ * 小组件 hero 泳道（对照 macOS WidgetTilePlan.bindingLane）。
+ *
+ * 源工程的小组件瓦片把「主 + 绑定泳道」里剩余最少的一条当大号数字——
+ * 那条泳道决定了用户还能不能继续干活，其余泳道按普通行罗列；
+ * 我们的卡片每家只有一行，所以整行都让给 hero 泳道：
+ * - hero 为主泳道：沿用主泳道展示（含绑定投影），不额外标注窗口名；
+ * - hero 为绑定泳道（比主泳道更紧）：显示该泳道自己的用量与重置时间，并带窗口名，
+ *   让用户知道大号数字指的是 Weekly / Monthly 而不是会话窗。
+ * 剩余量按 100 − usedPercent 比较（usageKnown=false 的窗口不参与度量，
+ * 只有全部窗口都不可知时才轮到它，并列时保持主泳道优先）。
+ */
+export interface HeroLane {
+  /** 展示窗口（主泳道为原始窗口，由调用方套用 primaryDisplayWindow） */
+  window: RateWindow;
+  /** 泳道展示名；主泳道为空串（沿用原展示，不额外标注） */
+  label: string;
+  /** 是否主泳道 */
+  isPrimary: boolean;
+}
+
+export function widgetHeroLane(providerId: string, snap: UsageSnapshot | null): HeroLane | null {
+  if (snap == null) {
+    return null;
+  }
+  // 主泳道缺失：回退第一个可用窗口（与旧版卡片行为一致）
+  if (snap.primary == null) {
+    if (snap.secondary != null) {
+      return { window: snap.secondary, label: '', isPrimary: false };
+    }
+    if (snap.extraRateWindows.length > 0) {
+      return { window: snap.extraRateWindows[0].window, label: '', isPrimary: false };
+    }
+    return null;
+  }
+  const lanes = bindingQuotaLanesFor(providerId);
+  if (lanes.length === 0) {
+    return { window: snap.primary, label: '', isPrimary: true };
+  }
+  // 候选：主泳道在前（并列时保持主泳道），随后按声明顺序取绑定泳道
+  const wins: RateWindow[] = [snap.primary];
+  const slots: string[] = [LANE_PRIMARY];
+  for (let i = 0; i < lanes.length; i++) {
+    const w = laneWindow(snap, lanes[i].slot);
+    if (w != null) {
+      wins.push(w);
+      slots.push(lanes[i].slot);
+    }
+  }
+  let heroIdx = 0;
+  let measured = false;
+  let best = 0;
+  for (let i = 0; i < wins.length; i++) {
+    if (!wins[i].usageKnown) {
+      continue;
+    }
+    const remaining = 100 - wins[i].usedPercent;
+    if (!measured || remaining < best) {
+      best = remaining;
+      heroIdx = i;
+      measured = true;
+    }
+  }
+  const slot = slots[heroIdx];
+  const label = slot === LANE_SECONDARY
+    ? (snap.secondaryLabel.length > 0 ? snap.secondaryLabel : '每周')
+    : (slot === LANE_TERTIARY
+      ? (snap.tertiaryLabel.length > 0 ? snap.tertiaryLabel : '第三窗口')
+      : '');
+  return { window: wins[heroIdx], label: label, isPrimary: slot === LANE_PRIMARY };
 }
 
 /**

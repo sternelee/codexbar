@@ -12,10 +12,10 @@
 > **两条凭证线并存，按需选用**：既支持 API Key / 访问令牌 / AK-SK 签名直连，也支持网页 Cookie（如 claude.ai `sessionKey`）与应用内「网页登录」OAuth（Codex PKCE 授权 + refresh token 静默续期）。每个服务商的查询与展示逻辑均逐一对照 macOS 版 Swift 源码迁移；同一家服务商可二选一填写凭证（例如 Codex 既可粘贴 PAT，也可网页登录；ClawRouter / OpenCode Go 既能填会话 Cookie，也能填 API Key）。
 
 - **仪表盘**：服务商卡片列表，用量进度条（会话 / 每周 / 每月窗口）、重置倒计时（秒级刷新）、余额展示、下拉刷新与一键全量刷新；列表将已配置凭证的服务商排在前面（已启用优先，组内保持注册表顺序）。窗口名优先取服务商自定义标签，其余由元数据表统一补齐（对照源工程 `ProviderMetadata` 的 `sessionLabel`/`weeklyLabel`/`opusLabel`，如 Codex 的 Session / Weekly、Claude 的 Session / Weekly / Sonnet、Copilot 的 Premium / Chat、Kimi 编码版的 7-day usage / 5-hour usage）。
-- **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新；未配置或凭证失效时可在页内直接配置，保存后立即清除旧的失败提示并以新凭证重新查询。这一页踩过两个 ArkUI 的坑，都已在代码里注明：（1）**状态不更新**——`ProviderState` 是普通类，页面对 `s.snapshot` / `s.setting` / `s.loading` 的读取不会被登记成依赖，写在 `ListItem` 里的内容在 store 变更后不会重建，表现就是「刚保存完凭证仍显示凭证无效或已过期，必须退出重进页面才更新」；现在整块 body 交给 `ForEach` 渲染、`key` 里带上 store 版本（每次状态变更 +1）与编辑/加载态，版本一变整棵重建。（2）**凭证被截断**——本页有每秒重渲染的倒计时定时器，`TextInput` 的 `text` 参数会被框架回写到输入框，粘贴长凭证时可能只提交一部分；输入框现在**不把 `text` 绑到 @State**（内容只由输入框自身持有）且**填写期间定时器整页冻结**，保存时按落盘结果重读凭证再强制重查，保证与之后 `refreshAll` / 冷启动读到的一致。
+- **详情页**：全部用量窗口、余额、账号身份、明细分组、错误原因、单服务商刷新；支持 Credits 的服务商（Codex / OpenRouter 等 7 家）在费用卡不可见时按源工程 `creditsHint` 给出提示行；未配置或凭证失效时可在页内直接配置，保存后立即清除旧的失败提示并以新凭证重新查询。这一页踩过两个 ArkUI 的坑，都已在代码里注明：（1）**状态不更新**——`ProviderState` 是普通类，页面对 `s.snapshot` / `s.setting` / `s.loading` 的读取不会被登记成依赖，写在 `ListItem` 里的内容在 store 变更后不会重建，表现就是「刚保存完凭证仍显示凭证无效或已过期，必须退出重进页面才更新」；现在整块 body 交给 `ForEach` 渲染、`key` 里带上 store 版本（每次状态变更 +1）与编辑/加载态，版本一变整棵重建。（2）**凭证被截断**——本页有每秒重渲染的倒计时定时器，`TextInput` 的 `text` 参数会被框架回写到输入框，粘贴长凭证时可能只提交一部分；输入框现在**不把 `text` 绑到 @State**（内容只由输入框自身持有）且**填写期间定时器整页冻结**，保存时按落盘结果重读凭证再强制重查，保证与之后 `refreshAll` / 冷启动读到的一致。
 - **提醒设置**（详情页）：逐服务商开启额度提醒——任一窗口用量达到阈值（50–95%，默认 90%）提示"额度即将用尽"；窗口重置前 5/15/30/60 分钟提示"额度即将恢复"。同一窗口同一周期只提醒一条（去重键随重置时间轮换），通知经 `@ohos.notificationManager` 三端插件发送，应用进程存活期间有效；点击通知可跳回应用（HarmonyOS 经 wantAgent 拉起 EntryAbility，Android/iOS 无该模块时走系统默认行为）。
 - **用量统计**（仪表盘 📊 进入，对标 macOS CostHistoryChartMenuView）：按服务商的每日柱形图——「用量增量（百分点）」与「消费（余额降幅估算）」双指标、近7天/近30天范围切换；峰值日黄色帽、[0, 中点, 最大] 刻度、首末日期轴；今日/近7天/近30天合计。数据为本地刷新采样估算（每日最后样本，保留 62 天），与源工程扫描 CLI 会话的精确统计存在差异。
-- **桌面组件**（对标 macOS WidgetExtension）：HarmonyOS 服务卡片与 **Android 原生 AppWidget** 各两枚——2x2 速览（2 家）与 2x4 列表（4 家），显示用量条 + 重置倒计时，点击进应用，配色随系统深浅色切换。**显示哪几家可在设置页挑选**（点选顺序即卡片上的顺序；鸿蒙 2x2 / 2x4 卡取前 2 / 4 家，安卓组件按自身高度自适应行数、最多 8 行；未挑选时自动按用量排序），改完即时重渲染。安卓组件的选择器预览图随深浅色各一张。应用每次刷新成功即落盘摘要数据：鸿蒙经 Form Kit 即时推送已添加卡片，安卓侧由组件进程内的 FileObserver 监听摘要文件变化后重渲染，两端均有 30 分钟定时更新兜底。
+- **桌面组件**（对标 macOS WidgetExtension）：HarmonyOS 服务卡片与 **Android 原生 AppWidget** 各两枚——2x2 速览与 2x4 列表，显示用量条 + 重置倒计时，点击进应用，配色随系统深浅色切换。**显示哪几家可在设置页挑选**（点选顺序即卡片上的顺序；鸿蒙两张卡片都是 Swiper 轮播、一页一家、全部渲染不截断，安卓组件按自身高度自适应行数、最多 8 行；未挑选时自动按用量排序），改完即时重渲染；候选列表与数据行均已接入源工程的 `widgetSelectable` 开关（Doubao / xAI / Perplexity / Moonshot 等 44 家余额型/花费型服务商不出现在卡片，旧版已挑选的会在进设置页时一次性剔除）。卡片每行显示的是 **hero 泳道**（对照源工程 `WidgetTilePlan`）：「主 + 绑定泳道」里剩余最少的一条当大号数字——Claude 周窗 96% 比会话窗 20% 更紧时卡片直接显示 96% 并标注 `Weekly`（鸿蒙卡片缀在倒计时行，安卓组件同款拼接），hero 为主泳道时沿用绑定投影不额外标注。无配额泳道但快照成功的服务商走**余额回退**（对照 `WidgetFallbackHero` + `WidgetBalanceFormatter.providerBalance`）：DeepSeek 显示余额、未设支出上限的 OpenRouter 优先显示 `balanceText` 余额，灰阶进度条 + `Balance` 标注，不再从卡片上整条消失；既无泳道又无余额数字的才跳过。安卓组件的选择器预览图随深浅色各一张。应用每次刷新成功即落盘摘要数据：鸿蒙经 Form Kit 即时推送已添加卡片，安卓侧由组件进程内的 FileObserver 监听摘要文件变化后重渲染，两端均有 30 分钟定时更新兜底。
 - **多账号**（全部服务商）：设置卡片「账号」条——点 chip 切换激活账号（立即刷新）、「＋」添加、长按弹出重命名/删除菜单（内联输入行改名，删除带确认框）；详情页显示当前激活账号名。Claude / Codex 的「＋」直接进入网页登录流程，其他服务商建空账号、填凭证保存即生效。同凭证自动去重（并补齐 refresh token / 额外字段），删除激活账号时自动转移到第一个剩余账号；凭证解析顺序为激活账号 → 旧单凭证键（完全向后兼容）。
 - **应用内网页登录**（Claude / Codex / DeepSeek）：设置页或详情页点「网页登录」进入内嵌网页——Claude 自动从登录会话中捕获 `sessionKey`，DeepSeek 从 `platform.deepseek.com` 的 `localStorage.userToken` 捕获平台会话（与 macOS 读浏览器数据同一个键，所以用户只需填 API Key），Codex 走 PKCE 授权（本地回调解析 + JWT 提取账号 ID）；刷新返回 401/403 时用保存的 refresh token 静默续期并重试一次，无需重新登录。
 - **额外配置字段**（`extraConfig`）：需要 3 个以上输入的服务商在设置页/详情页动态渲染字段——Azure OpenAI 的 Endpoint / Deployment / API 版本、Bedrock 的 Region / Session Token / 预算、v0 的 Scope、Copilot 的 Enterprise 域名。
@@ -86,7 +86,7 @@
 | Groq | Web 会话 | groq.com `stytch_session` Cookie；可选第二栏填组织 ID | 订阅额度 + 活动 API 用量 |
 | 阿里云百炼编码计划 | API Key | 百炼/DashScope Key（intl/cn） | 5 小时/周/账单月 配额窗口 |
 | Doubao (豆包/火山方舟) | AK/SK 或 API Key | 火山方舟 AK + Secret Access Key（或单独 Ark API Key） | 编码计划 5h/周/月 + Agent 计划窗口；仅填 API Key 时按请求额度探测 |
-| AWS Bedrock | AWS Access Key + Secret | Access Key ID + Secret Access Key（可选 Region / Session Token / 月度预算） | Cost Explorer 本月 Bedrock 花费 + 预算使用率 + 近14天 Claude tokens/请求数 |
+| AWS Bedrock | AWS Access Key + Secret | Access Key ID + Secret Access Key（可选 Region / Session Token / 月度预算） | Cost Explorer 本月 Bedrock 花费 + 预算使用率 + 近14天 Claude tokens/请求数 + 近30天逐日花费图（`Cost history`） |
 
 ### 其余服务商可行性分级（对照源工程 75+ 家）
 
@@ -398,12 +398,12 @@ ArkUI-X **不支持**鸿蒙服务卡片（SDK 的插件清单里没有任何 for
 待办（按优先级）：
 
 1. **泳道门控与明细行**：
-   - `primaryBindingQuotaLanes`（Claude/Chutes/ZenMux/z.ai/CommandCode 为 `.secondary`，ClinePass/Doubao/阿里云百炼为 `.secondary + .tertiary`）：已在本轮落地（见上「主/次/第三泳道的映射与标签核对」小节）；仍缺的是桌面小组件的 hero 泳道选择（`WidgetTilePlan`：在「主 + 绑定泳道」里取剩余最少的一条当大号数字）。
-   - `widgetSelectable: false`（如 Doubao / xAI / Perplexity / CommandCode 等）在源工程里不出现在桌面小组件；我们已支持在设置页手选卡片显示哪几家，但尚未接这个开关（这些服务商仍会出现在候选列表里）。
-   - `supportsCredits: true`（Codex / OpenRouter / MiMo / ZoomMate / Amp / Codebuff）对应源工程的 Credits 泳道与 `creditsHint`，我们只在 `providerCost` 存在时展示费用（Command Code 已按套餐目录补齐月度泳道，见本轮小节）。
+   - `primaryBindingQuotaLanes`（Claude/Chutes/ZenMux/z.ai/CommandCode 为 `.secondary`，ClinePass/Doubao/阿里云百炼为 `.secondary + .tertiary`）：已在本轮落地（见上「主/次/第三泳道的映射与标签核对」小节）；桌面小组件的 hero 泳道选择（`WidgetTilePlan`：在「主 + 绑定泳道」里取剩余最少的一条当大号数字）也已接入——`widgetHeroLane` 纯函数 + 卡片行 `lane` 标注，本地单测覆盖。
+   - `widgetSelectable: false`（如 Doubao / xAI / Perplexity / CommandCode 等 44 家）已接入：设置页候选列表过滤、自动/挑选两种模式的数据行过滤、旧挑选数据进设置页时一次性剔除。
+   - `supportsCredits: true`（Codex / OpenRouter / MiMo / ZoomMate / Amp / Codebuff / CommandCode）已接入 Credits 提示：详情页在费用卡不可见时按源工程 `creditsHint` 展示这块数据本来该是什么（`creditsHintFor` 逐条抄自源工程 metadata）。
    - **明细行剩余项**：Venice 的网页版 `Credits` 六行（`Bank cap`/`Next refill`）与其 `Used this cycle` 进度条——需要平台网页会话而非 API Key（源工程的 `progress` 只来自 VeniceWebUsageFetcher 与 Copilot，Copilot 已接）；HuggingFace 的 `Credits` 分组（Billing 页 HTML 抓余额）；Poe 的 `Daily points` 图表（源工程也未给 Poe 配 chart，其“每日点数”只在用量项里展示）；IBMBob 的 `teams/{id}/users/{userID}` 逐人预算端点；MiniMax 的平台网页版配额（HTML 抓取，我们仍用 API Token）（DeepSeek 未带平台令牌时已按 macOS 的 `webSessionRequired` 提示处理）；`costSummaryTitles` 目前只作为策略表保留（源工程用它把分组从“用量项选择器”里排除，我们没有该选择器）。图表已覆盖源工程全部 5 处 `makeChart`（Claude Admin / Groq / MiniMax / DeepSeek / ZoomMate），其余服务商源工程本就不画图。
-2. **Bedrock 成本日线**：源工程 `fetchDailyReport`（Cost Explorer DAILY 粒度）用于成本历史曲线，当前仅取本月汇总，统计页暂无 Bedrock 成本曲线。
-3. **iOS 重验证**：Android 已用 `ace build apk` 重建并在模拟器上实测桌面组件（见上表）；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商（iOS 侧同样没有 Form Kit，桌面组件需按 WidgetKit 另写）。
+2. **Bedrock 成本日线**：已接入——Cost Explorer 以 DAILY 粒度取近 30 天逐日花费（对照源工程 `fetchDailyReport` 的区间与分页保护），在详情页渲染 `Cost history` 分组柱状图（`bedrockDailyRange` / `bedrockDailyCostList` 纯函数 + 本地单测）；该查询为尽力而为，失败只丢图表不影响主结果。统计页仍走本地刷新采样（与源工程扫描 CLI 会话的统计口径不同，属已知差异）。
+3. **iOS 重验证**：Android 已用 `ace build apk` 重建并在模拟器上实测桌面组件（见上表）；本轮安卓组件新增 hero 泳道 `lane` 行（`WidgetData.Item` / `WidgetRenderer`，与摘要文件字段对齐，旧摘要文件缺 `lane` 键时按空串回落），需再次 `ace build apk` 重建验证；iOS 产物仍为上一版本，需 `ace build ios` 重新构建并验证新增与恢复的服务商（iOS 侧同样没有 Form Kit，桌面组件需按 WidgetKit 另写）。
 4. **鸿蒙真机再验一次卡片入口**：配置与产物已核对无误，但还没有在真机上走完「长按应用图标 → 卡片 → 添加」；若列表里看不到本应用，按本轮小节里的方法重装 + 重启桌面再试。
 
 仍明确不迁移（桌面专属 / CLI 探测 / HTML 抓取）：Windsurf、Sakana、Replicate、TypeSafe、Helmcode、StepFun、QwenCloud、Alibaba Token Plan、Augment、JetBrains、Antigravity、Vertex AI / Gemini、Copilot 预算页抓取、Bedrock Profile 模式、Kiro、Ollama 本地、Pi、CodeRabbit、Wayfinder、Zed。

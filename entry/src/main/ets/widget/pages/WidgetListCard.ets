@@ -12,6 +12,8 @@ interface WidgetListCardItem {
   barPct: number;
   level: string;
   cd: string;
+  /** hero 泳道名（绑定泳道比主泳道更紧时标注，如 "Weekly"）；主泳道为空 */
+  lane?: string;
 }
 
 @Entry
@@ -103,8 +105,10 @@ struct WidgetListCard {
               .borderRadius(2)
               .backgroundColor($r('app.color.stroke'))
 
-              if (item.cd.length > 0) {
-                Text(item.cd)
+              if (item.cd.length > 0 || (item.lane != null && item.lane.length > 0)) {
+                Text(item.lane != null && item.lane.length > 0
+                  ? (item.cd.length > 0 ? `${item.lane} · ${item.cd}` : item.lane)
+                  : item.cd)
                   .fontSize(10)
                   .fontColor($r('app.color.text_dim'))
                   .maxLines(1)
@@ -118,7 +122,7 @@ struct WidgetListCard {
             .width('100%')
             .height('100%')
             .justifyContent(FlexAlign.Center)
-          }, (item: WidgetListCardItem, idx: number) => `${idx}_${item.name}_${item.pct}_${item.cd}`)
+          }, (item: WidgetListCardItem, idx: number) => `${idx}_${item.name}_${item.pct}_${item.cd}_${item.lane == null ? '' : item.lane}`)
         }
         .indicator(true)
         .loop(true)

@@ -17,7 +17,8 @@
  *    Granularity=MONTHLY、Metrics=[UnblendedCost]、GroupBy SERVICE →
  *    汇总本期（UTC 本月首日至明日，左闭右开）服务名含 "Bedrock" 的花费；
  *    DataUnavailableException（账号未启用计费数据）按 0 处理；NextPageToken 分页（带重复令牌/页数保护，
- *    与源工程一致）。
+ *    与源工程一致）。同一接口另以 DAILY 粒度取近 30 天逐日花费（对照源工程 fetchDailyReport），
+ *    作为详情页 Cost history 图表；该查询为尽力而为，失败只丢图表。
  * 2) AWS CloudWatch：POST https://monitoring.{region}.{分区后缀}/
  *    SigV4 service=monitoring；X-Amz-Target: GraniteServiceVersion20100801.GetMetricData，
  *    三条 SEARCH 表达式（{AWS/Bedrock,ModelId} 下模型名含 claude 的
@@ -36,7 +37,9 @@ import { asArray, asObj, Json, optNum, parseJson, str } from '../net/Json';
 import {
   AuthKind,
   extraValue,
+  makeChart,
   makeWindow,
+  ProviderChartPoint,
   ProviderDescriptor,
   ProviderDetailRow,
   ProviderSetting,
@@ -58,6 +61,8 @@ const CW_CONTENT_TYPE = 'application/x-amz-json-1.0';
 const DEFAULT_REGION = 'us-east-1';
 /** Claude 活动指标回溯天数（源工程 lookbackDays） */
 const CW_LOOKBACK_DAYS = 14;
+/** 成本历史日线回溯天数（详情页 Cost history 图表） */
+const DAILY_LOOKBACK_DAYS = 30;
 /** 分页上限（源工程 CloudWatch maxPages = 20） */
 const MAX_PAGES = 20;
 
@@ -134,30 +139,83 @@ export function bedrockTotalCost(json: Json): number {
   let total = 0;
   for (let i = 0; i < results.length; i++) {
     const result = asObj(results[i]);
-    const groups = result != null ? asArray(result['Groups']) : null;
-    if (groups == null) {
+    total += bedrockGroupsCost(result != null ? asArray(result['Groups']) : null);
+  }
+  return total;
+}
+
+/** 一组 Groups 内 Bedrock 分组的花费合计（供月度汇总与逐日解析复用） */
+function bedrockGroupsCost(groups: Json[] | null): number {
+  if (groups == null) {
+    return 0;
+  }
+  let total = 0;
+  for (let g = 0; g < groups.length; g++) {
+    const group = asObj(groups[g]);
+    if (group == null) {
       continue;
     }
-    for (let g = 0; g < groups.length; g++) {
-      const group = asObj(groups[g]);
-      if (group == null) {
-        continue;
-      }
-      const keys = asArray(group['Keys']);
-      const first = keys != null && keys.length > 0 ? keys[0] : null;
-      const serviceName = typeof first === 'string' ? first as string : '';
-      if (serviceName.toLowerCase().indexOf('bedrock') < 0) {
-        continue;
-      }
-      const metrics = asObj(group['Metrics']);
-      const unblended = metrics != null ? asObj(metrics['UnblendedCost']) : null;
-      const amount = unblended != null ? optNum(unblended, 'Amount') : null;
-      if (amount != null && amount > 0) {
-        total += amount;
-      }
+    const keys = asArray(group['Keys']);
+    const first = keys != null && keys.length > 0 ? keys[0] : null;
+    const serviceName = typeof first === 'string' ? first as string : '';
+    if (serviceName.toLowerCase().indexOf('bedrock') < 0) {
+      continue;
+    }
+    const metrics = asObj(group['Metrics']);
+    const unblended = metrics != null ? asObj(metrics['UnblendedCost']) : null;
+    const amount = unblended != null ? optNum(unblended, 'Amount') : null;
+    if (amount != null && amount > 0) {
+      total += amount;
     }
   }
   return total;
+}
+
+/** 成本历史单日点（对照源工程 fetchDailyReport 的 CostUsageDailyReport 条目） */
+export interface BedrockDailyCost {
+  /** 计费日 yyyy-MM-dd（UTC，来自 TimePeriod.Start） */
+  date: string;
+  /** 当日 Bedrock 花费（USD） */
+  cost: number;
+}
+
+/**
+ * 成本历史日线查询区间：近 30 天整日窗口（UTC 今日 − 29 天 → 明日，左闭右开）。
+ * 源工程 fetchDailyReport 的 until 取 inclusiveEnd（+1 天），这里保持一致。
+ */
+export function bedrockDailyRange(nowMs: number): BedrockMonthRange {
+  const d = new Date(nowMs);
+  const dayStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return {
+    start: utcDateKey(dayStart - (DAILY_LOOKBACK_DAYS - 1) * 86400000),
+    end: utcDateKey(dayStart + 86400000),
+  };
+}
+
+/** Cost Explorer DAILY 结果 → 逐日花费（缺 TimePeriod.Start 的条目丢弃） */
+export function bedrockDailyCostList(json: Json): BedrockDailyCost[] {
+  const root = asObj(json);
+  const results = root != null ? asArray(root['ResultsByTime']) : null;
+  const out: BedrockDailyCost[] = [];
+  if (results == null) {
+    return out;
+  }
+  for (let i = 0; i < results.length; i++) {
+    const result = asObj(results[i]);
+    if (result == null) {
+      continue;
+    }
+    const period = asObj(result['TimePeriod']);
+    const date = period != null ? str(period, 'Start', '') : '';
+    if (date.length === 0) {
+      continue;
+    }
+    out.push({
+      date: date,
+      cost: Math.round(bedrockGroupsCost(asArray(result['Groups'])) * 100) / 100,
+    });
+  }
+  return out;
 }
 
 /** 分页令牌（缺失/空串表示最后一页） */
@@ -255,13 +313,14 @@ export function bedrockClaudeActivity(json: Json): BedrockActivity | null {
   };
 }
 
-/** 汇总 → 快照（对照 BedrockUsageSnapshot.toUsageSnapshot()） */
+/** 汇总 → 快照（对照 BedrockUsageSnapshot.toUsageSnapshot()）；dailyPoints 提供时附成本历史日线图 */
 export function bedrockSnapshot(
   spend: number,
   budget: number,
   activity: BedrockActivity | null,
   region: string,
-  now: number
+  now: number,
+  dailyPoints: ProviderChartPoint[] | null = null
 ): UsageSnapshot {
   const resetsAt = bedrockMonthEnd(now);
   const budgetPercent = budget > 0 ? Math.max(0, Math.min(100, (spend / budget) * 100)) : 0;
@@ -291,6 +350,14 @@ export function bedrockSnapshot(
   rows.push({ label: '区域', value: region });
   rows.push({ label: '统计区间', value: `${bedrockMonthRange(now).start} 起` });
   snap.details = [{ title: 'AWS Bedrock', rows: rows }];
+  // 成本历史（对照源工程 fetchDailyReport 的 DAILY 粒度用途；失败时整块不出现）
+  if (dailyPoints != null && dailyPoints.length > 0) {
+    snap.details.push({
+      title: 'Cost history',
+      rows: [],
+      chart: makeChart('Daily spend', 'USD', dailyPoints),
+    });
+  }
 
   const loginParts: string[] = [`Spend: ${Format.money(spend, 'USD')}`];
   if (budget > 0) {
@@ -312,12 +379,12 @@ export function bedrockSnapshot(
 // 请求体
 // ---------------------------------------------------------------------------
 
-function ceBody(start: string, end: string, nextPageToken: string): string {
+function ceBody(start: string, end: string, nextPageToken: string, granularity: string = 'MONTHLY'): string {
   const page = nextPageToken.length > 0
     ? `,"NextPageToken":${JSON.stringify(nextPageToken)}`
     : '';
   return '{"TimePeriod":{"Start":' + JSON.stringify(start) + ',"End":' + JSON.stringify(end) + '},' +
-    '"Granularity":"MONTHLY","Metrics":["UnblendedCost"],' +
+    `"Granularity":"${granularity}","Metrics":["UnblendedCost"],` +
     '"GroupBy":[{"Type":"DIMENSION","Key":"SERVICE"}]' + page + '}';
 }
 
@@ -397,9 +464,10 @@ class BedrockProvider implements UsageProvider {
     if (cost.error.length > 0) {
       return UsageSnapshot.failure(cost.error);
     }
-    // CloudWatch 为尽力查询：失败仅丢失 tokens / 请求数
+    // CloudWatch 与成本历史日线均为尽力查询：前者失败丢 tokens / 请求数，后者丢 Cost history 图
     const activity = await BedrockProvider.fetchClaudeActivity(credentials, region, now);
-    return bedrockSnapshot(cost.total, budget, activity, region, now);
+    const dailyPoints = await BedrockProvider.fetchDailyCosts(credentials, now);
+    return bedrockSnapshot(cost.total, budget, activity, region, now, dailyPoints);
   }
 
   /** Cost Explorer 本月花费（分页；未启用计费数据按 0） */
@@ -485,6 +553,56 @@ class BedrockProvider implements UsageProvider {
       const next = root != null ? str(root, 'NextToken', '').trim() : '';
       if (next.length === 0) {
         return { inputTokens: input, outputTokens: output, requestCount: requests };
+      }
+      if (seen.indexOf(next) >= 0) {
+        return null;
+      }
+      seen.push(next);
+      token = next;
+    }
+    return null;
+  }
+
+  /**
+   * Cost Explorer 近 30 天逐日花费（对照源工程 fetchDailyReport，DAILY 粒度），
+   * 用于详情页 Cost history 图表；尽力查询，失败/分页异常返回 null（不影响主结果）。
+   */
+  private static async fetchDailyCosts(
+    credentials: AwsCredentials,
+    now: number
+  ): Promise<ProviderChartPoint[] | null> {
+    const range = bedrockDailyRange(now);
+    const seen: string[] = [];
+    let token = '';
+    const daily: BedrockDailyCost[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const body = ceBody(range.start, range.end, token, 'DAILY');
+      const headers: Record<string, string> = {
+        'content-type': CE_CONTENT_TYPE,
+        'x-amz-target': CE_TARGET,
+        'accept': 'application/json',
+      };
+      const sig = signAwsRequest(
+        'POST', CE_URL, 'ce', CE_REGION, headers, body, credentials, now, true
+      );
+      const resp = await Http.post(CE_URL, sig.headers, body);
+      if (!resp.ok) {
+        return null;
+      }
+      const json = resp.json();
+      const entries = bedrockDailyCostList(json);
+      for (let i = 0; i < entries.length; i++) {
+        daily.push(entries[i]);
+      }
+      const next = bedrockNextPageToken(json);
+      if (next.length === 0) {
+        daily.sort((a: BedrockDailyCost, b: BedrockDailyCost) => a.date < b.date ? -1 : 1);
+        const points: ProviderChartPoint[] = [];
+        for (let i = 0; i < daily.length; i++) {
+          // 标签取 MM-dd（详情页图表横轴空间有限，与其他服务商的日线图一致）
+          points.push({ label: daily[i].date.length >= 10 ? daily[i].date.substring(5) : daily[i].date, value: daily[i].cost });
+        }
+        return points;
       }
       if (seen.indexOf(next) >= 0) {
         return null;

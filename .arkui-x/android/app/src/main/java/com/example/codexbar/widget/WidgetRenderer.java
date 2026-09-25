@@ -61,11 +61,16 @@ final class WidgetRenderer {
         row.setTextViewText(R.id.row_pct, item.pct);
         row.setTextColor(R.id.row_pct, levelColor(ctx, item.level));
         row.setProgressBar(R.id.row_bar, 100, item.barPct, false);
-        if (item.cd.isEmpty()) {
+        // hero 泳道名与重置倒计时拼同一行（与鸿蒙卡片一致）：谁在就显谁，都在用「·」隔开
+        String cd = item.cd;
+        if (!item.lane.isEmpty()) {
+            cd = cd.isEmpty() ? item.lane : item.lane + " · " + cd;
+        }
+        if (cd.isEmpty()) {
             row.setViewVisibility(R.id.row_cd, View.GONE);
         } else {
             row.setViewVisibility(R.id.row_cd, View.VISIBLE);
-            row.setTextViewText(R.id.row_cd, item.cd);
+            row.setTextViewText(R.id.row_cd, cd);
         }
         return row;
     }

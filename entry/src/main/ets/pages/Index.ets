@@ -19,7 +19,16 @@ struct Index {
   /** 每秒 +1，驱动倒计时刷新 */
   @State tick: number = 0;
   @State isRefreshing: boolean = false;
+  /**
+   * 滚动揭示：已渐入到第几个卡片（-1 = 全部待进场）。
+   * 进场级联只揭示初始视口（范围由 onScrollIndex 首次回调给出），
+   * 之后滚动到的新卡片在进入视口时渐入；上滑回看不重播。
+   */
+  @State revealEdge: number = -1;
+  private introStarted: boolean = false;
+  private introTarget: number = 0;
   private timerId: number = -1;
+  private introTimer: number = -1;
 
   aboutToAppear(): void {
     const store = AppStore.get();
@@ -39,6 +48,51 @@ struct Index {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+    if (this.introTimer >= 0) {
+      clearInterval(this.introTimer);
+      this.introTimer = -1;
+    }
+  }
+
+  /**
+   * 进场级联：卡片逐个淡入上浮（45ms 交错、300ms Friction 曲线），揭示到 introTarget 为止。
+   * 只在首次挂载播一轮；之后刷新 / 重建（ForEach key 变化）不重播，
+   * 滚动揭示由 onScrollReveal 接管。
+   */
+  private startIntro(): void {
+    if (this.introStarted) {
+      return;
+    }
+    this.introStarted = true;
+    this.introTimer = setInterval(() => {
+      if (this.revealEdge >= this.introTarget) {
+        clearInterval(this.introTimer);
+        this.introTimer = -1;
+        return;
+      }
+      const next = this.revealEdge + 1;
+      this.getUIContext().animateTo({ duration: 300, curve: Curve.Friction }, () => {
+        this.revealEdge = next;
+      });
+    }, 45);
+  }
+
+  /** 滚动 / 首次布局：把新进视口的卡片纳入揭示范围（渐入 + 上浮） */
+  private onScrollReveal(first: number, last: number): void {
+    if (last <= this.revealEdge) {
+      return;
+    }
+    if (!this.introStarted || this.introTimer >= 0) {
+      // 级联尚未开始或仍在进行：只延伸级联目标，保持逐个交错的节奏
+      this.introTarget = Math.max(this.introTarget, last);
+      if (!this.introStarted) {
+        this.startIntro();
+      }
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 300, curve: Curve.Friction }, () => {
+      this.revealEdge = last;
+    });
   }
 
   /** 显式引用 ver/tick 以注册渲染依赖；已配置凭证的服务商排在前面（组内保持注册表顺序） */
@@ -149,9 +203,9 @@ struct Index {
 
       Refresh({ refreshing: this.isRefreshing }) {
         List({ space: Theme.gap }) {
-          ForEach(this.items(this.ver, this.tick), (s: ProviderState) => {
+          ForEach(this.items(this.ver, this.tick), (s: ProviderState, idx: number) => {
             ListItem() {
-              this.providerCard(s)
+              this.providerCard(s, idx)
             }
           }, (s: ProviderState) => `${s.descriptor.id}_${s.loading}_${s.snapshot != null ? s.snapshot.updatedAt : 0}_${Math.floor(this.tick / 30)}`)
         }
@@ -159,6 +213,12 @@ struct Index {
         .height('100%')
         .padding({ left: Theme.pad, right: Theme.pad, bottom: Theme.padBottom })
         .scrollBar(BarState.Off)
+        .onAppear(() => {
+          this.startIntro();
+        })
+        .onScrollIndex((first: number, last: number) => {
+          this.onScrollReveal(first, last);
+        })
       }
       .layoutWeight(1)
       .onRefreshing(() => {
@@ -170,8 +230,16 @@ struct Index {
     .backgroundColor(Theme.bg)
   }
 
+  /** 路由过渡：进二级页时首页向左轻移做视差，返回时从左侧滑回 */
+  pageTransition() {
+    PageTransitionExit({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+    PageTransitionEnter({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+  }
+
   @Builder
-  providerCard(s: ProviderState) {
+  providerCard(s: ProviderState, idx: number) {
     Column({ space: Theme.rowGap }) {
       // 头部：名称 + 摘要
       Row({ space: Theme.rowGap }) {
@@ -197,14 +265,16 @@ struct Index {
           WindowBlock({
             title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : '会话',
             win: this.primaryWindow(s) ?? s.snapshot.primary,
-            compact: true
+            compact: true,
+            animKey: `${s.descriptor.id}_primary`
           })
         }
         if (s.snapshot.secondary != null) {
           WindowBlock({
             title: s.snapshot.secondaryLabel.length > 0 ? s.snapshot.secondaryLabel : '每周',
             win: s.snapshot.secondary,
-            compact: true
+            compact: true,
+            animKey: `${s.descriptor.id}_secondary`
           })
         }
         if (s.snapshot.providerCost != null && s.snapshot.primary == null) {
@@ -251,6 +321,9 @@ struct Index {
     .backgroundColor(Theme.card)
     .border({ width: 1, color: Theme.stroke })
     .shadow(Theme.cardShadow())
+    // 进场 / 滚动揭示：未揭示的卡片先隐藏并下移 18vp，随 revealEdge 渐入上浮
+    .opacity(idx > this.revealEdge ? 0 : 1)
+    .translate({ y: idx > this.revealEdge ? 18 : 0 })
     .onClick(() => {
       Nav.toDetail(s.descriptor.id);
     })

@@ -16,12 +16,24 @@ const PLOT_HEIGHT: number = 58;
 const BAR_GAP: number = 2;
 /** 最多绘制的柱/点（源工程同款上限） */
 const MAX_RENDER_POINTS: number = 120;
+/** 数值过渡时长（毫秒） */
+const REVEAL_MS: number = 450;
 
 @Component
 export struct DetailChart {
   chart: ProviderChart = { kind: 'bars', points: [] };
   private settings: RenderingContextSettings = new RenderingContextSettings(true);
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
+  /** 数值过渡进度 0..1（柱体从基线长出 / 折线从基线扫出） */
+  private reveal: number = 1;
+  private frameTimer: number = -1;
+
+  aboutToDisappear(): void {
+    if (this.frameTimer >= 0) {
+      clearInterval(this.frameTimer);
+      this.frameTimer = -1;
+    }
+  }
 
   /** 参与绘制的点（裁到上限） */
   private points(): ProviderChartPoint[] {
@@ -68,10 +80,32 @@ export struct DetailChart {
         .width('100%')
         .height(PLOT_HEIGHT)
         .onReady(() => {
+          this.reveal = 0;
           this.draw();
+          this.startReveal();
         })
     }
     .width('100%')
+  }
+
+  /**
+   * 数值过渡：约 450ms 逐帧重绘，cubic ease-out（与进场的 Friction 曲线观感一致）。
+   * Canvas 是命令式绘制，状态驱动的 animateTo 不生效，这里用帧定时器手动驱动。
+   */
+  private startReveal(): void {
+    if (this.frameTimer >= 0) {
+      return;
+    }
+    const started = Date.now();
+    this.frameTimer = setInterval(() => {
+      const t = Math.min(1, (Date.now() - started) / REVEAL_MS);
+      this.reveal = 1 - Math.pow(1 - t, 3);
+      this.draw();
+      if (t >= 1) {
+        clearInterval(this.frameTimer);
+        this.frameTimer = -1;
+      }
+    }, 16);
   }
 
   private hasCaption(): boolean {
@@ -110,7 +144,7 @@ export struct DetailChart {
     }
   }
 
-  /** 柱状：等宽柱 + 2px 间距，高度按占比，颜色按占比加深（最小 0.18 alpha） */
+  /** 柱状：等宽柱 + 2px 间距，高度按占比随 reveal 从基线长出，颜色按占比加深（最小 0.18 alpha） */
   private drawBars(pts: ProviderChartPoint[], max: number, width: number, height: number): void {
     const slot = (width - BAR_GAP * (pts.length - 1)) / pts.length;
     const barW = slot > 0 ? slot : 1;
@@ -118,14 +152,14 @@ export struct DetailChart {
     for (let i = 0; i < pts.length; i++) {
       const value = pts[i].value;
       const ratio = value > 0 && isFinite(value) ? Math.min(value / max, 1) : 0;
-      const barH = ratio > 0 ? Math.max(3, ratio * usable) : 1;
+      const barH = ratio > 0 ? Math.max(3, ratio * usable * this.reveal) : 1;
       const x = i * (barW + BAR_GAP);
       this.ctx.fillStyle = this.barFill(ratio);
       this.ctx.fillRect(x, height - barH, barW, barH);
     }
   }
 
-  /** 折线：2px 圆角折线 + 3px 圆点（单点时居中） */
+  /** 折线：2px 圆角折线 + 3px 圆点（单点时居中）；y 随 reveal 从基线过渡到目标 */
   private drawLine(pts: ProviderChartPoint[], max: number, width: number, height: number): void {
     const step = pts.length === 1 ? 0 : width / (pts.length - 1);
     const usable = height - 1;
@@ -135,7 +169,7 @@ export struct DetailChart {
     for (let i = 0; i < pts.length; i++) {
       const x = pts.length === 1 ? width / 2 : step * i;
       const ratio = pts[i].value > 0 && isFinite(pts[i].value) ? Math.min(pts[i].value / max, 1) : 0;
-      const y = height - ratio * usable;
+      const y = height - ratio * usable * this.reveal;
       if (i === 0) {
         this.ctx.moveTo(x, y);
       } else {
@@ -147,7 +181,7 @@ export struct DetailChart {
     for (let i = 0; i < pts.length; i++) {
       const x = pts.length === 1 ? width / 2 : step * i;
       const ratio = pts[i].value > 0 && isFinite(pts[i].value) ? Math.min(pts[i].value / max, 1) : 0;
-      const y = height - ratio * usable;
+      const y = height - ratio * usable * this.reveal;
       this.ctx.beginPath();
       this.ctx.arc(x, y, 1.5, 0, Math.PI * 2);
       this.ctx.fill();

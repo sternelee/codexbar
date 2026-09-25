@@ -28,20 +28,50 @@ import { Nav, parseDetailParam } from '../common/Nav';
 @Entry
 @Component
 struct StatsPage {
-  @State providerId: string = '';
-  @State metric: string = 'usage';
-  @State range: number = 7;
+  @State @Watch('onChartSource') providerId: string = '';
+  @State @Watch('onChartSource') metric: string = 'usage';
+  @State @Watch('onChartSource') range: number = 7;
   @State ver: number = 0;
   /** 点选的日期键（柱形图选中日） */
   @State selectedDay: string = '';
+  /** 柱形图数值过渡进度 0..1（进场 / 换数据源时从 0 长到 1） */
+  @State chartReveal: number = 0;
+  private chartPrimed: boolean = false;
 
   aboutToAppear(): void {
-    this.providerId = parseDetailParam(router.getParams() as Object | null);
+    // 路由指定服务商；未指定或不带历史数据时默认选第一个有数据的
+    const routed = parseDetailParam(router.getParams() as Object | null);
+    const list = this.historyProviders(0);
+    let picked = routed;
+    if (list.length > 0) {
+      let known = false;
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].descriptor.id === picked) {
+          known = true;
+          break;
+        }
+      }
+      if (!known) {
+        picked = list[0].descriptor.id;
+      }
+    }
+    this.providerId = picked;
     this.ver = AppStore.get().version;
   }
 
   onPageShow(): void {
     this.ver += 1;
+  }
+
+  /** 换服务商 / 指标 / 区间：柱形图从基线重新长一遍（首次挂载的赋值不重播） */
+  private onChartSource(): void {
+    if (!this.chartPrimed) {
+      return;
+    }
+    this.chartReveal = 0;
+    this.getUIContext().animateTo({ duration: 480, curve: Curve.Friction }, () => {
+      this.chartReveal = 1;
+    });
   }
 
   /** 有历史数据的服务商；路由指定的优先 */
@@ -81,6 +111,34 @@ struct StatsPage {
       }
     }
     return out;
+  }
+
+  /** Select 选项（仅有历史数据的服务商） */
+  private providerOptions(): SelectOption[] {
+    const list = this.historyProviders(this.ver);
+    const out: SelectOption[] = [];
+    for (let i = 0; i < list.length; i++) {
+      out.push({ value: list[i].descriptor.title });
+    }
+    return out;
+  }
+
+  /** 当前服务商在选项里的下标；未匹配返回 -1 */
+  private selectedIdx(): number {
+    const list = this.historyProviders(this.ver);
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].descriptor.id === this.providerId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /** Select 显示文案（当前服务商名） */
+  private selectedName(): string {
+    const idx = this.selectedIdx();
+    const list = this.historyProviders(this.ver);
+    return idx >= 0 && idx < list.length ? list[idx].descriptor.title : '选择服务商';
   }
 
   fmtValue(v: number): string {
@@ -135,28 +193,35 @@ struct StatsPage {
         .justifyContent(FlexAlign.Center)
       } else {
         List({ space: Theme.gap }) {
-          // 服务商 chips
+          // 服务商下拉选择器
           ListItem() {
-            Scroll() {
-              Row({ space: Theme.gapSm }) {
-                ForEach(this.historyProviders(this.ver), (s: ProviderState) => {
-                  Text(s.descriptor.title)
-                    .fontSize(Theme.fsCaption)
-                    .fontColor(this.providerId === s.descriptor.id ? Theme.bg : Theme.textDim)
-                    .backgroundColor(this.providerId === s.descriptor.id ? Theme.accent : Theme.input)
-                    .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
-                    .borderRadius(Theme.radiusInput)
-                    .maxLines(1)
-                    .onClick(() => {
-                      this.providerId = s.descriptor.id;
-                      if (!this.hasBalanceHistory(this.providerId) && this.metric === 'cost') {
-                        this.metric = 'usage';
-                      }
-                    })
-                }, (s: ProviderState) => `${s.descriptor.id}_${this.providerId === s.descriptor.id}_${this.ver}`)
-              }
+            Row({ space: Theme.gapSm }) {
+              Text('服务商')
+                .fontSize(Theme.fsBody)
+                .fontColor(Theme.textDim)
+              Select(this.providerOptions())
+                .selected(this.selectedIdx())
+                .value(this.selectedName())
+                .font({ size: Theme.fsBody, weight: FontWeight.Medium })
+                .fontColor(Theme.text)
+                .selectedOptionFont({ size: Theme.fsBody, weight: FontWeight.Medium })
+                .selectedOptionBgColor(Theme.input)
+                .optionFont({ size: Theme.fsBody })
+                .optionBgColor(Theme.card)
+                .backgroundColor(Theme.input)
+                .borderRadius(Theme.radiusInput)
+                .height(36)
+                .layoutWeight(1)
+                .onSelect((index: number, value: string) => {
+                  const list = this.historyProviders(this.ver);
+                  if (index >= 0 && index < list.length) {
+                    this.providerId = list[index].descriptor.id;
+                    if (!this.hasBalanceHistory(this.providerId) && this.metric === 'cost') {
+                      this.metric = 'usage';
+                    }
+                  }
+                })
             }
-            .scrollable(ScrollDirection.Horizontal)
             .width('100%')
           }
 
@@ -301,6 +366,13 @@ struct StatsPage {
     .backgroundColor(Theme.card)
     .border({ width: 1, color: Theme.stroke })
     .shadow(Theme.cardShadow())
+    .onAppear(() => {
+      // 进场：柱形图从基线长出（之后换数据源由 onChartSource 重播）
+      this.chartPrimed = true;
+      this.getUIContext().animateTo({ duration: 480, curve: Curve.Friction }, () => {
+        this.chartReveal = 1;
+      });
+    })
   }
 
   @Builder
@@ -331,12 +403,12 @@ struct StatsPage {
             if (this.isPeak(pt)) {
               Row()
                 .width('100%')
-                .height(130 * 0.05 * this.frac(pt))
+                .height(130 * 0.05 * this.frac(pt) * this.chartReveal)
                 .backgroundColor(Theme.warn)
             }
             Row()
               .width('100%')
-              .height(130 * (this.frac(pt) - (this.isPeak(pt) ? 0.05 * this.frac(pt) : 0)))
+              .height(130 * (this.frac(pt) - (this.isPeak(pt) ? 0.05 * this.frac(pt) : 0)) * this.chartReveal)
               .backgroundColor(Theme.accent)
           }
           .height(130)
@@ -424,5 +496,17 @@ struct StatsPage {
       }
     }
     return `${pt.label}: ${this.fmtValue(pt.v)}`;
+  }
+
+  /** 路由过渡：从右侧滑入 / 滑出 */
+  pageTransition() {
+    PageTransitionEnter({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionEnter({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+    PageTransitionExit({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionExit({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
   }
 }

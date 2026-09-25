@@ -704,4 +704,16 @@ struct SettingsPage {
     .height('100%')
     .backgroundColor(Theme.bg)
   }
+
+  /** 路由过渡：从右侧滑入 / 滑出 */
+  pageTransition() {
+    PageTransitionEnter({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionEnter({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+    PageTransitionExit({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionExit({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+  }
 }

@@ -672,7 +672,7 @@ struct ProviderDetail {
       if (s.snapshot != null && s.snapshot.ok) {
         ForEach(s.allWindows(), (w: NamedRateWindow) => {
           Column({ space: Theme.gapSm }) {
-            WindowBlock({ title: w.title, win: this.laneForDisplay(w, s), compact: false })
+            WindowBlock({ title: w.title, win: this.laneForDisplay(w, s), compact: false, animKey: `${s.descriptor.id}_${w.id}` })
           }
           .width('100%')
           .padding(Theme.cardPad)
@@ -803,6 +803,7 @@ struct ProviderDetail {
                   RowProgressBar({
                     percent: progressPercent(r.progress!),
                     tint: Theme.brandTint(s.descriptor.accentColor),
+                    animKey: `${s.descriptor.id}_${sec.title}_${r.label}`
                   })
                 }
               }
@@ -935,5 +936,17 @@ struct ProviderDetail {
     .backgroundColor(Theme.card)
     .border({ width: 1, color: this.remEnabled ? Theme.accent : Theme.stroke })
     .shadow(Theme.cardShadow())
+  }
+
+  /** 路由过渡：从右侧滑入 / 滑出；被更深的页面（网页登录）覆盖时向左轻移做视差 */
+  pageTransition() {
+    PageTransitionEnter({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionEnter({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
+    PageTransitionExit({ type: RouteType.Pop, duration: 320, curve: Curve.Friction })
+      .translate({ x: '100%' })
+    PageTransitionExit({ type: RouteType.Push, duration: 320, curve: Curve.Friction })
+      .translate({ x: '-16%' })
   }
 }

@@ -1114,6 +1114,30 @@ function zaiWindowMinutes(unit: number, number: number): number {
   return m != null && number > 0 ? number * m : 0;
 }
 
+/** limit 窗口的时长文案（unit: 1=天 3=小时 5=分钟 6=周），用于区分同类配额的多个窗口 */
+function zaiWindowDurationLabel(unit: number, number: number): string {
+  const unitNames: Record<number, string> = { 1: '天', 3: '小时', 5: '分钟', 6: '周' };
+  const name = unitNames[unit];
+  return name != null && number > 0 ? `${number} ${name}` : '';
+}
+
+/**
+ * 同名配额窗口去重：标题出现多次的窗口，追加时长后缀（如「Token 配额（5 小时）」）。
+ * labels 与 windows 一一对应（zaiWindowDurationLabel 的结果），无时长信息的窗口保持原标题。
+ */
+export function zaiDisambiguateWindowTitles(windows: NamedRateWindow[], labels: string[]): void {
+  const titleCounts: Record<string, number> = {};
+  for (let i = 0; i < windows.length; i++) {
+    const t = windows[i].title;
+    titleCounts[t] = (titleCounts[t] != null ? titleCounts[t] : 0) + 1;
+  }
+  for (let i = 0; i < windows.length; i++) {
+    if (titleCounts[windows[i].title] > 1 && labels[i] != null && labels[i].length > 0) {
+      windows[i].title = `${windows[i].title}（${labels[i]}）`;
+    }
+  }
+}
+
 /** 单条 limit 的归一化指标（对照 zai.js parseLimit） */
 class ZaiLimitFacts {
   type: string = '';
@@ -1289,6 +1313,7 @@ class ZaiProvider implements UsageProvider {
     const limits = asArray(data['limits'])!;
 
     const windows: NamedRateWindow[] = [];
+    const windowLabels: string[] = [];
     for (let i = 0; i < limits.length && windows.length < 6; i++) {
       const l = asObj(limits[i]);
       if (l == null) {
@@ -1297,6 +1322,7 @@ class ZaiProvider implements UsageProvider {
       const w = zaiLimitWindow(l);
       if (w != null) {
         windows.push(w);
+        windowLabels.push(zaiWindowDurationLabel(num(l, 'unit', 0), num(l, 'number', 0)));
       }
     }
     // 主窗口：优先 5 小时（300 分钟）窗口
@@ -1316,6 +1342,10 @@ class ZaiProvider implements UsageProvider {
       primary = windows[0].window;
     }
     const extras: NamedRateWindow[] = windows.filter(w => w.window !== primary && w.window !== secondary);
+
+    // 同类配额出现多个窗口（如 5 小时 + 更长周期的 TOKENS_LIMIT）时，
+    // 标题带上时长区分，否则详情页会出现两张「Token 配额」卡片
+    zaiDisambiguateWindowTitles(windows, windowLabels);
 
     const snap = UsageSnapshot.success(primary, secondary, null);
     snap.extraRateWindows = extras.slice(0, 4);

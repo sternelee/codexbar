@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { Format } from '../main/ets/common/Format';
+import { extractDeepSeekTokenCandidates, extractDeepSeekUserToken } from '../main/ets/common/OAuth';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../main/ets/net/Json';
 import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderDetailSection, ProviderSetting,
@@ -22,6 +23,7 @@ import {
   minimaxHasRecordBeforeWindow,
   MiniMaxBillingRecord,
   t3chatFindCustomerData,
+  zaiDisambiguateWindowTitles,
   zaiLimitWindow
 } from '../main/ets/providers/MoreProviders2';
 import {
@@ -363,6 +365,31 @@ export default function logicUnitTest() {
       // 未知类型拒绝
       const bad: Record<string, Object> = JSON.parse('{"type":"OTHER","unit":1,"number":1}') as Record<string, Object>;
       expect(zaiLimitWindow(bad)).assertEqual(null);
+    });
+
+    it('Zai_duplicate_window_titles', 0, () => {
+      // 两个 TOKENS_LIMIT（5 小时 + 30 天）原本同名「Token 配额」→ 追加时长区分
+      const five: Record<string, Object> = JSON.parse(
+        '{"type":"TOKENS_LIMIT","unit":5,"number":5,"percentage":30,"usage":1000,"remaining":700}'
+      ) as Record<string, Object>;
+      const month: Record<string, Object> = JSON.parse(
+        '{"type":"TOKENS_LIMIT","unit":1,"number":30,"percentage":10,"usage":5000,"remaining":4500}'
+      ) as Record<string, Object>;
+      const w1 = zaiLimitWindow(five)!;
+      const w2 = zaiLimitWindow(month)!;
+      const w3 = zaiLimitWindow(JSON.parse(
+        '{"type":"CREDIT_LIMIT","unit":1,"number":7,"percentage":20}') as Record<string, Object>)!;
+      zaiDisambiguateWindowTitles([w1, w2, w3], ['5 小时', '30 天', '7 天']);
+      expect(w1.title).assertEqual('Token 配额（5 小时）');
+      expect(w2.title).assertEqual('Token 配额（30 天）');
+      // 唯一标题不受影响
+      expect(w3.title).assertEqual('Credit 配额');
+      // 无时长信息的重复窗口保持原标题
+      const w4 = zaiLimitWindow(five)!;
+      const w5 = zaiLimitWindow(month)!;
+      zaiDisambiguateWindowTitles([w4, w5], ['', '']);
+      expect(w4.title).assertEqual('Token 配额');
+      expect(w5.title).assertEqual('Token 配额');
     });
 
     it('Reminder_usage_threshold', 0, () => {
@@ -2594,6 +2621,36 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(broken!.details[0].title).assertEqual('C');
       expect(broken!.details[0].rows.length).assertEqual(1);
       expect(broken!.details[0].chart).assertEqual(undefined);
+    });
+
+    it('DeepSeek_token_capture', 0, () => {
+      const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig';
+      // userToken 裸串 / 被引号包裹 / JSON 编码，三种形态都能取
+      expect(extractDeepSeekUserToken(jwt)).assertEqual(jwt);
+      expect(extractDeepSeekUserToken(`"${jwt}"`)).assertEqual(jwt);
+      expect(extractDeepSeekUserToken(JSON.stringify(jwt))).assertEqual(jwt);
+      // 对象形态 { value: … }
+      expect(extractDeepSeekUserToken(JSON.stringify({ value: jwt }))).assertEqual(jwt);
+      // 匿名/短令牌被拒
+      expect(extractDeepSeekUserToken('short')).assertEqual('');
+      expect(extractDeepSeekUserToken('')).assertEqual('');
+
+      // 扫描兜底：userToken 优先，其次按出现顺序；外层引号（runJavaScript 编码）先剥掉
+      const scan = JSON.stringify({ userToken: jwt, DS_TOKEN: `{"token":"${jwt}"}` });
+      const list = extractDeepSeekTokenCandidates(scan);
+      expect(list.length).assertEqual(1);
+      expect(list[0]).assertEqual(jwt);
+      const quoted = extractDeepSeekTokenCandidates(JSON.stringify(scan));
+      expect(quoted.length).assertEqual(1);
+      expect(quoted[0]).assertEqual(jwt);
+      // userToken 缺席时从改名键里取
+      const renamed = extractDeepSeekTokenCandidates(JSON.stringify({ platform_token: jwt }));
+      expect(renamed.length).assertEqual(1);
+      expect(renamed[0]).assertEqual(jwt);
+      // 无 token 键 / 非对象 / 空串 → 空
+      expect(extractDeepSeekTokenCandidates(JSON.stringify({ theme: 'dark' })).length).assertEqual(0);
+      expect(extractDeepSeekTokenCandidates('not json').length).assertEqual(0);
+      expect(extractDeepSeekTokenCandidates('').length).assertEqual(0);
     });
   });
 }

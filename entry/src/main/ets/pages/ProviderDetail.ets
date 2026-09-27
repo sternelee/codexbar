@@ -192,6 +192,11 @@ struct ProviderDetail {
       s.setting.credential2.trim().length === 0;
   }
 
+  /** 是否持有任意凭证（API Key 或 OAuth 第二凭证），决定清除入口是否显示 */
+  hasAnyCredential(s: ProviderState): boolean {
+    return s.setting.credential.trim().length > 0 || s.setting.credential2.trim().length > 0;
+  }
+
   /** 配置卡片标题：区分未配置与已失效 */
   credCardTitle(s: ProviderState): string {
     return s.setting.credential.length > 0 ? '凭证无效或已过期' : '尚未配置凭证';
@@ -251,7 +256,7 @@ struct ProviderDetail {
 
   /** 清除凭证（确认后执行：停用并清空，详情页回到未配置态） */
   confirmClearCredential(s: ProviderState): void {
-    this.askConfirm('清除凭证', `确定清除「${s.descriptor.title}」的凭证？清除后需要重新配置才能查询。`, '清除', () => {
+    this.askConfirm('清除凭证', `确定清除「${s.descriptor.title}」的凭证（含网页登录会话）？清除后需要重新配置才能查询。`, '清除', () => {
       AppStore.get().clearCredential(this.providerId);
       Nav.toast('凭证已清除');
     });
@@ -452,8 +457,8 @@ struct ProviderDetail {
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.accent)
         }
-        // 清除凭证入口（已配置时显示）
-        if (s.setting.credential.length > 0) {
+        // 清除凭证入口（已配置任意凭证时显示）
+        if (this.hasAnyCredential(s)) {
           Row() {
             Blank()
             Text('清除凭证')
@@ -466,13 +471,29 @@ struct ProviderDetail {
           .width('100%')
         }
         if (s.snapshot != null && !s.snapshot.ok) {
-          Row({ space: Theme.gapXs }) {
-            Text('⚠')
-              .fontSize(Theme.fsBody)
-            Text(s.snapshot.error)
-              .fontSize(Theme.fsBody)
-              .fontColor(Theme.danger)
-              .layoutWeight(1)
+          Column({ space: Theme.gapXs }) {
+            Row({ space: Theme.gapXs }) {
+              Text('⚠')
+                .fontSize(Theme.fsBody)
+              Text(s.snapshot.error)
+                .fontSize(Theme.fsBody)
+                .fontColor(Theme.danger)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            // 失败态快捷清理：不再需要该服务商时直接清除凭证（含 OAuth 会话）
+            if (this.hasAnyCredential(s)) {
+              Row() {
+                Blank()
+                Text('清除凭证')
+                  .fontSize(Theme.fsCaption)
+                  .fontColor(Theme.danger)
+                  .onClick(() => {
+                    this.confirmClearCredential(s);
+                  })
+              }
+              .width('100%')
+            }
           }
           .padding(Theme.rowGap)
           .borderRadius(Theme.radiusInput)

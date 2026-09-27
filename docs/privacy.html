@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="CodexBar（HarmonyOS 版）隐私政策：不收集、不上传任何用户数据，凭证仅存设备本机。">
+  <title>CodexBar 隐私政策</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --card: #ffffff;
+      --text: #18202b;
+      --text-dim: #5c6673;
+      --accent: #16d3b4;
+      --stroke: #e3e7ec;
+      --code-bg: #eef1f4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #10151b;
+        --card: #171e26;
+        --text: #e8ecf1;
+        --text-dim: #98a2ae;
+        --accent: #2fe3c5;
+        --stroke: #252e38;
+        --code-bg: #1d2630;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "HarmonyOS Sans SC", "PingFang SC",
+        "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+      line-height: 1.75;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+    .app-info {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .app-info .logo {
+      display: inline-block;
+      font-size: 40px;
+      line-height: 1;
+    }
+    .app-info h1 { font-size: 24px; margin: 12px 0 4px; }
+    .app-info p { color: var(--text-dim); font-size: 14px; margin: 0; }
+    .summary {
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      padding: 18px 20px;
+      margin-bottom: 28px;
+      font-size: 15px;
+    }
+    .summary strong { color: var(--accent); }
+    section {
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: 14px;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+    }
+    h2 {
+      font-size: 17px;
+      margin: 0 0 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--stroke);
+    }
+    p, li { font-size: 15px; margin: 8px 0; }
+    ul { padding-left: 20px; margin: 8px 0; }
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 13px;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+    }
+    .meta { color: var(--text-dim); font-size: 13px; text-align: center; margin-top: 32px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="app-info">
+    <div class="logo">📊</div>
+    <h1>CodexBar 隐私政策</h1>
+    <p>应用名称：CodexBar &nbsp;·&nbsp; 包名：<code>com.sternelee.codexbar</code></p>
+    <p>适用平台：HarmonyOS（含 HarmonyOS 桌面服务卡片）</p>
+  </div>
+
+  <div class="summary">
+    <strong>简而言之：</strong>CodexBar 是一款本地优先的 AI 额度速览工具。
+    <strong>我们不收集、不存储、不上传任何用户数据</strong>——本应用没有自建服务器，没有统计 SDK，没有广告，没有第三方追踪。
+  </div>
+
+  <section>
+    <h2>一、我们收集哪些信息</h2>
+    <p>不收集。CodexBar 全部功能在你设备本地完成：</p>
+    <ul>
+      <li>你主动填写的<strong>服务商凭证</strong>（API Key、会话令牌等）仅保存在设备本机的系统偏好存储中，绝不上传；</li>
+      <li><strong>用量数据</strong>由应用在刷新时直接向对应服务商查询获得，仅保存在本机；</li>
+      <li><strong>用量历史</strong>为本地刷新采样（每日保留最后一个样本，最多 62 天），仅用于本机统计图表。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>二、网络访问</h2>
+    <p>应用申明了网络权限（<code>ohos.permission.INTERNET</code>），网络访问<strong>只发生在你主动刷新时</strong>，且由应用直接连接<strong>你所配置的 AI 服务商官方接口</strong>（如 Anthropic、OpenAI、DeepSeek 等）。查询请求与凭证仅在你的设备与对应服务商之间传输，不经过任何我们控制的中转服务器（我们没有服务器）。</p>
+  </section>
+
+  <section>
+    <h2>三、网页登录</h2>
+    <p>对支持网页登录的服务商（如 Claude、Codex、DeepSeek），应用使用内嵌浏览器组件打开其官方登录页。登录过程中产生的会话凭据在<strong>你设备本地</strong>解析并保存，应用不会将你的账号密码发送到任何其他地方。</p>
+  </section>
+
+  <section>
+    <h2>四、桌面服务卡片</h2>
+    <p>鸿蒙桌面卡片展示的用量摘要数据来自本机已保存的数据，通过系统 Form Kit 推送到卡片，不产生额外网络请求。</p>
+  </section>
+
+  <section>
+    <h2>五、通知</h2>
+    <p>额度提醒为<strong>本地通知</strong>，由应用在后台根据本机数据计算后发出，不联网、不含任何追踪信息。你可在系统设置中随时关闭应用的通知权限。</p>
+  </section>
+
+  <section>
+    <h2>六、第三方服务商</h2>
+    <p>你配置的各 AI 服务商均为独立的数据控制者，其对你账号数据的处理适用各自的隐私政策。CodexBar 不代表它们收集数据，也无法访问或删除你在服务商侧的账号信息。</p>
+  </section>
+
+  <section>
+    <h2>七、数据的删除</h2>
+    <ul>
+      <li>可在应用「设置页 / 详情页」中随时删除单个凭证或账号；</li>
+      <li><strong>卸载应用即可彻底清除</strong>保存在本机的全部数据（凭证、快照、用量历史）。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>八、儿童隐私</h2>
+    <p>本应用面向开发者等 AI 服务用户，不面向儿童，也不收集儿童的任何信息。</p>
+  </section>
+
+  <section>
+    <h2>九、政策变更</h2>
+    <p>若本政策发生实质变更，我们将通过应用更新说明或本页面公告。继续使用应用即表示接受修订后的政策。</p>
+  </section>
+
+  <section>
+    <h2>十、联系我们</h2>
+    <p>本项目为开源软件，如有疑问或建议，请通过 GitHub 仓库提交 Issue：</p>
+    <p><a href="https://github.com/sternelee/codexbar/issues" rel="noopener">github.com/sternelee/codexbar/issues</a></p>
+  </section>
+
+  <p class="meta">生效日期：2026 年 9 月 26 日</p>
+</main>
+</body>
+</html>

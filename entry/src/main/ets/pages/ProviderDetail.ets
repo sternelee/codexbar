@@ -192,6 +192,11 @@ struct ProviderDetail {
       s.setting.credential2.trim().length === 0;
   }
 
+  /** 查询失败态：错误横幅内已带清除入口，顶部清除链接此时隐藏避免重复 */
+  isFailed(s: ProviderState): boolean {
+    return s.snapshot != null && !s.snapshot.ok;
+  }
+
   /** 是否持有任意凭证（API Key 或 OAuth 第二凭证），决定清除入口是否显示 */
   hasAnyCredential(s: ProviderState): boolean {
     return s.setting.credential.trim().length > 0 || s.setting.credential2.trim().length > 0;
@@ -457,8 +462,8 @@ struct ProviderDetail {
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.accent)
         }
-        // 清除凭证入口（已配置任意凭证时显示）
-        if (this.hasAnyCredential(s)) {
+        // 清除凭证入口（已配置任意凭证且未失败时显示；失败态由错误横幅内的入口承载）
+        if (this.hasAnyCredential(s) && !this.isFailed(s)) {
           Row() {
             Blank()
             Text('清除凭证')
@@ -470,12 +475,12 @@ struct ProviderDetail {
           }
           .width('100%')
         }
-        if (s.snapshot != null && !s.snapshot.ok) {
+        if (this.isFailed(s)) {
           Column({ space: Theme.gapXs }) {
             Row({ space: Theme.gapXs }) {
               Text('⚠')
                 .fontSize(Theme.fsBody)
-              Text(s.snapshot.error)
+              Text(s.snapshot!.error)
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.danger)
                 .layoutWeight(1)

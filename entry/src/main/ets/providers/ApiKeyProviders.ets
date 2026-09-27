@@ -27,6 +27,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { deepSeekPlatformHeaders } from '../common/OAuth';
 
 function bearer(key: string): Record<string, string> {
   const h: Record<string, string> = {
@@ -1221,11 +1222,8 @@ class DeepSeekProvider implements UsageProvider {
    * amount + cost 两组数据按桶时间合并，窗口为近 30 天，tz 为本地时区偏移。
    */
   private async fetchPlatformUsage(token: string, nowMs: number): Promise<DeepSeekPlatformUsage | null> {
-    const headers: Record<string, string> = {
-      'authorization': `Bearer ${token}`,
-      'accept': 'application/json',
-      'x-client-platform': 'web',
-    };
+    // 平台 WAF 拦截无浏览器特征的原生请求，必须走 deepSeekPlatformHeaders
+    const headers = deepSeekPlatformHeaders(token);
     const now = new Date(nowMs);
     const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).getTime()
       - 29 * 86400000;
@@ -1248,11 +1246,7 @@ class DeepSeekProvider implements UsageProvider {
    * 每个请求都拿「amount + cost」两份数据，任一份失败就算本次明细不可用。
    */
   private async fetchMonthlyUsage(token: string, nowMs: number): Promise<DeepSeekPlatformUsage | null> {
-    const headers: Record<string, string> = {
-      'authorization': `Bearer ${token}`,
-      'accept': 'application/json',
-      'x-client-platform': 'web',
-    };
+    const headers = deepSeekPlatformHeaders(token);
     const now = new Date(nowMs);
     const monthStartMs = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
     const query = `month=${now.getMonth() + 1}&year=${now.getFullYear()}`;

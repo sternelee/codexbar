@@ -10,6 +10,9 @@
 
 import web_webview from '@ohos.web.webview';
 import { router } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { Http } from '../net/Http';
+import { asObj } from '../net/Json';
 import { ProviderSetting } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
@@ -20,7 +23,10 @@ import {
   codexAuthorizeUrl,
   codexExchangeCode,
   CodexTokenSet,
+  extractDeepSeekTokenCandidates,
   extractDeepSeekUserToken,
+  deepSeekPlatformHeaders,
+  DEEPSEEK_WEB_UA,
   extractSessionKey,
   makePkce,
   PkcePair,
@@ -32,6 +38,15 @@ const CLAUDE_COOKIE_URL = 'https://claude.ai';
 const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 /** 读 localStorage.userToken（macOS 是从 Chrome 的同名键读，这里改成读应用内 Web 的同一键） */
 const DEEPSEEK_TOKEN_SCRIPT = 'window.localStorage.getItem("userToken") || ""';
+/** 兜底扫描：站点若不再用 userToken 键，取所有键名含 token 的项（JSON 对象串） */
+const DEEPSEEK_TOKEN_SCAN_SCRIPT =
+  '(function(){var o={};for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);' +
+  'if(k&&k.toLowerCase().indexOf("token")>=0){o[k]=localStorage.getItem(k);}}' +
+  'return JSON.stringify(o);})()';
+/** 诊断用：localStorage 全部键名 */
+const DEEPSEEK_KEYS_SCRIPT = 'Object.keys(window.localStorage).join(",")';
+const DOMAIN = 0x0400;
+const TAG = 'CodexBar.OAuthLogin';
 
 @Entry
 @Component
@@ -105,8 +120,25 @@ struct OAuthLogin {
   /**
    * DeepSeek：读 Web 组件里 platform.deepseek.com 的 localStorage.userToken，
    * 与 macOS 从 Chrome localStorage 导入平台会话是同一个键、同一份数据。
+   * userToken 取不到时扫描所有键名含 token 的项做兜底，候选逐个过平台接口校验。
    */
   private tokenInFlight: boolean = false;
+  /** 已被平台接口明确判无效（401/403/业务码非 0）的候选令牌，避免 2 秒轮询反复打接口 */
+  private rejectedTokens: string[] = [];
+
+  private isRejectedToken(token: string): boolean {
+    return this.rejectedTokens.indexOf(token) >= 0;
+  }
+
+  private rememberRejectedToken(token: string): void {
+    if (this.rejectedTokens.indexOf(token) < 0) {
+      this.rejectedTokens.push(token);
+      // 只留最近 8 个，防止匿名令牌轮换撑爆
+      while (this.rejectedTokens.length > 8) {
+        this.rejectedTokens.shift();
+      }
+    }
+  }
 
   async pollDeepSeekToken(): Promise<void> {
     if (this.done || this.tokenInFlight || this.providerId !== 'deepseek') {
@@ -114,19 +146,96 @@ struct OAuthLogin {
     }
     this.tokenInFlight = true;
     try {
-      const raw = await this.controller.runJavaScript(DEEPSEEK_TOKEN_SCRIPT);
-      const token = extractDeepSeekUserToken(raw);
-      if (token.length > 0) {
-        this.done = true;
-        this.status = '已获取平台会话，正在保存…';
-        await this.saveDeepSeekSession(token);
-      } else {
+      // 候选来源 1：macOS 同款 userToken 键
+      const primary = extractDeepSeekUserToken(await this.controller.runJavaScript(DEEPSEEK_TOKEN_SCRIPT));
+      const candidates: string[] = [];
+      if (primary.length > 0 && !this.isRejectedToken(primary)) {
+        candidates.push(primary);
+      }
+      // 候选来源 2：键名含 token 的全部项（站点改键名时的兜底），也覆盖 userToken 被拒后的场景
+      const scanList = extractDeepSeekTokenCandidates(
+        await this.controller.runJavaScript(DEEPSEEK_TOKEN_SCAN_SCRIPT));
+      for (let i = 0; i < scanList.length; i++) {
+        const item = scanList[i];
+        if (item.length > 0 && !this.isRejectedToken(item) && candidates.indexOf(item) < 0) {
+          candidates.push(item);
+        }
+      }
+      if (candidates.length === 0) {
         this.status = '登录 platform.deepseek.com 后会自动读取平台会话（仅 API Key 时明细不可用）';
+        // 诊断：打印 localStorage 键名，便于定位站点改键
+        const keys = await this.controller.runJavaScript(DEEPSEEK_KEYS_SCRIPT);
+        hilog.info(DOMAIN, TAG, 'deepseek no candidate, localStorage keys: %{public}s', `${keys}`);
+        this.tokenInFlight = false;
+        return;
+      }
+      this.status = '正在校验平台会话…';
+      let saved = false;
+      for (let i = 0; i < candidates.length; i++) {
+        const verdict = await this.validateDeepSeekToken(candidates[i]);
+        if (verdict === 0) {
+          this.done = true;
+          this.status = '已获取平台会话，正在保存…';
+          await this.saveDeepSeekSession(candidates[i]);
+          saved = true;
+          break;
+        }
+        if (verdict === 1) {
+          this.rememberRejectedToken(candidates[i]);
+        }
+        // verdict === 2（网络异常/响应结构异常）：不缓存，下轮重试
+      }
+      if (!saved && !this.done) {
+        this.status = '平台会话校验未通过，请确认已在下方完成登录后稍候';
       }
     } catch (e) {
       // 页面未就绪或 JS 执行被拒：静默重试，用户也可回设置页手工粘贴
+      hilog.warn(DOMAIN, TAG, 'deepseek poll failed: %{public}s', `${e}`);
     }
     this.tokenInFlight = false;
+  }
+
+  /**
+   * 校验候选令牌（对照 DeepSeekUsageFetcher.parseUserSummary 的成功判定）：
+   * get_user_summary 返回 2xx，且 code（若有）为 0、data.biz_code（若有）为 0、
+   * data.biz_data 存在才算有效。
+   * 返回：0 有效；1 明确无效（401/403 或业务码非 0，可缓存不再重试）；
+   * 2 不确定（网络失败/结构异常，下轮重试）。
+   */
+  private async validateDeepSeekToken(token: string): Promise<number> {
+    // 必须带浏览器伪装头：平台 WAF 拦无 UA 的原生请求（429 Request Blocked）
+    const headers = deepSeekPlatformHeaders(token);
+    const resp = await Http.get('https://platform.deepseek.com/api/v0/users/get_user_summary', headers);
+    if (!resp.ok) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary http %{public}d body=%{public}s',
+        resp.code, resp.body.substring(0, 200));
+      return resp.code === 401 || resp.code === 403 ? 1 : 2;
+    }
+    const root = asObj(resp.json());
+    if (root == null) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary body not json: %{public}s', resp.body.substring(0, 200));
+      return 2;
+    }
+    const code = root['code'];
+    if (typeof code === 'number' && code !== 0) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary code=%{public}d', code);
+      return 1;
+    }
+    const data = asObj(root['data']);
+    if (data == null) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary missing data: %{public}s', resp.body.substring(0, 200));
+      return 2;
+    }
+    const bizCode = data['biz_code'];
+    if (typeof bizCode === 'number' && bizCode !== 0) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary biz_code=%{public}d', bizCode);
+      return 1;
+    }
+    if (asObj(data['biz_data']) == null) {
+      hilog.warn(DOMAIN, TAG, 'deepseek summary missing biz_data: %{public}s', resp.body.substring(0, 200));
+      return 2;
+    }
+    return 0;
   }
 
   /** DeepSeek：只写第二栏（平台会话），API Key 保持不动 */
@@ -266,6 +375,13 @@ struct OAuthLogin {
         Web({ src: this.startUrl, controller: this.controller })
           .width('100%')
           .layoutWeight(1)
+          // platform.deepseek.com 等 SPA 强依赖 localStorage，
+          // ArkWeb 默认 domStorageAccess(false) 会直接白屏，必须显式开启
+          .domStorageAccess(true)
+          .javaScriptAccess(true)
+          .databaseAccess(true)
+          // 移动端 UA：页面走移动版布局；原生接口请求另用桌面 UA（见 deepSeekPlatformHeaders）
+          .userAgent(DEEPSEEK_WEB_UA)
           .onLoadIntercept((event) => {
             const url = event.data.getRequestUrl();
             return this.interceptCallback(url);

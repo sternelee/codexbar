@@ -427,6 +427,81 @@ export function extractDeepSeekUserToken(rawValue: string): string {
   return plausiblePlatformToken(unquoted) ? unquoted : '';
 }
 
+/**
+ * platform.deepseek.com 的浏览器伪装请求头。
+ * 平台 WAF 会拦截无浏览器特征的原生请求（实测无 UA 直接 429 "Request Blocked"，
+ * 带 Chrome UA + Referer/Origin 放行），校验与明细接口都必须带上。
+ */
+export const DEEPSEEK_BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+
+/** 应用内 Web 组件展示用移动端 UA（页面走移动版布局）；原生接口请求仍用上面的桌面 UA（WAF 已验证放行） */
+export const DEEPSEEK_WEB_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36';
+
+export function deepSeekPlatformHeaders(token: string): Record<string, string> {
+  return {
+    'authorization': `Bearer ${token}`,
+    'accept': 'application/json',
+    'x-client-platform': 'web',
+    'user-agent': DEEPSEEK_BROWSER_UA,
+    'referer': 'https://platform.deepseek.com/usage',
+    'origin': 'https://platform.deepseek.com',
+  };
+}
+
+/**
+ * localStorage 扫描兜底（对照 macOS 只认 userToken 键的语义做扩展）：
+ * 站点前端若改键名（如 DS_TOKEN / platform_token），userToken 取不到时，
+ * 扫描所有键名含 token 的项，按「userToken 优先、其余按出现顺序」逐个提取候选。
+ * scanRaw 是页面里 JSON.stringify(对象) 的返回，可能再被 runJavaScript 包一层引号。
+ * 候选不在这里判真伪——由调用方逐个过平台接口校验，第一个校验通过的胜出。
+ */
+export function extractDeepSeekTokenCandidates(scanRaw: string): string[] {
+  let text = scanRaw == null ? '' : scanRaw.trim();
+  if (text.length === 0) {
+    return [];
+  }
+  if (text.charAt(0) === '"') {
+    const inner = parseJson(text);
+    if (typeof inner === 'string') {
+      text = inner;
+    } else {
+      return [];
+    }
+  }
+  const bag = asObj(parseJson(text));
+  if (bag == null) {
+    return [];
+  }
+  const out: string[] = [];
+  const preferred = bag['userToken'];
+  if (typeof preferred === 'string') {
+    const direct = extractDeepSeekUserToken(preferred);
+    if (direct.length > 0) {
+      out.push(direct);
+    }
+  }
+  const keys = Object.keys(bag);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key === 'userToken') {
+      continue;
+    }
+    const value = bag[key];
+    let candidate = '';
+    if (typeof value === 'string') {
+      candidate = extractDeepSeekUserToken(value);
+    } else if (value instanceof Object) {
+      candidate = extractDeepSeekUserToken(JSON.stringify(value));
+    }
+    if (candidate.length > 0 && out.indexOf(candidate) < 0) {
+      out.push(candidate);
+    }
+  }
+  return out;
+}
+
 export function extractSessionKey(cookieText: string): string {
   if (cookieText == null || cookieText.length === 0) {
     return '';

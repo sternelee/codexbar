@@ -41,7 +41,7 @@
 | OpenRouter | API Key | `sk-or-v1-…` | 额度使用率 + 剩余额度 |
 | DeepSeek | API Key（平台会话自动获取） | 只需 `sk-…`；用量明细的平台会话由详情页「网页登录」自动抓取（对照 macOS 自动读浏览器，无需手填令牌） | 余额（首页只显 `¥X.XX`，详情页说明行才是 macOS 原句 `(Paid: … / Granted: …)`）+ `Usage`（Today / Last 30 days 或 This month / Requests / API keys / Top model + 每日 token 图）与 `Spend`（各模型花费 + 每日花费图）；by-key 失败自动回退月度账户数据 |
 | Kimi (Moonshot) | API Key | `sk-…` | 可用余额（现金/代金券） |
-| SiliconFlow 硅基流动 | API Key | `sk-…` | 总余额（充值/赠送） |
+| SiliconFlow 硅基流动 | API Key | `sk-…` | 总余额（充值/赠送）；国内站 `api.siliconflow.cn` 优先，失败回退国际站 `api.siliconflow.com`，错误透出服务端 message |
 | Kimi 编码版 (kimi.com / kimi.ai) | 访问令牌 / API Key | kimi.com authToken 或 Kimi Code API Key（sk-…） | 编码额度 5 小时/每周/月度 窗口 + 计划名（intl 自动降级） |
 | Manus | 会话令牌 | manus.im 会话 token | 用量窗口 + 额度构成 |
 | Perplexity | Web 会话 | perplexity.ai 会话 Cookie | 余额与用量窗口 |

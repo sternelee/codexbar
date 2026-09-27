@@ -14,7 +14,8 @@ import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow, manusLanes, perplexityLanes, perplexityPools } from '../main/ets/providers/MoreProviders';
 import { nousLane } from '../main/ets/providers/MoreProviders3';
 import { deepseekCostText, deepseekCountText, deepseekDetailSections, deepseekMonthlyUsage,
-  deepseekPlatformUsage } from '../main/ets/providers/ApiKeyProviders';
+  deepseekPlatformUsage, siliconflowErrorText, SILICONFLOW_HOSTS } from '../main/ets/providers/ApiKeyProviders';
+import { HttpResult } from '../main/ets/net/Http';
 import { copilotCreditRows, copilotSeatEntitlement } from '../main/ets/providers/ApiKeyProviders2';
 import {
   minimaxAggregate,
@@ -2682,6 +2683,31 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(extractDeepSeekTokenCandidates(JSON.stringify({ theme: 'dark' })).length).assertEqual(0);
       expect(extractDeepSeekTokenCandidates('not json').length).assertEqual(0);
       expect(extractDeepSeekTokenCandidates('').length).assertEqual(0);
+    });
+
+    it('Siliconflow_error_text_and_hosts', 0, () => {
+      // 错误文案优先透出服务端 message
+      const r1 = new HttpResult();
+      r1.code = 410;
+      r1.body = '{"code":20026,"message":"This API has been deprecated"}';
+      expect(siliconflowErrorText(r1)).assertEqual('This API has been deprecated (HTTP 410)');
+      const r2 = new HttpResult();
+      r2.code = 401;
+      r2.body = '{"code":30014,"message":"Token is invalid."}';
+      expect(siliconflowErrorText(r2)).assertEqual('Token is invalid. (HTTP 401)');
+      // 无 message / 非 JSON 体回退到通用文案
+      const r3 = new HttpResult();
+      r3.code = 410;
+      r3.body = '';
+      expect(siliconflowErrorText(r3)).assertEqual('请求失败 (HTTP 410)');
+      const r4 = new HttpResult();
+      r4.code = 410;
+      r4.body = '<html>Blocked</html>';
+      expect(siliconflowErrorText(r4)).assertEqual('请求失败 (HTTP 410)');
+      // 国内站优先，国际站兜底
+      expect(SILICONFLOW_HOSTS.length).assertEqual(2);
+      expect(SILICONFLOW_HOSTS[0]).assertEqual('https://api.siliconflow.cn');
+      expect(SILICONFLOW_HOSTS[1]).assertEqual('https://api.siliconflow.com');
     });
   });
 }

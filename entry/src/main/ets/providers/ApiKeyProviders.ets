@@ -10,7 +10,7 @@
  * - Anthropic Console（Admin API）: usage_report / cost_report（月度 token 与花费）
  */
 
-import { Http } from '../net/Http';
+import { Http, HttpResult } from '../net/Http';
 import { asArray, asObj, Json, num, optNum, optStr, str } from '../net/Json';
 import {
   AuthKind,
@@ -1350,6 +1350,27 @@ class MoonshotProvider implements UsageProvider {
 // SiliconFlow 硅基流动
 // ---------------------------------------------------------------------------
 
+/**
+ * 组装 SiliconFlow 失败文案：优先透出服务端 message，便于定位
+ * （如 410 端点下线 / 账号状态异常等，官方错误体为 {code, message}）。
+ */
+export function siliconflowErrorText(resp: HttpResult): string {
+  const root = asObj(resp.json());
+  if (root != null) {
+    const msg = optStr(root, 'message');
+    if (msg != null && msg.length > 0) {
+      return `${msg} (HTTP ${resp.code})`;
+    }
+  }
+  return resp.errorText();
+}
+
+/** SiliconFlow 国内站/国际站域名；国内站优先，失败后逐站回退 */
+export const SILICONFLOW_HOSTS: string[] = [
+  'https://api.siliconflow.cn',
+  'https://api.siliconflow.com',
+];
+
 class SiliconFlowProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'siliconflow',
@@ -1365,9 +1386,22 @@ class SiliconFlowProvider implements UsageProvider {
     if (key.length === 0) {
       return UsageSnapshot.failure('未配置 API Key');
     }
-    const resp = await Http.get('https://api.siliconflow.cn/v1/user/info', bearer(key));
-    if (!resp.ok) {
-      return UsageSnapshot.failure(resp.errorText());
+    // 国内站已出现对有效 Key 返回 410 的情况；逐站尝试（国内站优先，国际站兜底，
+    // 国际站 Key 在国内站会 401），全部失败时报告首个（国内站）错误。
+    let resp: HttpResult | null = null;
+    let firstError = '';
+    for (let i = 0; i < SILICONFLOW_HOSTS.length; i++) {
+      const r = await Http.get(`${SILICONFLOW_HOSTS[i]}/v1/user/info`, bearer(key));
+      if (r.ok) {
+        resp = r;
+        break;
+      }
+      if (firstError.length === 0) {
+        firstError = siliconflowErrorText(r);
+      }
+    }
+    if (resp == null) {
+      return UsageSnapshot.failure(firstError);
     }
     const root = asObj(resp.json());
     const data = root != null ? asObj(root['data']) : null;

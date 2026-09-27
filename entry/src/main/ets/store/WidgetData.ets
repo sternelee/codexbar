@@ -178,6 +178,44 @@ export function buildWidgetItems(states: ProviderState[], now: number, selected:
   return rows.slice(0, MAX_ITEMS);
 }
 
+class WidgetIdPct {
+  id: string = '';
+  pct: number = 0;
+}
+
+/**
+ * 纯函数：当前卡片上会渲染出条目的服务商 ID（与 buildWidgetItems 同一挑选逻辑，
+ * 同样受 MAX_ITEMS 截断）。供卡片「刷新」按钮使用——只刷新显示中的几家。
+ */
+export function widgetDisplayedIds(states: ProviderState[], selected: string[]): string[] {
+  const now = Date.now();
+  const ids: string[] = [];
+  if (selected.length > 0) {
+    for (let i = 0; i < selected.length && ids.length < MAX_ITEMS; i++) {
+      const s = stateById(states, selected[i]);
+      if (s != null && itemFor(s, now) != null) {
+        ids.push(s.descriptor.id);
+      }
+    }
+    return ids;
+  }
+  const pairs: WidgetIdPct[] = [];
+  for (let i = 0; i < states.length; i++) {
+    const item = itemFor(states[i], now);
+    if (item != null) {
+      const p = new WidgetIdPct();
+      p.id = states[i].descriptor.id;
+      p.pct = item.barPct;
+      pairs.push(p);
+    }
+  }
+  pairs.sort((a: WidgetIdPct, b: WidgetIdPct): number => b.pct - a.pct);
+  for (let i = 0; i < pairs.length && ids.length < MAX_ITEMS; i++) {
+    ids.push(pairs[i].id);
+  }
+  return ids;
+}
+
 export class WidgetDataStore {
   /** 应用沙箱 files 目录（EntryAbility.onCreate 时记录，供跨端组件文件桥使用） */
   private static dir: string = '';

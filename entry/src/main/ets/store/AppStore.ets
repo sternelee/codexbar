@@ -27,8 +27,11 @@ export class AppStore {
     return AppStore.instance;
   }
 
-  /** 构建初始状态：注册表 × 用户设置，并回放缓存快照 */
-  load(): void {
+  /**
+   * 构建初始状态：注册表 × 用户设置，并回放缓存快照。
+   * 卡片（FormExtensionAbility）进程里传 false——短生命周期进程不需要常驻提醒循环。
+   */
+  load(startReminderLoop: boolean = true): void {
     const list: ProviderState[] = [];
     const providers = ProviderRegistry.all();
     for (let i = 0; i < providers.length; i++) {
@@ -50,7 +53,9 @@ export class AppStore {
     }
     this.states = list;
     this.bump();
-    Reminders.startLoop();
+    if (startReminderLoop) {
+      Reminders.startLoop();
+    }
   }
 
   bump(): void {

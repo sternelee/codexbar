@@ -81,7 +81,7 @@ import {
   removeAccountFromList,
   renameAccountInList,
 } from '../main/ets/store/Settings';
-import { buildWidgetItems, parseWidgetSelection, WidgetDataStore } from '../main/ets/store/WidgetData';
+import { buildWidgetItems, parseWidgetSelection, widgetDisplayedIds, WidgetDataStore } from '../main/ets/store/WidgetData';
 import { HistoryDay, ProviderChartPoint } from '../main/ets/model/Models';
 import { ChartPoint } from '../main/ets/store/UsageHistory';
 import {
@@ -669,8 +669,7 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
 
     it('WidgetData_build_items', 0, () => {
       const now = 1758000000000;
-      const a = stateWith(makeWindow(42, now + 2 * 3600000, true), 'Alpha');
-      const rows = buildWidgetItems([a], now);
+      const a = stateWith(makeWindow(42, now + 2 * 3600000, true), 'Alpha');      const rows = buildWidgetItems([a], now);
       expect(rows.length).assertEqual(1);
       expect(rows[0].name).assertEqual('Alpha');
       expect(rows[0].pct).assertEqual('42%');
@@ -740,6 +739,38 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(buildWidgetItems(many, now).length).assertEqual(8);
       // 清空选择（「恢复自动」）等价于自动模式
       expect(buildWidgetItems(all, now, []).length).assertEqual(auto.length);
+    });
+
+    it('Widget_displayed_ids', 0, () => {
+      // 与 buildWidgetItems 同一挑选逻辑，返回 id 而不是行数据：
+      // 自动模式按用量降序，挑选模式按用户顺序
+      const now = 1758000000000;
+      const a = stateWith(makeWindow(42, 0, true), 'Alpha', true, 'alpha');
+      const b = stateWith(makeWindow(90, 0, true), 'Beta', true, 'beta');
+      const fail = stateWith(makeWindow(70, 0, true), 'Fail', true, 'fail');
+      fail.snapshot = UsageSnapshot.failure('x');
+      const all: ProviderState[] = [a, b, fail];
+      const auto = widgetDisplayedIds(all, []);
+      expect(auto.length).assertEqual(2);
+      expect(auto[0]).assertEqual('beta');
+      expect(auto[1]).assertEqual('alpha');
+      const picked = widgetDisplayedIds(all, ['alpha', 'beta']);
+      expect(picked.length).assertEqual(2);
+      expect(picked[0]).assertEqual('alpha');
+      expect(picked[1]).assertEqual('beta');
+      // 失败快照 / 不存在的 id 不会出现在刷新目标里
+      const withFail = widgetDisplayedIds(all, ['fail', 'nope', 'beta']);
+      expect(withFail.length).assertEqual(1);
+      expect(withFail[0]).assertEqual('beta');
+      // 自动模式同样受 8 条上限约束
+      const many: ProviderState[] = [];
+      const ids: string[] = [];
+      for (let i = 0; i < 10; i++) {
+        ids.push(`p${i}`);
+        many.push(stateWith(makeWindow(10 + i * 5, 0, true), `P${i}`, true, `p${i}`));
+      }
+      expect(widgetDisplayedIds(many, ids).length).assertEqual(8);
+      expect(widgetDisplayedIds(many, []).length).assertEqual(8);
     });
 
     it('Widget_selection_parse', 0, () => {

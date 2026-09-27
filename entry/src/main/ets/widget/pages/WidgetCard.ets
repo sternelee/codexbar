@@ -108,6 +108,26 @@ struct WidgetCard {
         .width('100%')
         .layoutWeight(1)
       }
+
+      // 右下角刷新：只重查当前显示中的服务商（message → EntryFormAbility）
+      Row() {
+        Text('↻')
+          .fontSize(13)
+          .fontColor($r('app.color.text'))
+          .width(22)
+          .height(22)
+          .textAlign(TextAlign.Center)
+          .borderRadius(11)
+          .backgroundColor($r('app.color.stroke'))
+          .onClick(() => {
+            postCardAction(this, {
+              'action': 'message',
+              'params': { 'event': 'refresh' }
+            });
+          })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
     }
     .width('100%')
     .height('100%')

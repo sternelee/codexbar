@@ -1365,6 +1365,16 @@ export function siliconflowErrorText(resp: HttpResult): string {
   return resp.errorText();
 }
 
+/** SiliconFlow 国内站失败文案：410 为官方停用终态（2026-08-14 起，code 20092，
+ *  替代 API 未发布，对照 QuotaTray #50/#53），转译为止血提示以免误判 Key 无效；
+ *  其余状态码走通用文案。 */
+export function siliconflowCnErrorText(resp: HttpResult): string {
+  if (resp.code === 410) {
+    return `SiliconFlow 国内站余额接口已由官方停止服务，暂无替代 API；这不表示 API Key 无效（${siliconflowErrorText(resp)}）`;
+  }
+  return siliconflowErrorText(resp);
+}
+
 /** SiliconFlow 国内站/国际站域名；国内站优先，失败后逐站回退 */
 export const SILICONFLOW_HOSTS: string[] = [
   'https://api.siliconflow.cn',
@@ -1386,8 +1396,8 @@ class SiliconFlowProvider implements UsageProvider {
     if (key.length === 0) {
       return UsageSnapshot.failure('未配置 API Key');
     }
-    // 国内站已出现对有效 Key 返回 410 的情况；逐站尝试（国内站优先，国际站兜底，
-    // 国际站 Key 在国内站会 401），全部失败时报告首个（国内站）错误。
+    // 国内站余额接口已被官方停用（410），仍保留逐站尝试：国际站 Key 可在
+    // api.siliconflow.com 直接成功；全部失败时报告国内站错误（410 转译为止血提示）。
     let resp: HttpResult | null = null;
     let firstError = '';
     for (let i = 0; i < SILICONFLOW_HOSTS.length; i++) {
@@ -1397,7 +1407,7 @@ class SiliconFlowProvider implements UsageProvider {
         break;
       }
       if (firstError.length === 0) {
-        firstError = siliconflowErrorText(r);
+        firstError = i === 0 ? siliconflowCnErrorText(r) : siliconflowErrorText(r);
       }
     }
     if (resp == null) {

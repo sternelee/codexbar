@@ -14,7 +14,7 @@ import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow, manusLanes, perplexityLanes, perplexityPools } from '../main/ets/providers/MoreProviders';
 import { nousLane } from '../main/ets/providers/MoreProviders3';
 import { deepseekCostText, deepseekCountText, deepseekDetailSections, deepseekMonthlyUsage,
-  deepseekPlatformUsage, siliconflowErrorText, SILICONFLOW_HOSTS } from '../main/ets/providers/ApiKeyProviders';
+  deepseekPlatformUsage, siliconflowErrorText, siliconflowCnErrorText, SILICONFLOW_HOSTS } from '../main/ets/providers/ApiKeyProviders';
 import { HttpResult } from '../main/ets/net/Http';
 import { copilotCreditRows, copilotSeatEntitlement } from '../main/ets/providers/ApiKeyProviders2';
 import {
@@ -2708,6 +2708,19 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       expect(SILICONFLOW_HOSTS.length).assertEqual(2);
       expect(SILICONFLOW_HOSTS[0]).assertEqual('https://api.siliconflow.cn');
       expect(SILICONFLOW_HOSTS[1]).assertEqual('https://api.siliconflow.com');
+      // 国内站 410 转译为止血提示（官方停用，不代表 Key 无效），原始信息保留
+      const gone = new HttpResult();
+      gone.code = 410;
+      gone.body = '{"code":20092,"message":"This endpoint is deprecated and is no longer available.","data":null}';
+      const notice = siliconflowCnErrorText(gone);
+      expect(notice.includes('已由官方停止服务')).assertTrue();
+      expect(notice.includes('这不表示 API Key 无效')).assertTrue();
+      expect(notice.includes('20092')).assertTrue();
+      // 410 之外的国内站错误不触发止血文案
+      const invalid = new HttpResult();
+      invalid.code = 401;
+      invalid.body = '{"code":30014,"message":"Token is invalid."}';
+      expect(siliconflowCnErrorText(invalid)).assertEqual('Token is invalid. (HTTP 401)');
     });
   });
 }

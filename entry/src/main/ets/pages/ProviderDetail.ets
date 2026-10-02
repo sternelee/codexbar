@@ -891,7 +891,7 @@ struct ProviderDetail {
         .strokeWidth(1)
         .color(Theme.stroke)
 
-      Text('额度快用完或即将恢复时发送系统通知（应用运行期间有效）')
+      Text('即将恢复：到点由系统定时通知（应用退出后台也生效，需通知权限与系统权益，受限时改为应用运行期间提醒）；额度快用完：应用运行期间提醒')
         .fontSize(Theme.fsMicro)
         .fontColor(Theme.textDim)
         .width('100%')

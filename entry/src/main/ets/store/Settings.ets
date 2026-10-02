@@ -315,6 +315,33 @@ export class Settings {
     Settings.setString(`f_${kind}_${providerId}`, key);
   }
 
+  /** 系统代理提醒：已注册的 reminderId（-1 = 无）；kind 目前仅 'reset' */
+  static agentReminderId(providerId: string, kind: string): number {
+    return Settings.getNumber(`ari_${kind}_${providerId}`, -1);
+  }
+
+  static setAgentReminderId(providerId: string, kind: string, id: number): void {
+    Settings.setNumber(`ari_${kind}_${providerId}`, id);
+  }
+
+  /** 系统代理提醒：当前注册对应的调度标识（窗口周期 + 提前量），防重复注册 */
+  static agentScheduleKey(providerId: string): string {
+    return Settings.getString(`ask_${providerId}`, '');
+  }
+
+  static setAgentScheduleKey(providerId: string, key: string): void {
+    Settings.setString(`ask_${providerId}`, key);
+  }
+
+  /** 系统代理提醒：注册失败的调度标识；同一标识不重试，避免 30 秒循环刷接口 */
+  static agentFailKey(providerId: string): string {
+    return Settings.getString(`afk_${providerId}`, '');
+  }
+
+  static setAgentFailKey(providerId: string, key: string): void {
+    Settings.setString(`afk_${providerId}`, key);
+  }
+
   /** OAuth refresh token（Codex 等）：激活账号优先，回退旧键 */
   static oauthRefreshToken(providerId: string): string {
     const accounts = Settings.accounts(providerId);

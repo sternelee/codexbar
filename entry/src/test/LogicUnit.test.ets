@@ -72,7 +72,7 @@ import {
   clawRouterUsageUrl,
   syntheticQuotaWindow,
 } from '../main/ets/providers/MoreProviders3';
-import { evaluateReminder, ReminderHit } from '../main/ets/store/Reminders';
+import { evaluateReminder, ReminderHit, nextResetSchedule, scheduleText } from '../main/ets/store/Reminders';
 import { Settings } from '../main/ets/store/Settings';
 import {
   addAccountToList,
@@ -447,6 +447,44 @@ export default function logicUnitTest() {
       // 重置时间未知（0）：不提醒
       const s4 = stateWith(makeWindow(20, 0, true));
       expect(evaluateReminder(s4, cfg, now)).assertEqual(null);
+    });
+
+    it('Reminder_next_reset_schedule', 0, () => {
+      const cfg = defaultReminder();
+      cfg.enabled = true;
+      cfg.usageThreshold = 0;
+      cfg.resetLeadMinutes = 30;
+      const now = 1758000000000;
+      // 远期重置（3 天后）也能注册代理提醒：不受提前量窗口约束
+      const resetsAt = now + 3 * 86400000;
+      const sched = nextResetSchedule(stateWith(makeWindow(20, resetsAt, true)), cfg, now);
+      expect(sched != null).assertTrue();
+      if (sched != null) {
+        expect(sched.resetsAt).assertEqual(resetsAt);
+        expect(sched.fireAt).assertEqual(resetsAt - 30 * 60000);
+        // 去重键与进程内提醒一致：注册成功后用它抑制进程内重复
+        expect(sched.dedupeKey).assertEqual(`r_primary_${resetsAt}`);
+        expect(sched.title.indexOf('测试') >= 0).assertTrue();
+        expect(sched.text.indexOf('重置') >= 0).assertTrue();
+      }
+      // 多窗口：取最近重置的
+      const multi = stateWith(makeWindow(20, resetsAt, true));
+      multi.snapshot!.secondary = makeWindow(10, now + 3600000, true);
+      const sched2 = nextResetSchedule(multi, cfg, now);
+      expect(sched2 != null && sched2!.windowId === 'secondary').assertTrue();
+      // 已关闭 reset 提醒（提前量 0）：不注册
+      cfg.resetLeadMinutes = 0;
+      expect(nextResetSchedule(stateWith(makeWindow(20, resetsAt, true)), cfg, now)).assertEqual(null);
+      cfg.resetLeadMinutes = 30;
+      cfg.enabled = false;
+      expect(nextResetSchedule(stateWith(makeWindow(20, resetsAt, true)), cfg, now)).assertEqual(null);
+      // 无未来重置点：不注册
+      cfg.enabled = true;
+      expect(nextResetSchedule(stateWith(makeWindow(20, now - 60000, true)), cfg, now)).assertEqual(null);
+      // 文案：时刻静态生成
+      const text = scheduleText('5 小时窗口', resetsAt);
+      expect(text.indexOf('5 小时窗口 将于') === 0).assertTrue();
+      expect(text.indexOf('重置') >= 0).assertTrue();
     });
 
     it('Reminder_reset_priority_and_dedupe', 0, () => {

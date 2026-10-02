@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { Format } from '../main/ets/common/Format';
+import { L, setAppLang } from '../main/ets/common/I18n';
 import { extractDeepSeekTokenCandidates, extractDeepSeekUserToken } from '../main/ets/common/OAuth';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../main/ets/net/Json';
@@ -167,6 +168,24 @@ function stateWith(
 
 export default function logicUnitTest() {
   describe('logicUnitTest', () => {
+    it('I18n_lang_switch', 0, () => {
+      // 默认中文
+      expect(L('中文', 'Chinese')).assertEqual('中文');
+      expect(Format.countdown(45 * 60 * 1000)).assertEqual('45分钟');
+      expect(Format.resetIn(45 * 60 * 1000)).assertEqual('45分钟后重置');
+      expect(Format.ago(0)).assertEqual('从未');
+      // 切英文：文案与时间单位随之切换
+      setAppLang('en');
+      expect(L('中文', 'Chinese')).assertEqual('Chinese');
+      expect(Format.countdown(45 * 60 * 1000)).assertEqual('45m');
+      expect(Format.resetIn(45 * 60 * 1000)).assertEqual('Resets in 45m');
+      expect(Format.countdown((3 * 3600 + 15 * 60) * 1000)).assertEqual('3h 15m');
+      expect(Format.ago(0)).assertEqual('Never');
+      // 还原中文，避免影响其他用例
+      setAppLang('zh');
+      expect(L('中文', 'Chinese')).assertEqual('中文');
+    });
+
     it('Format_percent', 0, () => {
       expect(Format.percent(85)).assertEqual('85%');
       expect(Format.percent(85.44)).assertEqual('85.4%');

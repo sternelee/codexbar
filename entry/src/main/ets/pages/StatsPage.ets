@@ -22,6 +22,7 @@ import {
   yAxisTicks,
 } from '../store/UsageHistory';
 import { Format } from '../common/Format';
+import { L } from '../common/I18n';
 import { Theme } from '../common/Theme';
 import { Nav, parseDetailParam } from '../common/Nav';
 
@@ -138,7 +139,7 @@ struct StatsPage {
   private selectedName(): string {
     const idx = this.selectedIdx();
     const list = this.historyProviders(this.ver);
-    return idx >= 0 && idx < list.length ? list[idx].descriptor.title : '选择服务商';
+    return idx >= 0 && idx < list.length ? list[idx].descriptor.title : L('选择服务商', 'Select provider');
   }
 
   fmtValue(v: number): string {
@@ -167,7 +168,7 @@ struct StatsPage {
           Nav.back();
         })
 
-        Text('用量统计')
+        Text(L('用量统计', 'Usage Stats'))
           .fontSize(Theme.fsHead)
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.text)
@@ -180,10 +181,10 @@ struct StatsPage {
         Column({ space: Theme.rowGap }) {
           Text('📊')
             .fontSize(Theme.fsEmojiLg)
-          Text('暂无统计数据')
+          Text(L('暂无统计数据', 'No stats yet'))
             .fontSize(Theme.fsName)
             .fontColor(Theme.text)
-          Text('回仪表盘点「刷新」积累数据')
+          Text(L('回仪表盘点「刷新」积累数据', 'Go back and tap "Refresh" to collect data'))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .textAlign(TextAlign.Center)
@@ -196,7 +197,7 @@ struct StatsPage {
           // 服务商下拉选择器
           ListItem() {
             Row({ space: Theme.gapSm }) {
-              Text('服务商')
+              Text(L('服务商', 'Provider'))
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.textDim)
               Select(this.providerOptions())
@@ -229,7 +230,7 @@ struct StatsPage {
           ListItem() {
             Row({ space: Theme.rowGap }) {
               Row({ space: Theme.gapXs }) {
-                Text('用量')
+                Text(L('用量', 'Usage'))
                   .fontSize(Theme.fsCaption)
                   .fontColor(this.metric === 'usage' ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.metric === 'usage' ? Theme.accent : Theme.input)
@@ -239,7 +240,7 @@ struct StatsPage {
                     this.metric = 'usage';
                   })
                 if (this.hasBalanceHistory(this.providerId)) {
-                  Text('消费')
+                  Text(L('消费', 'Cost'))
                     .fontSize(Theme.fsCaption)
                     .fontColor(this.metric === 'cost' ? Theme.bg : Theme.textDim)
                     .backgroundColor(this.metric === 'cost' ? Theme.accent : Theme.input)
@@ -254,7 +255,7 @@ struct StatsPage {
               Blank()
 
               Row({ space: Theme.gapXs }) {
-                Text('近7天')
+                Text(L('近7天', '7d'))
                   .fontSize(Theme.fsCaption)
                   .fontColor(this.range === 7 ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.range === 7 ? Theme.accent : Theme.input)
@@ -263,7 +264,7 @@ struct StatsPage {
                   .onClick(() => {
                     this.range = 7;
                   })
-                Text('近30天')
+                Text(L('近30天', '30d'))
                   .fontSize(Theme.fsCaption)
                   .fontColor(this.range === 30 ? Theme.bg : Theme.textDim)
                   .backgroundColor(this.range === 30 ? Theme.accent : Theme.input)
@@ -285,7 +286,7 @@ struct StatsPage {
           // 合计：三个区间收进同一张卡，标题 + 分割线与数值行分层
           ListItem() {
             Column({ space: Theme.gapSm }) {
-              Text('合计')
+              Text(L('合计', 'Total'))
                 .fontSize(Theme.fsCaption)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(Theme.text)
@@ -295,7 +296,7 @@ struct StatsPage {
                 .strokeWidth(1)
                 .color(Theme.stroke)
               Row() {
-                Text('今日')
+                Text(L('今日', 'Today'))
                   .fontSize(Theme.fsBody)
                   .fontColor(Theme.textDim)
                 Blank()
@@ -306,7 +307,7 @@ struct StatsPage {
               }
               .width('100%')
               Row() {
-                Text('近7天')
+                Text(L('近7天', '7d'))
                   .fontSize(Theme.fsBody)
                   .fontColor(Theme.textDim)
                 Blank()
@@ -317,7 +318,7 @@ struct StatsPage {
               }
               .width('100%')
               Row() {
-                Text('近30天')
+                Text(L('近30天', '30d'))
                   .fontSize(Theme.fsBody)
                   .fontColor(Theme.textDim)
                 Blank()
@@ -338,7 +339,8 @@ struct StatsPage {
           }
 
           ListItem() {
-            Text('基于刷新采样估算：每日取最后一次成功查询的用量/余额推算增量，与真实计费存在差异。')
+            Text(L('基于刷新采样估算：每日取最后一次成功查询的用量/余额推算增量，与真实计费存在差异。',
+                'Estimated from refresh samples: daily deltas are derived from the last successful usage/balance query and may differ from actual billing.'))
               .fontSize(Theme.fsMicro)
               .fontColor(Theme.textDim)
               .width('100%')

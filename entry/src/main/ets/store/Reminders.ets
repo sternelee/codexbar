@@ -17,6 +17,7 @@
 import { NamedRateWindow, ProviderState, ReminderConfig } from '../model/Models';
 import { Format } from '../common/Format';
 import { Notify } from '../common/Notify';
+import { L } from '../common/I18n';
 import { Settings } from './Settings';
 import { AppStore } from './AppStore';
 
@@ -60,8 +61,8 @@ export function evaluateReminder(s: ProviderState, cfg: ReminderConfig, now: num
         kind: 'reset',
         windowId: soonest.id,
         dedupeKey: `r_${soonest.id}_${soonest.window.resetsAt}`,
-        title: `${s.descriptor.title} 额度即将恢复`,
-        text: `${soonest.title} 约 ${mins} 分钟后重置`,
+        title: L(`${s.descriptor.title} 额度即将恢复`, `${s.descriptor.title} quota resetting soon`),
+        text: L(`${soonest.title} 约 ${mins} 分钟后重置`, `${soonest.title} resets in about ${mins} min`),
       };
     }
   }
@@ -83,8 +84,8 @@ export function evaluateReminder(s: ProviderState, cfg: ReminderConfig, now: num
         kind: 'usage',
         windowId: worst.id,
         dedupeKey: `u_${worst.id}_${worst.window.resetsAt}`,
-        title: `${s.descriptor.title} 额度即将用尽`,
-        text: `${worst.title} 已用 ${Format.percent(worst.window.usedPercent)}`,
+        title: L(`${s.descriptor.title} 额度即将用尽`, `${s.descriptor.title} quota almost used up`),
+        text: L(`${worst.title} 已用 ${Format.percent(worst.window.usedPercent)}`, `${worst.title} used ${Format.percent(worst.window.usedPercent)}`),
       };
     }
   }
@@ -110,7 +111,8 @@ export interface ResetSchedule {
 export function scheduleText(windowTitle: string, resetsAt: number): string {
   const d = new Date(resetsAt);
   const two = (n: number): string => n < 10 ? `0${n}` : `${n}`;
-  return `${windowTitle} 将于 ${d.getMonth() + 1}-${d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())} 重置`;
+  return L(`${windowTitle} 将于 ${d.getMonth() + 1}-${d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())} 重置`,
+    `${windowTitle} resets at ${two(d.getHours())}:${two(d.getMinutes())} on ${d.getMonth() + 1}-${d.getDate()}`);
 }
 
 /**
@@ -138,7 +140,7 @@ export function nextResetSchedule(s: ProviderState, cfg: ReminderConfig, now: nu
     resetsAt: soonest.window.resetsAt,
     fireAt: soonest.window.resetsAt - cfg.resetLeadMinutes * 60000,
     dedupeKey: `r_${soonest.id}_${soonest.window.resetsAt}`,
-    title: `${s.descriptor.title} 额度即将恢复`,
+    title: L(`${s.descriptor.title} 额度即将恢复`, `${s.descriptor.title} quota resetting soon`),
     text: scheduleText(soonest.title, soonest.window.resetsAt),
   };
 }

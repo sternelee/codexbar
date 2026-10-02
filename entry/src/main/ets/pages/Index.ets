@@ -8,6 +8,7 @@ import { AppStore } from '../store/AppStore';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
+import { L } from '../common/I18n';
 import { WindowBlock } from '../view/UsageBar';
 import { ProviderIcon } from '../view/ProviderIcon';
 
@@ -109,14 +110,14 @@ struct Index {
   /** 卡片状态摘要（右侧一行字） */
   summaryOf(s: ProviderState): string {
     if (s.loading) {
-      return '查询中…';
+      return L('查询中…', 'Loading…');
     }
     if (s.setting.enabled && s.setting.credential.length === 0) {
-      return '未配置凭证';
+      return L('未配置凭证', 'No credential');
     }
     const snap = s.snapshot;
     if (snap == null) {
-      return '未刷新';
+      return L('未刷新', 'Not refreshed');
     }
     if (!snap.ok) {
       return snap.error;
@@ -125,7 +126,7 @@ struct Index {
       // 卡片另起余额行时（按量花费型，如 OpenRouter）摘要就报余额，否则报卡片上的大号数字
       const balance = snap.providerCost.balanceText;
       if (balance != null && balance.length > 0) {
-        return `余额 ${balance}`;
+        return L(`余额 ${balance}`, `Balance ${balance}`);
       }
       return `余额 ${snap.providerCost.displayText}`;
     }
@@ -134,7 +135,7 @@ struct Index {
       const shown = primaryDisplayWindow(s.descriptor.id, snap, Date.now());
       return Format.percent(shown != null ? shown.usedPercent : snap.primary.usedPercent);
     }
-    return '已更新';
+    return L('已更新', 'Updated');
   }
 
   /** 主泳道的展示窗口（命中绑定泳道投影时替换百分比与重置时间） */
@@ -151,14 +152,14 @@ struct Index {
             .fontSize(Theme.fsTitle)
             .fontWeight(FontWeight.Bold)
             .fontColor(Theme.text)
-          Text(`AI 额度速览 · ${AppStore.get().enabledCount()} 家已启用`)
+          Text(L(`AI 额度速览 · ${AppStore.get().enabledCount()} 家已启用`, `AI Quota at a Glance · ${AppStore.get().enabledCount()} enabled`))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
-        Button(this.isRefreshing ? '刷新中' : '刷新')
+        Button(this.isRefreshing ? L('刷新中', 'Refreshing') : L('刷新', 'Refresh'))
           .fontSize(Theme.fsBody)
           .fontColor(Theme.bg)
           .backgroundColor(Theme.accent)
@@ -263,7 +264,7 @@ struct Index {
       if (s.snapshot != null && s.snapshot.ok) {
         if (s.snapshot.primary != null) {
           WindowBlock({
-            title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : '会话',
+            title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : L('会话', 'Session'),
             win: this.primaryWindow(s) ?? s.snapshot.primary,
             compact: true,
             animKey: `${s.descriptor.id}_primary`
@@ -271,7 +272,7 @@ struct Index {
         }
         if (s.snapshot.secondary != null) {
           WindowBlock({
-            title: s.snapshot.secondaryLabel.length > 0 ? s.snapshot.secondaryLabel : '每周',
+            title: s.snapshot.secondaryLabel.length > 0 ? s.snapshot.secondaryLabel : L('每周', 'Weekly'),
             win: s.snapshot.secondary,
             compact: true,
             animKey: `${s.descriptor.id}_secondary`
@@ -296,7 +297,7 @@ struct Index {
       if (s.loading) {
         Row({ space: Theme.gapSm }) {
           LoadingProgress().width(14).height(14).color(Theme.accent)
-          Text('正在获取用量…')
+          Text(L('正在获取用量…', 'Fetching usage…'))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
@@ -308,7 +309,7 @@ struct Index {
         Row({ space: Theme.gapXs }) {
           Text('🔑')
             .fontSize(Theme.fsCaption)
-          Text('点击去设置页添加凭证')
+          Text(L('点击去设置页添加凭证', 'Tap to add a credential in Settings'))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }

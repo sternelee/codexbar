@@ -15,6 +15,7 @@ import { Settings } from '../store/Settings';
 import { AppStore } from '../store/AppStore';
 import { WidgetDataStore, widgetDisplayedIds } from '../store/WidgetData';
 import { asObj, parseJson } from '../net/Json';
+import { L } from '../common/I18n';
 
 const DOMAIN = 0x0000;
 const TAG = 'EntryFormAbility';
@@ -82,7 +83,7 @@ export default class EntryFormAbility extends FormExtensionAbility {
       if (current.length > 0) {
         const parsed = asObj(parseJson(current));
         if (parsed != null) {
-          parsed['updatedAt'] = '刷新中…';
+          parsed['updatedAt'] = L('刷新中…', 'Refreshing…');
           const pending = formBindingData.createFormBindingData(JSON.stringify(parsed));
           formProvider.updateForm(formId, pending);
         }

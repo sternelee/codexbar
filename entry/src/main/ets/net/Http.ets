@@ -5,6 +5,7 @@
 
 import http from '@ohos.net.http';
 import { parseJson, Json } from './Json';
+import { L } from '../common/I18n';
 
 export class HttpResult {
   code: number = 0;
@@ -22,18 +23,18 @@ export class HttpResult {
 
   errorText(): string {
     if (this.code === 401 || this.code === 403) {
-      return '凭证无效或已过期';
+      return L('凭证无效或已过期', 'Invalid or expired credential');
     }
     if (this.code === 429) {
-      return '请求过于频繁，请稍后再试';
+      return L('请求过于频繁，请稍后再试', 'Rate limited. Please retry later');
     }
     if (this.code >= 500) {
-      return `服务商服务端错误 (${this.code})`;
+      return L(`服务商服务端错误 (${this.code})`, `Provider server error (${this.code})`);
     }
     if (this.code === 0) {
-      return '网络请求失败，请检查网络';
+      return L('网络请求失败，请检查网络', 'Network request failed. Check your connection');
     }
-    return `请求失败 (HTTP ${this.code})`;
+    return L(`请求失败 (HTTP ${this.code})`, `Request failed (HTTP ${this.code})`);
   }
 }
 

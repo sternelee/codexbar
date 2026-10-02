@@ -1,7 +1,10 @@
 /**
  * CodexBar Mobile — 展示格式化工具
  * 对应 Swift 版的倒计时/百分比/金额格式化逻辑（精简迁移）。
+ * 时间单位/相对时间随显示语言输出（I18n.L）；默认中文。
  */
+
+import { L, currentLang } from './I18n';
 
 export class Format {
   /** 百分比：85.0 → "85%"；85.4 → "85.4%" */
@@ -22,38 +25,38 @@ export class Format {
   /** 剩余毫秒 → "3天4小时" / "2小时15分" / "45分钟" / "30秒"；超过 99 天按绝对时间显示 */
   static countdown(msUntil: number): string {
     if (msUntil <= 0) {
-      return '已重置';
+      return L('已重置', 'Reset');
     }
     const totalSec = Math.floor(msUntil / 1000);
     const days = Math.floor(totalSec / 86400);
     if (days > 99) {
-      return `重置于 ${Format.dateTime(Date.now() + msUntil)}`;
+      return L(`重置于 ${Format.dateTime(Date.now() + msUntil)}`, `Resets ${Format.dateTime(Date.now() + msUntil)}`);
     }
     const hours = Math.floor((totalSec % 86400) / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
     const seconds = totalSec % 60;
     if (days > 0) {
-      return hours > 0 ? `${days}天${hours}小时` : `${days}天`;
+      return hours > 0 ? L(`${days}天${hours}小时`, `${days}d ${hours}h`) : L(`${days}天`, `${days}d`);
     }
     if (hours > 0) {
-      return minutes > 0 ? `${hours}小时${minutes}分` : `${hours}小时`;
+      return minutes > 0 ? L(`${hours}小时${minutes}分`, `${hours}h ${minutes}m`) : L(`${hours}小时`, `${hours}h`);
     }
     if (minutes > 0) {
-      return `${minutes}分钟`;
+      return L(`${minutes}分钟`, `${minutes}m`);
     }
-    return `${seconds}秒`;
+    return L(`${seconds}秒`, `${seconds}s`);
   }
 
   /** 重置时间统一文案：已重置 / X后重置 / 重置于 日期（超 99 天封顶） */
   static resetIn(msUntil: number): string {
     if (msUntil <= 0) {
-      return '已重置';
+      return L('已重置', 'Reset');
     }
     const cd = Format.countdown(msUntil);
-    if (cd === '已重置' || cd.startsWith('重置于')) {
+    if (cd === L('已重置', 'Reset') || cd.startsWith(L('重置于', 'Resets'))) {
       return cd;
     }
-    return `${cd}后重置`;
+    return L(`${cd}后重置`, `Resets in ${cd}`);
   }
 
   /** Unix 毫秒 → "HH:mm" */
@@ -64,26 +67,30 @@ export class Format {
     return `${h}:${m}`;
   }
 
-  /** Unix 毫秒 → "M月d日 HH:mm" */
+  /** Unix 毫秒 → "M月d日 HH:mm" / "MMM d HH:mm" */
   static dateTime(ms: number): string {
     const d = new Date(ms);
+    if (currentLang() === 'en') {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${months[d.getMonth()]} ${d.getDate()} ${Format.clock(ms)}`;
+    }
     return `${d.getMonth() + 1}月${d.getDate()}日 ${Format.clock(ms)}`;
   }
 
   /** 相对时间："刚刚" / "5分钟前" / "2小时前" */
   static ago(ms: number): string {
     if (ms <= 0) {
-      return '从未';
+      return L('从未', 'Never');
     }
     const diff = Date.now() - ms;
     if (diff < 60 * 1000) {
-      return '刚刚';
+      return L('刚刚', 'just now');
     }
     if (diff < 3600 * 1000) {
-      return `${Math.floor(diff / 60000)}分钟前`;
+      return L(`${Math.floor(diff / 60000)}分钟前`, `${Math.floor(diff / 60000)}m ago`);
     }
     if (diff < 86400 * 1000) {
-      return `${Math.floor(diff / 3600000)}小时前`;
+      return L(`${Math.floor(diff / 3600000)}小时前`, `${Math.floor(diff / 3600000)}h ago`);
     }
     return Format.dateTime(ms);
   }

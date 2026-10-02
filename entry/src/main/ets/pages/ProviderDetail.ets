@@ -29,6 +29,7 @@ import { Notify } from '../common/Notify';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
+import { L } from '../common/I18n';
 import { RowProgressBar, WindowBlock } from '../view/UsageBar';
 import { DetailChart } from '../view/DetailChart';
 import { ProviderIcon } from '../view/ProviderIcon';
@@ -38,22 +39,22 @@ const LEAD_OPTIONS: number[] = [0, 5, 15, 30, 60];
 
 function leadLabel(m: number): string {
   if (m === 0) {
-    return '关';
+    return L('关', 'Off');
   }
   if (m < 60) {
-    return `${m}分`;
+    return L(`${m}分`, `${m}m`);
   }
-  return '1小时';
+  return L('1小时', '1h');
 }
 
 function leadPhrase(m: number): string {
   if (m === 0) {
-    return '已关闭';
+    return L('已关闭', 'Off');
   }
   if (m < 60) {
-    return `重置前 ${m} 分钟提醒`;
+    return L(`重置前 ${m} 分钟提醒`, `${m} min before reset`);
   }
-  return '重置前 1 小时提醒';
+  return L('重置前 1 小时提醒', '1 hour before reset');
 }
 
 @Entry
@@ -144,7 +145,7 @@ struct ProviderDetail {
   /** 费用卡标题：源工程 ProviderCostSnapshot.period 优先，否则用中性的「余额」 */
   costTitle(cost: ProviderCostSnapshot): string {
     const period = cost.period;
-    return period != null && period.length > 0 ? period : '余额';
+    return period != null && period.length > 0 ? period : L('余额', 'Balance');
   }
 
   /**
@@ -164,7 +165,7 @@ struct ProviderDetail {
   @State askVisible: boolean = false;
   @State askTitle: string = '';
   @State askMessage: string = '';
-  @State askConfirmText: string = '确认';
+  @State askConfirmText: string = '确认'; // 由 askConfirm 调用方本地化
   private askAction: (() => void) | null = null;
 
   /** 是否需要第二凭证（与设置页一致） */
@@ -182,7 +183,8 @@ struct ProviderDetail {
     if (s.setting.credential.length === 0) {
       return true;
     }
-    return s.snapshot != null && !s.snapshot.ok && s.snapshot.error.indexOf('凭证无效') >= 0;
+    return s.snapshot != null && !s.snapshot.ok &&
+      s.snapshot.error.indexOf(L('凭证无效', 'Invalid credential')) >= 0;
   }
 
   /** 主凭证已配置但平台会话（第二栏）缺少：给一个网页登录入口把明细补上 */
@@ -204,7 +206,7 @@ struct ProviderDetail {
 
   /** 配置卡片标题：区分未配置与已失效 */
   credCardTitle(s: ProviderState): string {
-    return s.setting.credential.length > 0 ? '凭证无效或已过期' : '尚未配置凭证';
+    return s.setting.credential.length > 0 ? L('凭证无效或已过期', 'Credential invalid or expired') : L('尚未配置凭证', 'No credential yet');
   }
 
   /** 配置卡片图标 */
@@ -214,13 +216,13 @@ struct ProviderDetail {
 
   /** 配置卡片提示 */
   credCardHint(s: ProviderState): string {
-    return s.setting.credential.length > 0 ? '重新填写凭证并保存后，将自动重新查询' : s.descriptor.authHint;
+    return s.setting.credential.length > 0 ? L('重新填写凭证并保存后，将自动重新查询', 'Re-enter the credential and save to re-query') : s.descriptor.authHint;
   }
 
   saveInlineCredential(): void {
     const cred = this.credInput.trim();
     if (cred.length === 0) {
-      Nav.toast('请输入凭证');
+      Nav.toast(L('请输入凭证', 'Please enter a credential'));
       return;
     }
     // 用户未重填第二凭证 / 额外字段时保留现值（如 Codex 账号 ID、Azure 端点）
@@ -238,7 +240,7 @@ struct ProviderDetail {
     this.editingCred = false;
     this.credInput = '';
     this.cred2Input = '';
-    Nav.toast('已保存，正在查询');
+    Nav.toast(L('已保存，正在查询', 'Saved. Querying…'));
   }
 
   /** 弹出自绘确认框 */
@@ -261,9 +263,9 @@ struct ProviderDetail {
 
   /** 清除凭证（确认后执行：停用并清空，详情页回到未配置态） */
   confirmClearCredential(s: ProviderState): void {
-    this.askConfirm('清除凭证', `确定清除「${s.descriptor.title}」的凭证（含网页登录会话）？清除后需要重新配置才能查询。`, '清除', () => {
+    this.askConfirm(L('清除凭证', 'Clear Credential'), L(`确定清除「${s.descriptor.title}」的凭证（含网页登录会话）？清除后需要重新配置才能查询。`, `Clear the credential of "${s.descriptor.title}" (including web login session)? You'll need to set it up again to query.`), L('清除', 'Clear'), () => {
       AppStore.get().clearCredential(this.providerId);
-      Nav.toast('凭证已清除');
+      Nav.toast(L('凭证已清除', 'Credential cleared'));
     });
   }
 
@@ -290,7 +292,7 @@ struct ProviderDetail {
     if (this.remEnabled) {
       Notify.ensurePermission().then((ok: boolean) => {
         if (!ok) {
-          Nav.toast('通知权限未开启，可在系统设置中允许通知');
+          Nav.toast(L('通知权限未开启，可在系统设置中允许通知', 'Notifications are off. Allow them in system settings'));
         }
       });
     }
@@ -354,10 +356,10 @@ struct ProviderDetail {
         if (this.state(this.ver, this.tick) == null) {
           ListItem() {
             Column({ space: Theme.rowGap }) {
-              Text('未找到该服务商')
+              Text(L('未找到该服务商', 'Provider not found'))
                 .fontSize(Theme.fsName)
                 .fontColor(Theme.text)
-              Text(`路由参数异常："${this.providerId}"，请返回列表重试`)
+              Text(L(`路由参数异常："${this.providerId}"，请返回列表重试`, `Invalid route param: "${this.providerId}". Go back and retry`))
                 .fontSize(Theme.fsCaption)
                 .fontColor(Theme.textDim)
             }
@@ -389,7 +391,7 @@ struct ProviderDetail {
               .fontColor(Theme.textDim)
               .width('100%')
             Row({ space: Theme.rowGap }) {
-              Button('取消')
+              Button(L('取消', 'Cancel'))
                 .fontSize(Theme.fsLabel)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)
@@ -442,7 +444,7 @@ struct ProviderDetail {
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
           Blank()
-          Text(s.loading ? '查询中…' : `更新于 ${Format.ago(s.lastSuccessAt)}`)
+          Text(s.loading ? L('查询中…', 'Loading…') : L(`更新于 ${Format.ago(s.lastSuccessAt)}`, `Updated ${Format.ago(s.lastSuccessAt)}`))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
@@ -458,7 +460,7 @@ struct ProviderDetail {
         }
         // 多账号：显示当前激活账号
         if (Settings.accountCount(this.providerId) > 0 && this.activeAccountName().length > 0) {
-          Text(`当前账号：${this.activeAccountName()}`)
+          Text(L(`当前账号：${this.activeAccountName()}`, `Account: ${this.activeAccountName()}`))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.accent)
         }
@@ -466,7 +468,7 @@ struct ProviderDetail {
         if (this.hasAnyCredential(s) && !this.isFailed(s)) {
           Row() {
             Blank()
-            Text('清除凭证')
+            Text(L('清除凭证', 'Clear Credential'))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.danger)
               .onClick(() => {
@@ -490,7 +492,7 @@ struct ProviderDetail {
             if (this.hasAnyCredential(s)) {
               Row() {
                 Blank()
-                Text('清除凭证')
+                Text(L('清除凭证', 'Clear Credential'))
                   .fontSize(Theme.fsCaption)
                   .fontColor(Theme.danger)
                   .onClick(() => {
@@ -522,14 +524,14 @@ struct ProviderDetail {
             Text(this.credCardTitle(s))
               .fontSize(Theme.fsName)
               .fontWeight(FontWeight.Medium)
-              .fontColor(this.credCardTitle(s) === '尚未配置凭证' ? Theme.text : Theme.danger)
+              .fontColor(this.credCardTitle(s) === L('尚未配置凭证', 'No credential yet') ? Theme.text : Theme.danger)
             Text(this.credCardHint(s))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
               .textAlign(TextAlign.Center)
             Row({ space: Theme.rowGap }) {
               if (s.descriptor.id === 'claude' || s.descriptor.id === 'codex') {
-                Button('网页登录')
+                Button(L('网页登录', 'Web Login'))
                   .fontSize(Theme.fsBody)
                   .fontColor(Theme.accent)
                   .backgroundColor(Theme.input)
@@ -540,7 +542,7 @@ struct ProviderDetail {
                     Nav.toOAuthLogin(s.descriptor.id);
                   })
               }
-              Button('配置凭证')
+              Button(L('配置凭证', 'Configure'))
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.accent)
@@ -594,7 +596,7 @@ struct ProviderDetail {
                 })
             }, (f: ExtraField) => `${this.providerId}_${f.key}`)
             Row({ space: Theme.rowGap }) {
-              Button('取消')
+              Button(L('取消', 'Cancel'))
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)
@@ -606,7 +608,7 @@ struct ProviderDetail {
                   this.cred2Input = '';
                   this.credExtraJson = '';
                 })
-              Button('保存并查询')
+              Button(L('保存并查询', 'Save & Query'))
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.bg)
                 .backgroundColor(Theme.accent)
@@ -631,15 +633,16 @@ struct ProviderDetail {
       // DeepSeek：只差平台会话（API Key 已有）时，提供网页登录一键补全
       if (this.needsSessionLogin(s)) {
         Column({ space: Theme.gapSm }) {
-          Text('平台会话未配置')
+          Text(L('平台会话未配置', 'Platform session not configured'))
             .fontSize(Theme.fsLabel)
             .fontWeight(FontWeight.Medium)
             .fontColor(Theme.text)
-          Text('近 30 天用量与花费需要 platform.deepseek.com 的会话；网页登录一次即可自动回填，不会改动已填的 API Key')
+          Text(L('近 30 天用量与花费需要 platform.deepseek.com 的会话；网页登录一次即可自动回填，不会改动已填的 API Key',
+                '30-day usage and cost require a platform.deepseek.com session. Sign in once via web login to backfill; your API key stays untouched'))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
             .textAlign(TextAlign.Center)
-          Button('网页登录')
+          Button(L('网页登录', 'Web Login'))
             .fontSize(Theme.fsBody)
             .fontColor(Theme.accent)
             .backgroundColor(Theme.input)
@@ -663,7 +666,7 @@ struct ProviderDetail {
       if (s.loading) {
         Row({ space: Theme.rowGap }) {
           LoadingProgress().width(18).height(18).color(Theme.accent)
-          Text('正在获取用量…')
+          Text(L('正在获取用量…', 'Fetching usage…'))
             .fontSize(Theme.fsBody)
             .fontColor(Theme.textDim)
         }
@@ -679,10 +682,10 @@ struct ProviderDetail {
       // 尚未刷新（已配置但没数据）
       if (!s.loading && s.snapshot == null && s.setting.credential.length > 0) {
         Column({ space: Theme.gapSm }) {
-          Text('暂无数据')
+          Text(L('暂无数据', 'No data yet'))
             .fontSize(Theme.fsName)
             .fontColor(Theme.text)
-          Text('点击右上角 ↻ 立即查询')
+          Text(L('点击右上角 ↻ 立即查询', 'Tap ↻ at the top right to query'))
             .fontSize(Theme.fsCaption)
             .fontColor(Theme.textDim)
         }
@@ -734,7 +737,7 @@ struct ProviderDetail {
           if (s.snapshot.providerCost.balanceText != null &&
             s.snapshot.providerCost.balanceText!.length > 0) {
             Row({ space: Theme.gapXs }) {
-              Text('余额')
+              Text(L('余额', 'Balance'))
                 .fontSize(Theme.fsBody)
                 .fontColor(Theme.textDim)
               Text(s.snapshot.providerCost.balanceText!)
@@ -752,7 +755,7 @@ struct ProviderDetail {
           }
           // 有周期上限时补一行「已用 / 上限」（对照源工程费用卡的 used/limit）
           if (s.snapshot.providerCost.limit != null && s.snapshot.providerCost.limit! > 0) {
-            Text(`已用 ${Format.money(s.snapshot.providerCost.used, s.snapshot.providerCost.currency)} / 上限 ${Format.money(s.snapshot.providerCost.limit!, s.snapshot.providerCost.currency)}`)
+            Text(L(`已用 ${Format.money(s.snapshot.providerCost.used, s.snapshot.providerCost.currency)} / 上限 ${Format.money(s.snapshot.providerCost.limit!, s.snapshot.providerCost.currency)}`, `Used ${Format.money(s.snapshot.providerCost.used, s.snapshot.providerCost.currency)} / Limit ${Format.money(s.snapshot.providerCost.limit!, s.snapshot.providerCost.currency)}`))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
@@ -855,7 +858,7 @@ struct ProviderDetail {
 
       // 认证说明
       if (s.descriptor.authUrl.length > 0) {
-        Text(`凭证获取：${s.descriptor.authUrl}`)
+        Text(L(`凭证获取：${s.descriptor.authUrl}`, `Get credential: ${s.descriptor.authUrl}`))
           .fontSize(Theme.fsMicro)
           .fontColor(Theme.textDim)
           .width('100%')
@@ -871,7 +874,7 @@ struct ProviderDetail {
       Row({ space: Theme.gapSm }) {
         Text('🔔')
           .fontSize(Theme.fsLabel)
-        Text('提醒设置')
+        Text(L('提醒设置', 'Reminders'))
           .fontSize(Theme.fsLabel)
           .fontWeight(FontWeight.Medium)
           .fontColor(Theme.text)
@@ -891,7 +894,8 @@ struct ProviderDetail {
         .strokeWidth(1)
         .color(Theme.stroke)
 
-      Text('即将恢复：到点由系统定时通知（应用退出后台也生效，需通知权限与系统权益，受限时改为应用运行期间提醒）；额度快用完：应用运行期间提醒')
+      Text(L('即将恢复：到点由系统定时通知（应用退出后台也生效，需通知权限与系统权益，受限时改为应用运行期间提醒）；额度快用完：应用运行期间提醒',
+          'Reset alerts are delivered by the system on time (work even in background; require notification permission and system entitlement, otherwise fall back to in-app alerts). Quota alerts work while the app is running'))
         .fontSize(Theme.fsMicro)
         .fontColor(Theme.textDim)
         .width('100%')
@@ -900,11 +904,11 @@ struct ProviderDetail {
         // 额度快用完：用量阈值
         Column({ space: Theme.gapSm }) {
           Row() {
-            Text('额度快用完')
+            Text(L('额度快用完', 'Quota almost used up'))
               .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
             Blank()
-            Text(this.remThreshold > 0 ? `任一窗口用量 ≥ ${this.remThreshold}%` : '已关闭')
+            Text(this.remThreshold > 0 ? L(`任一窗口用量 ≥ ${this.remThreshold}%`, `Any window usage ≥ ${this.remThreshold}%`) : L('已关闭', 'Off'))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
@@ -927,7 +931,7 @@ struct ProviderDetail {
         // 即将恢复：提前量档位
         Column({ space: Theme.gapSm }) {
           Row() {
-            Text('即将恢复')
+            Text(L('即将恢复', 'Reset coming up'))
               .fontSize(Theme.fsBody)
               .fontColor(Theme.text)
             Blank()

@@ -8,6 +8,7 @@
  */
 
 import { widgetLevelColor } from './WidgetTheme';
+import { L } from '../../common/I18n';
 
 interface WidgetCardItem {
   name: string;
@@ -82,7 +83,7 @@ struct WidgetCard {
       .width('100%')
 
       if (this.items.length === 0) {
-        Text('打开应用刷新数据')
+        Text(L('打开应用刷新数据', 'Open the app to refresh'))
           .fontSize(11)
           .fontColor($r('app.color.text_dim'))
           .width('100%')

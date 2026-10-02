@@ -17,6 +17,7 @@ import { ProviderSetting } from '../model/Models';
 import { AppStore } from '../store/AppStore';
 import { Settings } from '../store/Settings';
 import { Theme } from '../common/Theme';
+import { L } from '../common/I18n';
 import { Nav, parseDetailMode, parseDetailParam } from '../common/Nav';
 import {
   CallbackCode,
@@ -65,25 +66,25 @@ struct OAuthLogin {
     const params = router.getParams() as Object | null;
     this.providerId = parseDetailParam(params);
     this.addMode = parseDetailMode(params) === 'add';
-    const addSuffix = this.addMode ? '（将添加为新账号）' : '';
+    const addSuffix = this.addMode ? L('（将添加为新账号）', ' (will be added as a new account)') : '';
     if (this.providerId === 'codex') {
       this.pkce = makePkce(Date.now());
       this.startUrl = codexAuthorizeUrl(this.pkce);
-      this.status = `在下方完成 ChatGPT 登录，授权后自动返回${addSuffix}`;
+      this.status = L(`在下方完成 ChatGPT 登录，授权后自动返回${addSuffix}`, `Sign in to ChatGPT below. You'll return automatically after authorizing${addSuffix}`);
     } else if (this.providerId === 'claude') {
       this.startUrl = 'https://claude.ai/login';
-      this.status = `在下方登录 claude.ai，成功后自动返回${addSuffix}`;
+      this.status = L(`在下方登录 claude.ai，成功后自动返回${addSuffix}`, `Sign in to claude.ai below. You'll return automatically on success${addSuffix}`);
       this.timerId = setInterval(() => {
         this.pollClaudeCookie();
       }, 2000);
     } else if (this.providerId === 'deepseek') {
       this.startUrl = this.addMode ? 'https://platform.deepseek.com/sign_in' : DEEPSEEK_USAGE_URL;
-      this.status = '在下方登录 platform.deepseek.com，成功后自动回填平台会话（不会改动已填的 API Key）';
+      this.status = L('在下方登录 platform.deepseek.com，成功后自动回填平台会话（不会改动已填的 API Key）', 'Sign in to platform.deepseek.com below. The platform session will be backfilled automatically; your API key stays untouched');
       this.timerId = setInterval(() => {
         this.pollDeepSeekToken();
       }, 2000);
     } else {
-      this.status = '不支持的服务商';
+      this.status = L('不支持的服务商', 'Unsupported provider');
       this.failed = true;
     }
   }
@@ -108,7 +109,7 @@ struct OAuthLogin {
       const key = extractSessionKey(cookie);
       if (key.length > 0) {
         this.done = true;
-        this.status = '已获取登录凭证，正在保存…';
+        this.status = L('已获取登录凭证，正在保存…', 'Got the credential. Saving…');
         await this.saveAndBack(key, '');
       }
     } catch (e) {
@@ -162,20 +163,20 @@ struct OAuthLogin {
         }
       }
       if (candidates.length === 0) {
-        this.status = '登录 platform.deepseek.com 后会自动读取平台会话（仅 API Key 时明细不可用）';
+        this.status = L('登录 platform.deepseek.com 后会自动读取平台会话（仅 API Key 时明细不可用）', 'After signing in to platform.deepseek.com, the platform session is read automatically (details unavailable with API key only)');
         // 诊断：打印 localStorage 键名，便于定位站点改键
         const keys = await this.controller.runJavaScript(DEEPSEEK_KEYS_SCRIPT);
         hilog.info(DOMAIN, TAG, 'deepseek no candidate, localStorage keys: %{public}s', `${keys}`);
         this.tokenInFlight = false;
         return;
       }
-      this.status = '正在校验平台会话…';
+      this.status = L('正在校验平台会话…', 'Validating platform session…');
       let saved = false;
       for (let i = 0; i < candidates.length; i++) {
         const verdict = await this.validateDeepSeekToken(candidates[i]);
         if (verdict === 0) {
           this.done = true;
-          this.status = '已获取平台会话，正在保存…';
+          this.status = L('已获取平台会话，正在保存…', 'Got the platform session. Saving…');
           await this.saveDeepSeekSession(candidates[i]);
           saved = true;
           break;
@@ -186,7 +187,7 @@ struct OAuthLogin {
         // verdict === 2（网络异常/响应结构异常）：不缓存，下轮重试
       }
       if (!saved && !this.done) {
-        this.status = '平台会话校验未通过，请确认已在下方完成登录后稍候';
+        this.status = L('平台会话校验未通过，请确认已在下方完成登录后稍候', 'Platform session validation failed. Make sure you have signed in below, then wait a moment');
       }
     } catch (e) {
       // 页面未就绪或 JS 执行被拒：静默重试，用户也可回设置页手工粘贴
@@ -250,9 +251,9 @@ struct OAuthLogin {
       extraConfig: state != null ? state.setting.extraConfig : '',
     });
     if (apiKey.length === 0) {
-      Nav.toast('已获取平台会话，还需在设置页填写 DeepSeek API Key');
+      Nav.toast(L('已获取平台会话，还需在设置页填写 DeepSeek API Key', 'Platform session saved. Also fill in your DeepSeek API key in Settings'));
     } else {
-      Nav.toast('已获取平台会话，正在刷新用量明细');
+      Nav.toast(L('已获取平台会话，正在刷新用量明细', 'Platform session saved. Refreshing usage details…'));
     }
     Nav.back();
   }
@@ -270,12 +271,12 @@ struct OAuthLogin {
       return true;
     }
     if (cb.state !== this.pkce.state) {
-      this.status = '授权状态校验失败，请重试';
+      this.status = L('授权状态校验失败，请重试', 'Authorization check failed. Please retry');
       this.failed = true;
       return true;
     }
     this.done = true;
-    this.status = '授权成功，正在换取令牌…';
+    this.status = L('授权成功，正在换取令牌…', 'Authorized. Exchanging tokens…');
     this.exchangeAndSave(cb.code, this.pkce.verifier);
     return true;
   }
@@ -308,7 +309,7 @@ struct OAuthLogin {
       const res = Settings.addAccount(this.providerId, credential, cred2, refreshToken);
       store.reloadSetting(this.providerId);
       store.refreshOne(this.providerId);
-      Nav.toast(res.deduped ? `已切换到${res.account.name}` : `已添加${res.account.name}`);
+      Nav.toast(res.deduped ? L(`已切换到${res.account.name}`, `Switched to ${res.account.name}`) : L(`已添加${res.account.name}`, `Added ${res.account.name}`));
       Nav.back();
       return;
     }
@@ -321,19 +322,19 @@ struct OAuthLogin {
       credential2: cred2,
       extraConfig: state != null ? state.setting.extraConfig : '',
     });
-    Nav.toast('登录成功，凭证已保存');
+    Nav.toast(L('登录成功，凭证已保存', 'Signed in. Credential saved'));
     Nav.back();
   }
 
   /** 页面标题：按服务商区分（DeepSeek 只取平台会话，不是账号登录） */
   loginTitle(): string {
     if (this.providerId === 'codex') {
-      return 'Codex 网页登录';
+      return L('Codex 网页登录', 'Codex Web Login');
     }
     if (this.providerId === 'deepseek') {
-      return 'DeepSeek 平台会话';
+      return L('DeepSeek 平台会话', 'DeepSeek Platform Session');
     }
-    return 'Claude 网页登录';
+    return L('Claude 网页登录', 'Claude Web Login');
   }
 
   build() {

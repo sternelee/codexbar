@@ -20,6 +20,7 @@ import { Settings } from '../store/Settings';
 import { WidgetDataStore } from '../store/WidgetData';
 import { Theme } from '../common/Theme';
 import { Nav } from '../common/Nav';
+import { L, AppLang, currentLang, setAppLang } from '../common/I18n';
 import { ProviderIcon } from '../view/ProviderIcon';
 
 /** 单个服务商的设置卡片：内部持有编辑态 */
@@ -85,18 +86,18 @@ struct ProviderSettingCard {
       credential2: this.credential2.trim(),
       extraConfig: this.extraJson.trim(),
     });
-    Nav.toast('已保存');
+    Nav.toast(L('已保存', 'Saved'));
   }
 
   /** 删除账号（长按菜单触发，确认后执行） */
   confirmDeleteAccount(a: ProviderAccount, pid: string): void {
-    this.onAsk('删除账号', `确定删除「${a.name}」？`, '删除', () => {
+    this.onAsk(L('删除账号', 'Delete Account'), L(`确定删除「${a.name}」？`, `Delete "${a.name}"?`), L('删除', 'Delete'), () => {
       Settings.removeAccount(pid, a.aid);
       AppStore.get().reloadSetting(pid);
       AppStore.get().refreshOne(pid);
       this.reloadFromStore();
       this.accRev += 1;
-      Nav.toast('已删除');
+      Nav.toast(L('已删除', 'Deleted'));
     });
   }
 
@@ -105,8 +106,8 @@ struct ProviderSettingCard {
     promptAction.showActionMenu({
       title: a.name,
       buttons: [
-        { text: '重命名', color: Theme.text },
-        { text: '删除', color: Theme.danger },
+        { text: L('重命名', 'Rename'), color: Theme.text },
+        { text: L('删除', 'Delete'), color: Theme.danger },
       ]
     }).then((res: promptAction.ActionMenuSuccessResponse) => {
       if (res.index === 0) {
@@ -123,7 +124,7 @@ struct ProviderSettingCard {
     const name = this.renameText.trim();
     if (this.renamingAid.length > 0 && name.length > 0) {
       Settings.renameAccount(this.pid, this.renamingAid, name);
-      Nav.toast('已重命名');
+      Nav.toast(L('已重命名', 'Renamed'));
     }
     this.renamingAid = '';
     this.renameText = '';
@@ -142,7 +143,7 @@ struct ProviderSettingCard {
   accountBar() {
     if (this.descriptor != null) {
       Row({ space: Theme.gapSm }) {
-        Text('账号')
+        Text(L('账号', 'Accounts'))
           .fontSize(Theme.fsCaption)
           .fontColor(Theme.textDim)
         ForEach(Settings.accounts(this.pid), (a: ProviderAccount) => {
@@ -158,7 +159,7 @@ struct ProviderSettingCard {
                 AppStore.get().switchAccount(this.pid, a.aid);
                 this.reloadFromStore();
                 this.accRev += 1;
-                Nav.toast(`已切换到${a.name}`);
+                Nav.toast(L(`已切换到${a.name}`, `Switched to ${a.name}`));
               }
             })
             .gesture(LongPressGesture().onAction(() => {
@@ -180,7 +181,7 @@ struct ProviderSettingCard {
       // 内联重命名行
       if (this.renamingAid.length > 0) {
         Row({ space: Theme.gapSm }) {
-          TextInput({ text: this.renameText, placeholder: '账号名称' })
+          TextInput({ text: this.renameText, placeholder: L('账号名称', 'Account name') })
             .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
@@ -221,7 +222,7 @@ struct ProviderSettingCard {
     AppStore.get().reloadSetting(this.pid);
     this.reloadFromStore();
     this.accRev += 1;
-    Nav.toast(`已添加${res.account.name}，填写凭证后保存`);
+    Nav.toast(L(`已添加${res.account.name}，填写凭证后保存`, `Added ${res.account.name}. Fill in the credential and save`));
   }
 
   build() {
@@ -292,7 +293,7 @@ struct ProviderSettingCard {
 
         Row({ space: Theme.rowGap }) {
           if (this.canWebLogin) {
-            Button('网页登录')
+            Button(L('网页登录', 'Web Login'))
               .fontSize(Theme.fsBody)
               .fontColor(Theme.accent)
               .backgroundColor(Theme.input)
@@ -304,7 +305,7 @@ struct ProviderSettingCard {
               })
           }
           if (this.descriptor.authUrl.length > 0) {
-            Text(`获取凭证 ↗`)
+            Text(L('获取凭证 ↗', 'Get Credential ↗'))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.accent)
               .layoutWeight(1)
@@ -316,7 +317,7 @@ struct ProviderSettingCard {
               .layoutWeight(1)
               .maxLines(2)
           }
-          Button('保存')
+          Button(L('保存', 'Save'))
             .fontSize(Theme.fsBody)
             .fontColor(Theme.bg)
             .backgroundColor(Theme.accent)
@@ -497,7 +498,7 @@ struct SettingsPage {
           Nav.back();
         })
 
-        Text('设置')
+        Text(L('设置', 'Settings'))
           .fontSize(Theme.fsHead)
           .fontWeight(FontWeight.Bold)
           .fontColor(Theme.text)
@@ -508,7 +509,7 @@ struct SettingsPage {
 
       List({ space: Theme.gap }) {
         ListItem() {
-          TextInput({ placeholder: '🔍 搜索服务商', text: this.keyword })
+          TextInput({ placeholder: L('🔍 搜索服务商', '🔍 Search providers'), text: this.keyword })
             .fontSize(Theme.fsBody)
             .fontColor(Theme.text)
             .placeholderColor(Theme.textDim)
@@ -524,7 +525,8 @@ struct SettingsPage {
 
         ListItem() {
           Column({ space: Theme.gapXxs }) {
-            Text('凭证仅保存在本机应用数据中，刷新时直连服务商接口。')
+            Text(L('凭证仅保存在本机应用数据中，刷新时直连服务商接口。',
+              'Credentials are stored only on this device. Refreshes go directly to provider APIs.'))
               .fontSize(Theme.fsCaption)
               .fontColor(Theme.textDim)
           }
@@ -532,13 +534,55 @@ struct SettingsPage {
           .padding(Theme.gap)
         }
 
+        // 语言切换
         ListItem() {
           Row({ space: Theme.rowGap }) {
             Column({ space: Theme.gapXxs }) {
-              Text('展示可选用量明细')
+              Text(L('显示语言', 'Language'))
                 .fontSize(Theme.fsLabel)
                 .fontColor(Theme.text)
-              Text('关闭后按服务商策略隐藏可选分组（如 DeepSeek 用量、MiniMax 账单历史）')
+              Text(L('切换界面文案的中英文显示', 'Switch UI text between Chinese and English'))
+                .fontSize(Theme.fsMicro)
+                .fontColor(Theme.textDim)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Flex({ wrap: FlexWrap.NoWrap }) {
+              ForEach(['zh', 'en'], (code: string) => {
+                Text(code === 'zh' ? '中文' : 'English')
+                  .fontSize(Theme.fsCaption)
+                  .fontColor(currentLang() === code ? Theme.bg : Theme.textDim)
+                  .backgroundColor(currentLang() === code ? Theme.accent : Theme.input)
+                  .border({ width: 1, color: currentLang() === code ? Theme.accent : Theme.stroke })
+                  .padding({ left: Theme.gap, right: Theme.gap, top: Theme.gapXs, bottom: Theme.gapXs })
+                  .borderRadius(Theme.radiusChip)
+                  .margin({ left: Theme.gapSm })
+                  .onClick(() => {
+                    if (currentLang() !== code) {
+                      setAppLang(code as AppLang);
+                      this.ver += 1;
+                      AppStore.get().bump();
+                    }
+                  })
+              }, (code: string) => `${code}_${currentLang() === code}`)
+            }
+          }
+          .width('100%')
+          .padding(Theme.cardPad)
+          .borderRadius(Theme.radius)
+          .backgroundColor(Theme.card)
+          .border({ width: 1, color: Theme.stroke })
+          .shadow(Theme.cardShadow())
+        }
+
+        ListItem() {
+          Row({ space: Theme.rowGap }) {
+            Column({ space: Theme.gapXxs }) {
+              Text(L('展示可选用量明细', 'Show optional usage details'))
+                .fontSize(Theme.fsLabel)
+                .fontColor(Theme.text)
+              Text(L('关闭后按服务商策略隐藏可选分组（如 DeepSeek 用量、MiniMax 账单历史）',
+                'When off, optional groups are hidden per provider policy (e.g. DeepSeek usage, MiniMax billing history)'))
                 .fontSize(Theme.fsMicro)
                 .fontColor(Theme.textDim)
             }
@@ -564,10 +608,11 @@ struct SettingsPage {
           Column({ space: Theme.gapSm }) {
             Row() {
               Column({ space: Theme.gapXxs }) {
-                Text('桌面组件显示')
+                Text(L('桌面组件显示', 'Widget Providers'))
                   .fontSize(Theme.fsLabel)
                   .fontColor(Theme.text)
-                Text('点选要显示的服务商，顺序即卡片上的顺序；鸿蒙 2x2 / 2x4 卡取前 2 / 4 家，Android 组件按高度自适应（拉高可显示更多）；未选择时自动显示用量最高的若干家')
+                Text(L('点选要显示的服务商，顺序即卡片上的顺序；鸿蒙 2x2 / 2x4 卡取前 2 / 4 家，Android 组件按高度自适应（拉高可显示更多）；未选择时自动显示用量最高的若干家',
+                  'Tap providers to show; the order is the order on the widget. HarmonyOS 2x2 / 2x4 cards take the first 2 / 4; the Android widget adapts to its height. When empty, the busiest providers are shown automatically'))
                   .fontSize(Theme.fsMicro)
                   .fontColor(Theme.textDim)
               }
@@ -577,7 +622,7 @@ struct SettingsPage {
             .width('100%')
 
             if (this.widgetCandidates().length === 0) {
-              Text('暂无已启用的服务商')
+              Text(L('暂无已启用的服务商', 'No enabled providers yet'))
                 .fontSize(Theme.fsMicro)
                 .fontColor(Theme.textDim)
             } else {
@@ -600,7 +645,7 @@ struct SettingsPage {
               .width('100%')
 
               if (this.widgetSel.length > 0) {
-                Text('恢复自动（按用量排序）')
+                Text(L('恢复自动（按用量排序）', 'Reset to automatic (sorted by usage)'))
                   .fontSize(Theme.fsMicro)
                   .fontColor(Theme.accent)
                   .onClick(() => {
@@ -620,10 +665,10 @@ struct SettingsPage {
         if (this.ids(this.ver, this.keyword).length === 0) {
           ListItem() {
             Column({ space: Theme.gapXs }) {
-              Text('未找到匹配的服务商')
+              Text(L('未找到匹配的服务商', 'No matching providers'))
                 .fontSize(Theme.fsLabel)
                 .fontColor(Theme.text)
-              Text('试试其他关键词，如 "Claude" 或 "deepseek"')
+              Text(L('试试其他关键词，如 "Claude" 或 "deepseek"', 'Try other keywords like "Claude" or "deepseek"'))
                 .fontSize(Theme.fsMicro)
                 .fontColor(Theme.textDim)
             }
@@ -664,7 +709,7 @@ struct SettingsPage {
               .fontColor(Theme.textDim)
               .width('100%')
             Row({ space: Theme.rowGap }) {
-              Button('取消')
+              Button(L('取消', 'Cancel'))
                 .fontSize(Theme.fsLabel)
                 .fontColor(Theme.textDim)
                 .backgroundColor(Theme.input)

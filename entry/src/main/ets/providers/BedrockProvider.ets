@@ -49,6 +49,7 @@ import {
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
 import { AwsCredentials, signAwsRequest } from '../common/AwsSign';
+import { LT } from '../common/I18n';
 
 const CE_URL = 'https://ce.us-east-1.amazonaws.com/';
 /** Cost Explorer 只有 us-east-1 端点（源工程固定 ceRegion = us-east-1） */
@@ -336,19 +337,19 @@ export function bedrockSnapshot(
   };
 
   const rows: ProviderDetailRow[] = [
-    { label: '本月消费', value: Format.money(spend, 'USD'), secondary: 'UnblendedCost（Bedrock）' },
+    { label: LT('本月消费'), value: Format.money(spend, 'USD'), secondary: LT('UnblendedCost（Bedrock）') },
   ];
   if (budget > 0) {
-    rows.push({ label: '月度预算', value: Format.money(budget, 'USD') });
-    rows.push({ label: '预算使用', value: Format.percent(budgetPercent) });
+    rows.push({ label: LT('月度预算'), value: Format.money(budget, 'USD') });
+    rows.push({ label: LT('预算使用'), value: Format.percent(budgetPercent) });
   }
   if (activity != null) {
-    rows.push({ label: 'Claude 输入 tokens', value: Format.compact(activity.inputTokens) });
-    rows.push({ label: 'Claude 输出 tokens', value: Format.compact(activity.outputTokens) });
-    rows.push({ label: 'Claude 请求数', value: Format.compact(activity.requestCount) });
+    rows.push({ label: LT('Claude 输入 tokens'), value: Format.compact(activity.inputTokens) });
+    rows.push({ label: LT('Claude 输出 tokens'), value: Format.compact(activity.outputTokens) });
+    rows.push({ label: LT('Claude 请求数'), value: Format.compact(activity.requestCount) });
   }
-  rows.push({ label: '区域', value: region });
-  rows.push({ label: '统计区间', value: `${bedrockMonthRange(now).start} 起` });
+  rows.push({ label: LT('区域'), value: region });
+  rows.push({ label: LT('统计区间'), value: `${bedrockMonthRange(now).start}${LT(' 起')}` });
   snap.details = [{ title: 'AWS Bedrock', rows: rows }];
   // 成本历史（对照源工程 fetchDailyReport 的 DAILY 粒度用途；失败时整块不出现）
   if (dailyPoints != null && dailyPoints.length > 0) {
@@ -432,7 +433,7 @@ class BedrockProvider implements UsageProvider {
     title: 'AWS Bedrock',
     authKind: AuthKind.API_KEY,
     accentColor: '#FF9900',
-    authHint: '第一栏填 AWS Access Key ID，第二栏填 Secret Access Key；Region / 预算填在下方输入框',
+    authHint: LT('第一栏填 AWS Access Key ID，第二栏填 Secret Access Key；Region / 预算填在下方输入框'),
     authUrl: 'https://console.aws.amazon.com/iam/home#/security_credentials',
   };
 
@@ -440,10 +441,10 @@ class BedrockProvider implements UsageProvider {
     const accessKeyId = setting.credential.trim();
     const secretAccessKey = setting.credential2.trim();
     if (accessKeyId.length === 0) {
-      return UsageSnapshot.failure('未配置 AWS Access Key ID');
+      return UsageSnapshot.failure(LT('未配置 AWS Access Key ID'));
     }
     if (secretAccessKey.length === 0) {
-      return UsageSnapshot.failure('AWS Bedrock 需要 Access Key ID 与 Secret Access Key 一同填写');
+      return UsageSnapshot.failure(LT('AWS Bedrock 需要 Access Key ID 与 Secret Access Key 一同填写'));
     }
 
     const regionRaw = extraValue(setting.extraConfig, 'region').trim();
@@ -494,7 +495,7 @@ class BedrockProvider implements UsageProvider {
         if (bedrockDataUnavailable(resp.code, resp.body)) {
           return { total: 0, error: '' };
         }
-        return { total: 0, error: `AWS Cost Explorer：${awsErrorText(resp)}` };
+        return { total: 0, error: `${LT('AWS Cost Explorer：')}${awsErrorText(resp)}` };
       }
       const json = resp.json();
       total += bedrockTotalCost(json);
@@ -503,12 +504,12 @@ class BedrockProvider implements UsageProvider {
         return { total: total, error: '' };
       }
       if (seen.indexOf(next) >= 0) {
-        return { total: 0, error: 'AWS Cost Explorer 分页令牌重复' };
+        return { total: 0, error: LT('AWS Cost Explorer 分页令牌重复') };
       }
       seen.push(next);
       token = next;
     }
-    return { total: 0, error: 'AWS Cost Explorer 分页过多' };
+    return { total: 0, error: LT('AWS Cost Explorer 分页过多') };
   }
 
   /** CloudWatch 近 14 天 Claude 输入/输出 tokens 与请求数（失败返回 null） */

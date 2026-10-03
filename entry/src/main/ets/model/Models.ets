@@ -1,3 +1,4 @@
+import { LT } from '../common/I18n';
 /**
  * CodexBar Mobile — 核心数据模型
  *
@@ -379,25 +380,25 @@ export interface ExtraField {
 export function extraFields(providerId: string): ExtraField[] {
   if (providerId === 'azure-openai') {
     return [
-      { key: 'endpoint', hint: 'Endpoint（如 https://my-res.openai.azure.com）' },
-      { key: 'deployment', hint: 'Deployment 名称' },
-      { key: 'apiVersion', hint: 'API 版本，默认 2024-10-21；填 v1 走新版接口' },
+      { key: 'endpoint', hint: LT('Endpoint（如 https://my-res.openai.azure.com）') },
+      { key: 'deployment', hint: LT('Deployment 名称') },
+      { key: 'apiVersion', hint: LT('API 版本，默认 2024-10-21；填 v1 走新版接口') },
     ];
   }
   if (providerId === 'bedrock') {
     return [
-      { key: 'region', hint: 'AWS 区域，默认 us-east-1' },
-      { key: 'sessionToken', hint: '可选：AWS_SESSION_TOKEN' },
-      { key: 'budget', hint: '可选：月度预算（美元，用于展示预算进度）' },
+      { key: 'region', hint: LT('AWS 区域，默认 us-east-1') },
+      { key: 'sessionToken', hint: LT('可选：AWS_SESSION_TOKEN') },
+      { key: 'budget', hint: LT('可选：月度预算（美元，用于展示预算进度）') },
     ];
   }
   if (providerId === 'v0') {
-    return [{ key: 'scope', hint: '可选：项目 ID 或 slug' }];
+    return [{ key: 'scope', hint: LT('可选：项目 ID 或 slug') }];
   }
   if (providerId === 'copilot') {
     return [
-      { key: 'enterpriseHost', hint: '可选：GitHub Enterprise 域名（默认 github.com）' },
-      { key: 'seatEntitlement', hint: '可选：席位包含额度（分母，用于明细行的用量进度条）' },
+      { key: 'enterpriseHost', hint: LT('可选：GitHub Enterprise 域名（默认 github.com）') },
+      { key: 'seatEntitlement', hint: LT('可选：席位包含额度（分母，用于明细行的用量进度条）') },
     ];
   }
   return [];
@@ -970,9 +971,9 @@ export function widgetHeroLane(providerId: string, snap: UsageSnapshot | null): 
   }
   const slot = slots[heroIdx];
   const label = slot === LANE_SECONDARY
-    ? (snap.secondaryLabel.length > 0 ? snap.secondaryLabel : '每周')
+    ? (snap.secondaryLabel.length > 0 ? snap.secondaryLabel : LT('每周'))
     : (slot === LANE_TERTIARY
-      ? (snap.tertiaryLabel.length > 0 ? snap.tertiaryLabel : '第三窗口')
+      ? (snap.tertiaryLabel.length > 0 ? snap.tertiaryLabel : LT('第三窗口'))
       : '');
   return { window: wins[heroIdx], label: label, isPrimary: slot === LANE_PRIMARY };
 }
@@ -1134,19 +1135,19 @@ export function needsSecondCredential(providerId: string): boolean {
 /** 第二凭证输入框提示文案 */
 export function secondCredentialHint(providerId: string): string {
   if (providerId === 'doubao') {
-    return 'Secret Access Key（AK/SK 模式必填）';
+    return LT('Secret Access Key（AK/SK 模式必填）');
   }
   if (providerId === 'bedrock') {
-    return 'AWS Secret Access Key（与 Access Key ID 配对）';
+    return LT('AWS Secret Access Key（与 Access Key ID 配对）');
   }
   if (providerId === 'clawrouter') {
-    return '可选：自托管 Base URL（默认 https://clawrouter.openclaw.ai）';
+    return LT('可选：自托管 Base URL（默认 https://clawrouter.openclaw.ai）');
   }
   if (providerId === 'minimax') {
-    return '可选：platform.minimaxi.com 的会话 Cookie（用于 Billing history 明细）';
+    return LT('可选：platform.minimaxi.com 的会话 Cookie（用于 Billing history 明细）');
   }
 
-  return '可选：组织 / 账号 ID';
+  return LT('可选：组织 / 账号 ID');
 }
 
 /** ReminderConfig 默认值（配置缺省/解析失败时） */
@@ -1178,13 +1179,13 @@ export class ProviderState {
       return list;
     }
     if (snap.primary != null) {
-      list.push({ id: 'primary', title: snap.primaryLabel.length > 0 ? snap.primaryLabel : '会话', window: snap.primary });
+      list.push({ id: 'primary', title: snap.primaryLabel.length > 0 ? snap.primaryLabel : LT('会话'), window: snap.primary });
     }
     if (snap.secondary != null) {
-      list.push({ id: 'secondary', title: snap.secondaryLabel.length > 0 ? snap.secondaryLabel : '每周', window: snap.secondary });
+      list.push({ id: 'secondary', title: snap.secondaryLabel.length > 0 ? snap.secondaryLabel : LT('每周'), window: snap.secondary });
     }
     if (snap.tertiary != null) {
-      list.push({ id: 'tertiary', title: snap.tertiaryLabel.length > 0 ? snap.tertiaryLabel : '第三窗口', window: snap.tertiary });
+      list.push({ id: 'tertiary', title: snap.tertiaryLabel.length > 0 ? snap.tertiaryLabel : LT('第三窗口'), window: snap.tertiary });
     }
     for (let i = 0; i < snap.extraRateWindows.length; i++) {
       list.push(snap.extraRateWindows[i]);

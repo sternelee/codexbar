@@ -29,6 +29,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 function pickNum(o: Record<string, Json>, keys: string[]): number | null {
   for (let i = 0; i < keys.length; i++) {
@@ -74,7 +75,7 @@ class XaiProvider implements UsageProvider {
     title: 'xAI (Grok)',
     authKind: AuthKind.API_KEY,
     accentColor: '#111111',
-    authHint: '粘贴 xAI Management API Key；第二栏必填 Team ID（Console → Management Keys）',
+    authHint: LT('粘贴 xAI Management API Key；第二栏必填 Team ID（Console → Management Keys）'),
     authUrl: 'https://console.x.ai',
   };
 
@@ -82,7 +83,7 @@ class XaiProvider implements UsageProvider {
     const key = setting.credential.trim();
     const team = setting.credential2.trim();
     if (key.length === 0 || team.length === 0) {
-      return UsageSnapshot.failure('需要 Management API Key 与 Team ID');
+      return UsageSnapshot.failure(LT('需要 Management API Key 与 Team ID'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -97,7 +98,7 @@ class XaiProvider implements UsageProvider {
     const total = root != null ? asObj(root['total']) : null;
     const rawVal = total != null ? optStr(total, 'val') : null;
     if (rawVal == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 美分字符串，负数表示余额
     const balance = -parseFloat(rawVal) / 100;
@@ -224,14 +225,14 @@ class QoderProvider implements UsageProvider {
     title: 'Qoder',
     authKind: AuthKind.SESSION,
     accentColor: '#10B981',
-    authHint: '粘贴 qoder.com（或 qoder.com.cn）的会话 Cookie',
+    authHint: LT('粘贴 qoder.com（或 qoder.com.cn）的会话 Cookie'),
     authUrl: 'https://qoder.com/account/usage',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const sites = ['https://qoder.com', 'https://qoder.com.cn'];
     let root: Record<string, Json> | null = null;
@@ -257,14 +258,14 @@ class QoderProvider implements UsageProvider {
       }
     }
     if (root == null) {
-      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '凭证被拒绝');
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('凭证被拒绝'));
     }
     const container = asObj(firstOfObj(root, ['totalQuota', 'total_quota']));
     const shared = asObj(firstOfObj(root, ['sharedQuota', 'shared_quota']));
     const summary = container != null ? asObj(firstOfObj(container, ['quotaSummary', 'quota_summary'])) : null;
     const sharedSummary = shared != null ? asObj(firstOfObj(shared, ['quotaSummary', 'quota_summary'])) : null;
     if (summary == null) {
-      return UsageSnapshot.failure('响应缺少配额摘要');
+      return UsageSnapshot.failure(LT('响应缺少配额摘要'));
     }
     let used = pickNum(summary, ['usedValue', 'used_value']) ?? 0;
     let total = pickNum(summary, ['limitValue', 'limit_value']) ?? 0;
@@ -287,7 +288,7 @@ class QoderProvider implements UsageProvider {
     }
     const snap = UsageSnapshot.success(makeWindow(Math.max(0, Math.min(100, percent)), resets, true), null, null);
     const rows: ProviderDetailRow[] = [
-      { label: '已用 / 总量', value: `${Math.round(used)} / ${Math.round(total)}` },
+      { label: LT('已用 / 总量'), value: `${Math.round(used)} / ${Math.round(total)}` },
     ];
     const section: ProviderDetailSection = { title: 'Big Model Credits', rows: rows };
     snap.details = [section];
@@ -315,14 +316,14 @@ class VeniceProvider implements UsageProvider {
     title: 'Venice',
     authKind: AuthKind.API_KEY,
     accentColor: '#E11D48',
-    authHint: '粘贴 Venice API Key',
+    authHint: LT('粘贴 Venice API Key'),
     authUrl: 'https://venice.ai/settings/api',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -334,11 +335,11 @@ class VeniceProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const balances = asObj(root['balances']);
     if (balances == null) {
-      return UsageSnapshot.failure('响应缺少余额');
+      return UsageSnapshot.failure(LT('响应缺少余额'));
     }
     const usdValue = pickNum(balances, ['usd']);
     const diemValue = pickNum(balances, ['diem']);
@@ -390,14 +391,14 @@ class NousProvider implements UsageProvider {
     title: 'Nous Research',
     authKind: AuthKind.API_KEY,
     accentColor: '#8B5CF6',
-    authHint: '粘贴 Nous Portal 访问令牌；可选第二栏填自定义 Portal 地址',
+    authHint: LT('粘贴 Nous Portal 访问令牌；可选第二栏填自定义 Portal 地址'),
     authUrl: 'https://portal.nousresearch.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置访问令牌');
+      return UsageSnapshot.failure(LT('未配置访问令牌'));
     }
     const portalRaw = setting.credential2.trim();
     const portal = portalRaw.length > 0 ? portalRaw.replace(/\/+$/, '') : 'https://portal.nousresearch.com';
@@ -411,7 +412,7 @@ class NousProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const sub = asObj(root['subscription']);
     const access = asObj(root['paid_service_access']);
@@ -424,7 +425,7 @@ class NousProvider implements UsageProvider {
       (access != null ? pickNum(access, ['purchased_credits_remaining']) : null);
     const total = access != null ? pickNum(access, ['total_usable_credits']) : null;
     if (remaining == null && monthly == null && rollover == null && purchased == null && total == null) {
-      return UsageSnapshot.failure('未返回额度信息');
+      return UsageSnapshot.failure(LT('未返回额度信息'));
     }
     const renewable = sub != null ? optStr(sub, 'current_period_end') : null;
     const renewalMs = renewable != null ? Date.parse(renewable) : 0;
@@ -507,14 +508,14 @@ class MuseProvider implements UsageProvider {
     title: 'Muse Code',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#0668E1',
-    authHint: '粘贴 Muse 设备令牌（muse login 获取）',
+    authHint: LT('粘贴 Muse 设备令牌（muse login 获取）'),
     authUrl: 'https://dev.meta.ai',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置设备令牌');
+      return UsageSnapshot.failure(LT('未配置设备令牌'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${token}`,
@@ -528,13 +529,13 @@ class MuseProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     if (bool(root, 'require_payment')) {
-      return UsageSnapshot.failure('需要先完成支付绑定（dev.meta.ai）');
+      return UsageSnapshot.failure(LT('需要先完成支付绑定（dev.meta.ai）'));
     }
     if (!bool(root, 'is_subs_active')) {
-      return UsageSnapshot.failure('没有有效的 Muse Code 订阅');
+      return UsageSnapshot.failure(LT('没有有效的 Muse Code 订阅'));
     }
     const plan = optStr(root, 'subs_tier_name');
     const email = optStr(root, 'user_email');
@@ -558,7 +559,7 @@ class MuseProvider implements UsageProvider {
     const windowObj = asObj(usage['window']);
     const weekly = asObj(usage['weekly']);
     if (windowObj == null) {
-      return UsageSnapshot.failure('响应缺少用量窗口');
+      return UsageSnapshot.failure(LT('响应缺少用量窗口'));
     }
     const minutes = num(windowObj, 'window_duration_mins', 0);
     const percent = num(windowObj, 'used_percent', 0);
@@ -598,14 +599,14 @@ class DeepgramProvider implements UsageProvider {
     title: 'Deepgram',
     authKind: AuthKind.API_KEY,
     accentColor: '#13EF93',
-    authHint: '粘贴 Deepgram API Key',
+    authHint: LT('粘贴 Deepgram API Key'),
     authUrl: 'https://console.deepgram.com/project/keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Token ${key}`,
@@ -619,7 +620,7 @@ class DeepgramProvider implements UsageProvider {
     const projRoot = asObj(projResp.json());
     const projects = projRoot != null ? asArray(projRoot['projects']) : null;
     if (projects == null || projects.length === 0) {
-      return UsageSnapshot.failure('未找到项目');
+      return UsageSnapshot.failure(LT('未找到项目'));
     }
 
     // 逐项目累加用量分解（对照插件：遍历全部项目，取最早 start / 最晚 end）
@@ -676,7 +677,7 @@ class DeepgramProvider implements UsageProvider {
       }
     }
     if (!anyOk) {
-      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '未获取到用量数据');
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('未获取到用量数据'));
     }
 
     const snap = UsageSnapshot.success(null, null, null);
@@ -736,14 +737,14 @@ class ClinePassProvider implements UsageProvider {
     title: 'ClinePass',
     authKind: AuthKind.API_KEY,
     accentColor: '#7C3AED',
-    authHint: '粘贴 ClinePass API Key',
+    authHint: LT('粘贴 ClinePass API Key'),
     authUrl: 'https://app.cline.bot',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -755,12 +756,12 @@ class ClinePassProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null || !bool(root, 'success')) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const data = asObj(root['data']);
     const limits = data != null ? asArray(data['limits']) : null;
     if (limits == null) {
-      return UsageSnapshot.failure('响应缺少限额');
+      return UsageSnapshot.failure(LT('响应缺少限额'));
     }
     let primary: RateWindow | null = null;
     let secondary: RateWindow | null = null;
@@ -776,13 +777,13 @@ class ClinePassProvider implements UsageProvider {
       let title = '';
       if (type === 'five_hour') {
         minutes = 300;
-        title = '5 小时窗口';
+        title = LT('5 小时窗口');
       } else if (type === 'weekly') {
         minutes = 10080;
-        title = '每周窗口';
+        title = LT('每周窗口');
       } else if (type === 'monthly') {
         minutes = 43200;
-        title = '月度窗口';
+        title = LT('月度窗口');
       }
       if (minutes === 0) {
         continue;
@@ -817,14 +818,14 @@ class CrofProvider implements UsageProvider {
     title: 'Crof',
     authKind: AuthKind.API_KEY,
     accentColor: '#059669',
-    authHint: '粘贴 Crof API Key',
+    authHint: LT('粘贴 Crof API Key'),
     authUrl: 'https://crof.ai/dashboard',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -836,7 +837,7 @@ class CrofProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const credits = num(root, 'credits', 0);
     const snap = UsageSnapshot.success(null, null, null);
@@ -848,13 +849,13 @@ class CrofProvider implements UsageProvider {
     const requestsPlan = optNum(root, 'requests_plan');
     const usable = optNum(root, 'usable_requests');
     if (requestsPlan != null) {
-      rows.push({ label: '计划请求数', value: `${Math.round(requestsPlan)}` });
+      rows.push({ label: LT('计划请求数'), value: `${Math.round(requestsPlan)}` });
     }
     if (usable != null) {
-      rows.push({ label: '可用请求', value: `${Math.round(usable)}` });
+      rows.push({ label: LT('可用请求'), value: `${Math.round(usable)}` });
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '用量', rows: rows };
+      const section: ProviderDetailSection = { title: LT('用量'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -871,14 +872,14 @@ class SyntheticProvider implements UsageProvider {
     title: 'Synthetic',
     authKind: AuthKind.API_KEY,
     accentColor: '#DC2626',
-    authHint: '粘贴 Synthetic API Key',
+    authHint: LT('粘贴 Synthetic API Key'),
     authUrl: 'https://api.synthetic.new',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -899,7 +900,7 @@ class SyntheticProvider implements UsageProvider {
       }
     }
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 优先取插件（synthetic.js）定义的三个具名泳道：
     // primary=rollingFiveHourLimit、secondary=weeklyTokenLimit、tertiary=search.hourly
@@ -951,7 +952,7 @@ class SyntheticProvider implements UsageProvider {
         }
       }
       if (parsed.length === 0) {
-        return UsageSnapshot.failure('未识别到配额数据');
+        return UsageSnapshot.failure(LT('未识别到配额数据'));
       }
       primary = parsed.length > 0 ? parsed[0] : null;
       secondary = parsed.length > 1 ? parsed[1] : null;
@@ -959,8 +960,8 @@ class SyntheticProvider implements UsageProvider {
       for (let i = 3; i < parsed.length; i++) {
         const q = asObj(candidates[i]);
         const title = q != null
-          ? (pickStr(q, ['name', 'label', 'type', 'period', 'scope', 'title', 'id']) ?? `配额 ${i + 1}`)
-          : `配额 ${i + 1}`;
+          ? (pickStr(q, ['name', 'label', 'type', 'period', 'scope', 'title', 'id']) ?? `${LT('配额 ')}${i + 1}`)
+          : `${LT('配额 ')}${i + 1}`;
         extras.push({ id: `syn_${i}`, title: title, window: parsed[i] });
       }
     }
@@ -1060,14 +1061,14 @@ class ClawRouterProvider implements UsageProvider {
     title: 'ClawRouter',
     authKind: AuthKind.SESSION,
     accentColor: '#596EF6',
-    authHint: '粘贴 clawrouter.openclaw.ai 的会话 Cookie，或自托管 / 云端 policy API Key',
+    authHint: LT('粘贴 clawrouter.openclaw.ai 的会话 Cookie，或自托管 / 云端 policy API Key'),
     authUrl: 'https://clawrouter.openclaw.ai/dashboard/access',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cred = setting.credential.trim();
     if (cred.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie 或 API Key');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie 或 API Key'));
     }
     const headers: Record<string, string> = { 'accept': 'application/json' };
     if (clawRouterIsApiKey(cred)) {
@@ -1082,13 +1083,13 @@ class ClawRouterProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const budget = asObj(root['budget']);
     const usage = asObj(root['usage']);
     const summary = usage != null ? asObj(usage['summary']) : null;
     if (budget == null || summary == null) {
-      return UsageSnapshot.failure('响应缺少预算/用量');
+      return UsageSnapshot.failure(LT('响应缺少预算/用量'));
     }
     const limitMicros = optNum(budget, 'limitMicros');
     const spentMicros = optNum(budget, 'spentMicros');
@@ -1279,7 +1280,7 @@ class LiteLLMProvider implements UsageProvider {
     title: 'LiteLLM',
     authKind: AuthKind.API_KEY,
     accentColor: '#0F766E',
-    authHint: '第二栏填 LiteLLM 服务器地址；首栏填虚拟密钥',
+    authHint: LT('第二栏填 LiteLLM 服务器地址；首栏填虚拟密钥'),
     authUrl: 'https://docs.litellm.ai',
   };
 
@@ -1287,7 +1288,7 @@ class LiteLLMProvider implements UsageProvider {
     const key = setting.credential.trim();
     const base = setting.credential2.trim().replace(/\/+$/, '');
     if (key.length === 0 || base.length === 0) {
-      return UsageSnapshot.failure('需要服务器地址与虚拟密钥');
+      return UsageSnapshot.failure(LT('需要服务器地址与虚拟密钥'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -1300,7 +1301,7 @@ class LiteLLMProvider implements UsageProvider {
     const root = asObj(resp.json());
     const info = root != null ? asObj(root['info']) : null;
     if (info == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const spend = num(info, 'spend', 0);
     const maxBudget = optNum(info, 'max_budget');
@@ -1311,12 +1312,12 @@ class LiteLLMProvider implements UsageProvider {
     }
     const snap = UsageSnapshot.success(primary, null, null);
     const rows: ProviderDetailRow[] = [
-      { label: '已消费', value: Format.money(spend, 'USD') },
+      { label: LT('已消费'), value: Format.money(spend, 'USD') },
     ];
     if (maxBudget != null) {
-      rows.push({ label: '预算上限', value: Format.money(maxBudget, 'USD') });
+      rows.push({ label: LT('预算上限'), value: Format.money(maxBudget, 'USD') });
     }
-    const section: ProviderDetailSection = { title: '预算', rows: rows };
+    const section: ProviderDetailSection = { title: LT('预算'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -1332,7 +1333,7 @@ class LLMProxyProvider implements UsageProvider {
     title: 'LLM Proxy',
     authKind: AuthKind.API_KEY,
     accentColor: '#475569',
-    authHint: '第二栏填 LLM Proxy 服务器地址；首栏填 API Key',
+    authHint: LT('第二栏填 LLM Proxy 服务器地址；首栏填 API Key'),
     authUrl: 'https://github.com/LLMProxy',
   };
 
@@ -1340,7 +1341,7 @@ class LLMProxyProvider implements UsageProvider {
     const key = setting.credential.trim();
     const base = setting.credential2.trim().replace(/\/+$/, '');
     if (key.length === 0 || base.length === 0) {
-      return UsageSnapshot.failure('需要服务器地址与 API Key');
+      return UsageSnapshot.failure(LT('需要服务器地址与 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -1353,7 +1354,7 @@ class LLMProxyProvider implements UsageProvider {
     const root = asObj(resp.json());
     const groups = root != null ? asArray(root['quota_groups']) : null;
     if (groups == null || groups.length === 0) {
-      return UsageSnapshot.failure('未返回配额组');
+      return UsageSnapshot.failure(LT('未返回配额组'));
     }
     let primary: RateWindow | null = null;
     let secondary: RateWindow | null = null;
@@ -1364,7 +1365,7 @@ class LLMProxyProvider implements UsageProvider {
         continue;
       }
       const remaining = optNum(g, 'remaining_percent');
-      const name = str(g, 'name', `配额组 ${i + 1}`);
+      const name = str(g, 'name', `${LT('配额组 ')}${i + 1}`);
       if (remaining == null) {
         continue;
       }
@@ -1388,7 +1389,7 @@ class LLMProxyProvider implements UsageProvider {
       }
     }
     if (primary == null) {
-      return UsageSnapshot.failure('未识别到配额窗口');
+      return UsageSnapshot.failure(LT('未识别到配额窗口'));
     }
     const snap = UsageSnapshot.success(primary, secondary, null);
     snap.extraRateWindows = extras;

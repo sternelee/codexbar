@@ -33,6 +33,7 @@ import {
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
 import { signVolcRequest, VolcCredentials } from '../common/VolcSign';
+import { LT } from '../common/I18n';
 
 const DOUBAO_CODING_PLAN_URL =
   'https://open.volcengineapi.com/?Action=GetCodingPlanUsage&Version=2024-01-01';
@@ -63,9 +64,9 @@ interface DoubaoPlanSpec {
 
 const DOUBAO_PLANS: DoubaoPlanSpec[] = [
   { prefix: '', id: '', title: '' },
-  { prefix: 'agent_', id: 'doubao-agent', title: 'Agent 计划' },
-  { prefix: 'coding_team_', id: 'doubao-coding-team', title: '编码团队' },
-  { prefix: 'agent_team_', id: 'doubao-agent-team', title: 'Agent 团队' },
+  { prefix: 'agent_', id: 'doubao-agent', title: LT('Agent 计划') },
+  { prefix: 'coding_team_', id: 'doubao-coding-team', title: LT('编码团队') },
+  { prefix: 'agent_team_', id: 'doubao-agent-team', title: LT('Agent 团队') },
 ];
 
 // ---------------------------------------------------------------------------
@@ -247,13 +248,13 @@ export function doubaoSignedSnapshot(quotas: DoubaoQuota[], meta: DoubaoPlanMeta
   for (let i = 1; i < plans.length; i++) {
     const plan = plans[i];
     if (plan.session != null && !usedSession[i]) {
-      extras.push({ id: `${plan.id}-session`, title: `${plan.title} 5 小时`, window: plan.session });
+      extras.push({ id: `${plan.id}-session`, title: `${plan.title}${LT(' 5 小时')}`, window: plan.session });
     }
     if (plan.weekly != null && !usedWeekly[i]) {
-      extras.push({ id: `${plan.id}-weekly`, title: `${plan.title} 每周`, window: plan.weekly });
+      extras.push({ id: `${plan.id}-weekly`, title: `${plan.title}${LT(' 每周')}`, window: plan.weekly });
     }
     if (plan.monthly != null && !usedMonthly[i]) {
-      extras.push({ id: `${plan.id}-monthly`, title: `${plan.title} 月度`, window: plan.monthly });
+      extras.push({ id: `${plan.id}-monthly`, title: `${plan.title}${LT(' 月度')}`, window: plan.monthly });
     }
   }
 
@@ -264,13 +265,13 @@ export function doubaoSignedSnapshot(quotas: DoubaoQuota[], meta: DoubaoPlanMeta
   }
   const rows: ProviderDetailRow[] = [];
   if (meta.status.length > 0) {
-    rows.push({ label: '状态', value: meta.status });
+    rows.push({ label: LT('状态'), value: meta.status });
   }
   if (meta.updatedAt > 0) {
-    rows.push({ label: '更新于', value: Format.ago(meta.updatedAt) });
+    rows.push({ label: LT('更新于'), value: Format.ago(meta.updatedAt) });
   }
   if (rows.length > 0) {
-    snap.details = [{ title: '计划', rows: rows }];
+    snap.details = [{ title: LT('计划'), rows: rows }];
   }
   if (meta.status.length > 0) {
     snap.identity = { accountEmail: '', accountOrganization: '', loginMethod: meta.status };
@@ -394,12 +395,12 @@ export function doubaoProbeSnapshot(r: DoubaoProbeResult): UsageSnapshot {
   if (r.keyValid) {
     const snap = UsageSnapshot.success(null, null, null);
     snap.details = [{
-      title: '说明',
-      rows: [{ label: '请求额度', value: 'API Key 有效，但响应未携带请求限额' }],
+      title: LT('说明'),
+      rows: [{ label: LT('请求额度'), value: LT('API Key 有效，但响应未携带请求限额') }],
     }];
     return snap;
   }
-  return UsageSnapshot.failure('Ark API Key 无效或已过期');
+  return UsageSnapshot.failure(LT('Ark API Key 无效或已过期'));
 }
 
 function compactText(text: string, maxLength: number = 200): string {
@@ -454,10 +455,10 @@ export function doubaoApiErrorText(resp: HttpResult): string {
 class DoubaoProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'doubao',
-    title: '豆包 · 火山方舟',
+    title: LT('豆包 · 火山方舟'),
     authKind: AuthKind.API_KEY,
     accentColor: '#3370FF',
-    authHint: '火山方舟 AK/SK（AK… + Secret Access Key 填第二栏）；或直接粘贴 Ark API Key',
+    authHint: LT('火山方舟 AK/SK（AK… + Secret Access Key 填第二栏）；或直接粘贴 Ark API Key'),
     authUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement?advancedActiveKey=subscribe',
   };
 
@@ -465,13 +466,13 @@ class DoubaoProvider implements UsageProvider {
     const cred1 = setting.credential.trim();
     const cred2 = setting.credential2.trim();
     if (cred1.length === 0) {
-      return UsageSnapshot.failure('未配置凭证');
+      return UsageSnapshot.failure(LT('未配置凭证'));
     }
     if (cred2.length > 0) {
       return DoubaoProvider.fetchSignedPlan(cred1, cred2);
     }
     if (cred1.toUpperCase().startsWith('AK')) {
-      return UsageSnapshot.failure('Access Key ID 需与 Secret Access Key 一同填写');
+      return UsageSnapshot.failure(LT('Access Key ID 需与 Secret Access Key 一同填写'));
     }
     return DoubaoProvider.fetchArkProbe(cred1);
   }
@@ -526,8 +527,8 @@ class DoubaoProvider implements UsageProvider {
     }
 
     if (quotas.length === 0) {
-      const suffix = meta.status.length > 0 ? `（状态：${meta.status}）` : '';
-      return UsageSnapshot.failure(`未获取到编码 / Agent 计划额度${suffix}`);
+      const suffix = meta.status.length > 0 ? `${LT('（状态：')}${meta.status}${LT('）')}` : '';
+      return UsageSnapshot.failure(`${LT('未获取到编码 / Agent 计划额度')}${suffix}`);
     }
     return doubaoSignedSnapshot(quotas, meta);
   }
@@ -573,7 +574,7 @@ class DoubaoProvider implements UsageProvider {
       }
       return doubaoProbeSnapshot(result);
     }
-    return UsageSnapshot.failure(lastError.length > 0 ? lastError : '所有探测模型均不可用');
+    return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('所有探测模型均不可用'));
   }
 }
 

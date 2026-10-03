@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { Format } from '../main/ets/common/Format';
-import { L, setAppLang } from '../main/ets/common/I18n';
+import { L, LT, setAppLang } from '../main/ets/common/I18n';
 import { extractDeepSeekTokenCandidates, extractDeepSeekUserToken } from '../main/ets/common/OAuth';
 import { Theme } from '../main/ets/common/Theme';
 import { parseJson, asObj, asArray, str, num, optNum, optStr, Json } from '../main/ets/net/Json';
@@ -181,6 +181,11 @@ export default function logicUnitTest() {
       expect(Format.resetIn(45 * 60 * 1000)).assertEqual('Resets in 45m');
       expect(Format.countdown((3 * 3600 + 15 * 60) * 1000)).assertEqual('3h 15m');
       expect(Format.ago(0)).assertEqual('Never');
+      // 服务商层文案查表翻译（LT）；未收录的原文返回
+      expect(LT('未配置 API Key')).assertEqual('No API key configured');
+      expect(LT('余额构成')).assertEqual('Balance breakdown');
+      expect(LT('（')).assertEqual(' (');
+      expect(LT('不存在的文案')).assertEqual('不存在的文案');
       // 还原中文，避免影响其他用例
       setAppLang('zh');
       expect(L('中文', 'Chinese')).assertEqual('中文');

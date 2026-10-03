@@ -28,6 +28,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 // ---------------------------------------------------------------------------
 // HuggingFace
@@ -39,14 +40,14 @@ class HuggingFaceProvider implements UsageProvider {
     title: 'HuggingFace',
     authKind: AuthKind.API_KEY,
     accentColor: '#FFD21E',
-    authHint: '粘贴 HuggingFace Token（需 Billing 读权限）',
+    authHint: LT('粘贴 HuggingFace Token（需 Billing 读权限）'),
     authUrl: 'https://huggingface.co/settings/tokens',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 Token');
+      return UsageSnapshot.failure(LT('未配置 Token'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${token}`,
@@ -68,7 +69,7 @@ class HuggingFaceProvider implements UsageProvider {
     const usage = root != null ? asObj(root['usage']) : null;
     const inference = usage != null ? asObj(usage['inferenceProviders']) : null;
     if (inference == null) {
-      return UsageSnapshot.failure('响应缺少 inferenceProviders');
+      return UsageSnapshot.failure(LT('响应缺少 inferenceProviders'));
     }
     const gross = (optNum(inference, 'usedNanoUsd') ?? 0) / 1e9;
     const included = (optNum(inference, 'includedNanoUsd') ?? 0) / 1e9;
@@ -150,14 +151,14 @@ class WarpProvider implements UsageProvider {
     title: 'Warp',
     authKind: AuthKind.API_KEY,
     accentColor: '#FFFFFF',
-    authHint: '粘贴 Warp API Key',
+    authHint: LT('粘贴 Warp API Key'),
     authUrl: 'https://app.warp.dev/settings/credits',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -184,7 +185,7 @@ class WarpProvider implements UsageProvider {
     const limitInfo = inner != null ? asObj(inner['requestLimitInfo']) : null;
     if (limitInfo == null) {
       const errors = root != null ? asArray(root['errors']) : null;
-      return UsageSnapshot.failure(errors != null && errors.length > 0 ? 'GraphQL 错误' : '响应解析失败');
+      return UsageSnapshot.failure(errors != null && errors.length > 0 ? LT('GraphQL 错误') : LT('响应解析失败'));
     }
     const unlimited = bool(limitInfo, 'isUnlimited');
     const requestLimit = num(limitInfo, 'requestLimit', 0);
@@ -205,17 +206,17 @@ class WarpProvider implements UsageProvider {
     }
     const snap = UsageSnapshot.success(primary, null, null);
     const rows: ProviderDetailRow[] = [
-      { label: '本周期请求', value: `${Math.round(used)} / ${unlimited ? '∞' : Math.round(requestLimit)}` },
+      { label: LT('本周期请求'), value: `${Math.round(used)} / ${unlimited ? '∞' : Math.round(requestLimit)}` },
     ];
     const grants = inner != null ? asObj(inner['bonusGrants']) : null;
     if (grants != null) {
       const granted = optNum(grants, 'requestCreditsGranted');
       const remaining = optNum(grants, 'requestCreditsRemaining');
       if (remaining != null) {
-        rows.push({ label: '赠额剩余', value: `${Math.round(remaining)}${granted != null ? ` / ${Math.round(granted)}` : ''}` });
+        rows.push({ label: LT('赠额剩余'), value: `${Math.round(remaining)}${granted != null ? ` / ${Math.round(granted)}` : ''}` });
       }
     }
-    const section: ProviderDetailSection = { title: '请求额度', rows: rows };
+    const section: ProviderDetailSection = { title: LT('请求额度'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -334,7 +335,7 @@ class OpenCodeBaseProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -354,7 +355,7 @@ class OpenCodeBaseProvider implements UsageProvider {
       }
     }
     if (workspaceID.length === 0) {
-      return UsageSnapshot.failure('未能确定工作区 ID，可在设置第二栏手动填写');
+      return UsageSnapshot.failure(LT('未能确定工作区 ID，可在设置第二栏手动填写'));
     }
 
     const referer = `https://opencode.ai/workspace/${workspaceID}`;
@@ -392,7 +393,7 @@ class OpenCodeBaseProvider implements UsageProvider {
         return OpenCodeBaseProvider.snapshotFrom(usage, root);
       }
     }
-    return UsageSnapshot.failure('未解析到用量（订阅与计费函数均无数据）');
+    return UsageSnapshot.failure(LT('未解析到用量（订阅与计费函数均无数据）'));
   }
 
   private static snapshotFrom(usage: Record<string, Json>, root: Record<string, Json>): UsageSnapshot {
@@ -403,7 +404,7 @@ class OpenCodeBaseProvider implements UsageProvider {
       percent = (used / cap) * 100;
     }
     if (percent == null) {
-      return UsageSnapshot.failure('用量字段缺失');
+      return UsageSnapshot.failure(LT('用量字段缺失'));
     }
     let resets = 0;
     const renewIso = optStr(usage, 'renews_at') ?? optStr(usage, 'renewsAt') ?? optStr(root, 'renews_at');
@@ -442,7 +443,7 @@ class OpenCodeProvider extends OpenCodeBaseProvider {
       title: 'OpenCode',
       authKind: AuthKind.SESSION,
       accentColor: '#3B82F6',
-      authHint: '粘贴 opencode.ai 会话 Cookie；可选第二栏填工作区 ID',
+      authHint: LT('粘贴 opencode.ai 会话 Cookie；可选第二栏填工作区 ID'),
       authUrl: 'https://opencode.ai/workspace',
     }, false);
   }
@@ -455,7 +456,7 @@ class OpenCodeGoProvider extends OpenCodeBaseProvider {
       title: 'OpenCode Go',
       authKind: AuthKind.SESSION,
       accentColor: '#3B82F6',
-      authHint: '粘贴 opencode.ai 会话 Cookie 或 Zen API Key（Go 计划）；可选第二栏填工作区 ID',
+      authHint: LT('粘贴 opencode.ai 会话 Cookie 或 Zen API Key（Go 计划）；可选第二栏填工作区 ID'),
       authUrl: 'https://opencode.ai/workspace',
     }, true);
   }
@@ -473,12 +474,12 @@ class OpenCodeGoProvider extends OpenCodeBaseProvider {
     const root = asObj(resp.json());
     const usage = root != null ? asObj(root['usage']) : null;
     if (usage == null) {
-      return UsageSnapshot.failure('响应缺少 usage 字段');
+      return UsageSnapshot.failure(LT('响应缺少 usage 字段'));
     }
     const now = Date.now();
     const rolling = ocWindowFrom(usage['rolling'], now);
     if (rolling == null) {
-      return UsageSnapshot.failure('响应缺少 rolling 用量');
+      return UsageSnapshot.failure(LT('响应缺少 rolling 用量'));
     }
     const snap = UsageSnapshot.success(
       rolling,
@@ -508,14 +509,14 @@ class GroqProvider implements UsageProvider {
     title: 'Groq',
     authKind: AuthKind.SESSION,
     accentColor: '#F56844',
-    authHint: '粘贴 groq.com 的 stytch_session Cookie；可选第二栏填组织 ID',
+    authHint: LT('粘贴 groq.com 的 stytch_session Cookie；可选第二栏填组织 ID'),
     authUrl: 'https://console.groq.com/settings/organization',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     // 从 Cookie 中取 stytch_session 值
     let sessionToken = cookie;
@@ -527,7 +528,7 @@ class GroqProvider implements UsageProvider {
       sessionToken = (end >= 0 ? rest.substring(0, end) : rest).trim();
     }
     if (sessionToken.length === 0) {
-      return UsageSnapshot.failure('Cookie 中未找到 stytch_session');
+      return UsageSnapshot.failure(LT('Cookie 中未找到 stytch_session'));
     }
 
     // 1. Stytch 会话交换
@@ -546,13 +547,13 @@ class GroqProvider implements UsageProvider {
       JSON.stringify({ session_token: sessionToken, session_duration_minutes: 30 })
     );
     if (!authResp.ok) {
-      return UsageSnapshot.failure('会话交换失败，Cookie 可能已过期');
+      return UsageSnapshot.failure(LT('会话交换失败，Cookie 可能已过期'));
     }
     const authRoot = asObj(authResp.json());
     const authData = authRoot != null ? asObj(authRoot['data']) : null;
     const jwt = authData != null ? optStr(authData, 'session_jwt') : null;
     if (jwt == null || jwt.length === 0) {
-      return UsageSnapshot.failure('会话交换响应缺少 JWT');
+      return UsageSnapshot.failure(LT('会话交换响应缺少 JWT'));
     }
 
     // 2. 组织 ID：优先第二凭证，否则从组织列表取第一个
@@ -575,7 +576,7 @@ class GroqProvider implements UsageProvider {
       }
     }
     if (orgId.length === 0) {
-      return UsageSnapshot.failure('未能确定组织 ID，可在设置第二栏手动填写');
+      return UsageSnapshot.failure(LT('未能确定组织 ID，可在设置第二栏手动填写'));
     }
 
     // 3. 近 30 天活动

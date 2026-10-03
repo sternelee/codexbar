@@ -10,6 +10,7 @@ import { Settings } from './Settings';
 import { Reminders } from './Reminders';
 import { WidgetDataStore } from './WidgetData';
 import { recordSampleFor } from './UsageHistory';
+import { LT } from '../common/I18n';
 
 export class AppStore {
   private static instance: AppStore | null = null;
@@ -168,7 +169,7 @@ export class AppStore {
     try {
       snap = await provider.fetch(state.setting);
     } catch (e) {
-      snap = UsageSnapshot.failure(e instanceof Error ? e.message : '查询失败');
+      snap = UsageSnapshot.failure(e instanceof Error ? e.message : LT('查询失败'));
     }
     // 查询期间凭证发生变更（清除/切换账号/重新保存）：丢弃过期结果，
     // 并保留 loading（由更新的那次查询负责收尾）

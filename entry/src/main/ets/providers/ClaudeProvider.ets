@@ -24,6 +24,7 @@ import {
 } from '../model/Models';
 import { Format } from '../common/Format';
 import { UsageProvider, UrlUtil } from './ProviderBase';
+import { LT } from '../common/I18n';
 
 class ClaudeWebProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
@@ -31,7 +32,7 @@ class ClaudeWebProvider implements UsageProvider {
     title: 'Claude',
     authKind: AuthKind.SESSION,
     accentColor: '#CC7C5E',
-    authHint: '粘贴 claude.ai 的 sessionKey（sk-ant-sid01-… 开头），或在设置页「网页登录」直接登录',
+    authHint: LT('粘贴 claude.ai 的 sessionKey（sk-ant-sid01-… 开头），或在设置页「网页登录」直接登录'),
     authUrl: 'https://claude.ai/settings/billing',
   };
 
@@ -47,7 +48,7 @@ class ClaudeWebProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 sessionKey');
+      return UsageSnapshot.failure(LT('未配置 sessionKey'));
     }
     const headers = this.headers(key);
 
@@ -58,7 +59,7 @@ class ClaudeWebProvider implements UsageProvider {
     }
     const orgs = asArray(orgResp.json());
     if (orgs == null || orgs.length === 0) {
-      return UsageSnapshot.failure('未找到组织，sessionKey 可能已失效');
+      return UsageSnapshot.failure(LT('未找到组织，sessionKey 可能已失效'));
     }
     let orgId = '';
     let orgName = '';
@@ -88,7 +89,7 @@ class ClaudeWebProvider implements UsageProvider {
       }
     }
     if (orgId.length === 0) {
-      return UsageSnapshot.failure('无法解析组织信息');
+      return UsageSnapshot.failure(LT('无法解析组织信息'));
     }
 
     // 第二步：用量
@@ -99,7 +100,7 @@ class ClaudeWebProvider implements UsageProvider {
     }
     const root = asObj(usageResp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
 
     const session = ClaudeWebProvider.windowOf(root, 'five_hour');

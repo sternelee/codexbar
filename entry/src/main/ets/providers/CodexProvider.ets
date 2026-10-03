@@ -31,6 +31,7 @@ import { UsageProvider } from './ProviderBase';
 import { Settings } from '../store/Settings';
 import { AppStore } from '../store/AppStore';
 import { codexRefreshToken, CodexTokenSet } from '../common/OAuth';
+import { LT } from '../common/I18n';
 
 const WHOAMI_URL = 'https://auth.openai.com/api/accounts/v1/user-auth-credential/whoami';
 const USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
@@ -50,14 +51,14 @@ class CodexProvider implements UsageProvider {
     title: 'Codex (ChatGPT)',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#10A37F',
-    authHint: '在设置页「网页登录」授权，或粘贴 ChatGPT OAuth access token / OpenAI Personal Access Token；可选第二栏填账号 ID',
+    authHint: LT('在设置页「网页登录」授权，或粘贴 ChatGPT OAuth access token / OpenAI Personal Access Token；可选第二栏填账号 ID'),
     authUrl: 'https://chatgpt.com/codex',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     let token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 access token / Personal Access Token');
+      return UsageSnapshot.failure(LT('未配置 access token / Personal Access Token'));
     }
     const accountId = setting.credential2.trim();
 
@@ -82,7 +83,7 @@ class CodexProvider implements UsageProvider {
 
     if (!resp.ok) {
       if (resp.code === 401 || resp.code === 403) {
-        return UsageSnapshot.failure('令牌无效、已过期或无权访问该账号');
+        return UsageSnapshot.failure(LT('令牌无效、已过期或无权访问该账号'));
       }
       return UsageSnapshot.failure(resp.errorText());
     }
@@ -145,7 +146,7 @@ class CodexProvider implements UsageProvider {
   private static parseUsage(resp: HttpResult, whoami: CodexIdentity): UsageSnapshot {
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
 
     let limitNode = asObj(root['rate_limit']);
@@ -164,7 +165,7 @@ class CodexProvider implements UsageProvider {
         if (item == null) {
           continue;
         }
-        const name = str(item, 'limit_name', '附加限制');
+        const name = str(item, 'limit_name', LT('附加限制'));
         const rl = asObj(item['rate_limit']);
         if (rl == null) {
           continue;

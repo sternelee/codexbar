@@ -23,7 +23,7 @@ export class HttpResult {
 
   errorText(): string {
     if (this.code === 401 || this.code === 403) {
-      return L('凭证无效或已过期', 'Invalid or expired credential');
+      return L('凭证无效或已过期', 'Invalid credential or expired');
     }
     if (this.code === 429) {
       return L('请求过于频繁，请稍后再试', 'Rate limited. Please retry later');

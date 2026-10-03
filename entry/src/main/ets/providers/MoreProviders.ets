@@ -24,6 +24,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 /** ISO8601 → 毫秒；失败返回 0 */
 function isoToMs(iso: string | null): number {
@@ -44,7 +45,7 @@ class ZenMuxProvider implements UsageProvider {
     title: 'ZenMux',
     authKind: AuthKind.API_KEY,
     accentColor: '#6366F1',
-    authHint: '粘贴 ZenMux Management API Key（普通推理 Key 不支持）',
+    authHint: LT('粘贴 ZenMux Management API Key（普通推理 Key 不支持）'),
     authUrl: 'https://zenmux.ai/settings/management-keys',
   };
 
@@ -66,7 +67,7 @@ class ZenMuxProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 Management API Key');
+      return UsageSnapshot.failure(LT('未配置 Management API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -81,7 +82,7 @@ class ZenMuxProvider implements UsageProvider {
     const subRoot = asObj(subResp.json());
     const subData = subRoot != null ? asObj(subRoot['data']) : null;
     if (subData == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const plan = asObj(subData['plan']);
     const tier = plan != null ? str(plan, 'tier') : '';
@@ -112,13 +113,13 @@ class ZenMuxProvider implements UsageProvider {
 
     const rows: ProviderDetailRow[] = [];
     if (tier.length > 0) {
-      rows.push({ label: '套餐', value: tier });
+      rows.push({ label: LT('套餐'), value: tier });
     }
     if (expiresAt > 0) {
-      rows.push({ label: '到期时间', value: Format.dateTime(expiresAt) });
+      rows.push({ label: LT('到期时间'), value: Format.dateTime(expiresAt) });
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '订阅', rows: rows };
+      const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
       snap.details = [section];
     }
     snap.identity = { accountEmail: '', accountOrganization: '', loginMethod: tier.length > 0 ? `${tier} plan` : 'Management Key' };
@@ -163,14 +164,14 @@ class ManusProvider implements UsageProvider {
     title: 'Manus',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#34322D',
-    authHint: '粘贴 manus.im 的会话 token',
+    authHint: LT('粘贴 manus.im 的会话 token'),
     authUrl: 'https://manus.im',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置会话 token');
+      return UsageSnapshot.failure(LT('未配置会话 token'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${token}`,
@@ -186,7 +187,7 @@ class ManusProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 信封兼容：credits / data / result 三种包裹
     let credits = asObj(root['credits']);
@@ -197,7 +198,7 @@ class ManusProvider implements UsageProvider {
       credits = asObj(root['result']);
     }
     if (credits == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const total = num(credits, 'totalCredits', 0);
     const monthly = num(credits, 'proMonthlyCredits', 0);
@@ -206,7 +207,7 @@ class ManusProvider implements UsageProvider {
     const maxRefresh = num(credits, 'maxRefreshCredits', 0);
     const refreshInterval = optStr(credits, 'refreshInterval');
     const rows: ProviderDetailRow[] = [];
-    const labels: string[] = ['免费额度', '周期额度', '加购额度', '刷新额度', 'Pro 月度额度', '刷新上限'];
+    const labels: string[] = [LT('免费额度'), LT('周期额度'), LT('加购额度'), LT('刷新额度'), LT('Pro 月度额度'), LT('刷新上限')];
     const keys: string[] = [
       'freeCredits', 'periodicCredits', 'addonCredits', 'refreshCredits', 'proMonthlyCredits', 'maxRefreshCredits',
     ];
@@ -218,18 +219,18 @@ class ManusProvider implements UsageProvider {
     }
     const nextRefresh = isoToMs(optStr(credits, 'nextRefreshTime'));
     if (nextRefresh > 0) {
-      rows.push({ label: '下次刷新', value: `${Format.dateTime(nextRefresh)}（${Format.countdown(nextRefresh - Date.now())}后）` });
+      rows.push({ label: LT('下次刷新'), value: `${Format.dateTime(nextRefresh)}${LT('（')}${Format.countdown(nextRefresh - Date.now())}${LT('后）')}` });
     }
 
     const lanes = manusLanes(monthly, periodic, refresh, maxRefresh, nextRefresh);
     if (lanes.primary != null) {
-      rows.push({ label: 'Pro 月度已用', value: `${Math.round(Math.max(0, monthly - periodic))} / ${Math.round(monthly)}` });
+      rows.push({ label: LT('Pro 月度已用'), value: `${Math.round(Math.max(0, monthly - periodic))} / ${Math.round(monthly)}` });
     }
     if (lanes.secondary != null) {
       const prefix = refreshInterval != null && refreshInterval.length > 0
         ? `${refreshInterval.charAt(0).toUpperCase()}${refreshInterval.slice(1)}: `
         : '';
-      rows.push({ label: '刷新已用', value: `${prefix}${Math.round(refresh)} / ${Math.round(maxRefresh)}` });
+      rows.push({ label: LT('刷新已用'), value: `${prefix}${Math.round(refresh)} / ${Math.round(maxRefresh)}` });
     }
 
     const snap = UsageSnapshot.success(lanes.primary, lanes.secondary, null);
@@ -242,7 +243,7 @@ class ManusProvider implements UsageProvider {
       displayText: `${total.toFixed(0)} credits`,
     };
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '额度构成', rows: rows };
+      const section: ProviderDetailSection = { title: LT('额度构成'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -259,14 +260,14 @@ class DeepInfraProvider implements UsageProvider {
     title: 'DeepInfra',
     authKind: AuthKind.API_KEY,
     accentColor: '#0EA5E9',
-    authHint: '粘贴 DeepInfra API Key',
+    authHint: LT('粘贴 DeepInfra API Key'),
     authUrl: 'https://deepinfra.com/dash/api_keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -278,7 +279,7 @@ class DeepInfraProvider implements UsageProvider {
     }
     const cl = asObj(checklistResp.json());
     if (cl == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const stripeBalance = num(cl, 'stripe_balance', 0);
     const recent = Math.max(0, num(cl, 'recent', 0));
@@ -304,15 +305,15 @@ class DeepInfraProvider implements UsageProvider {
       displayText: Format.money(netBalance, 'USD'),
     };
     const rows: ProviderDetailRow[] = [];
-    rows.push({ label: '本月花费', value: Format.money(monthCostUSD, 'USD') });
+    rows.push({ label: LT('本月花费'), value: Format.money(monthCostUSD, 'USD') });
     if (limit != null && limit > 0) {
-      rows.push({ label: '消费上限', value: Format.money(limit, 'USD') });
+      rows.push({ label: LT('消费上限'), value: Format.money(limit, 'USD') });
     }
-    rows.push({ label: '账户余额', value: Format.money(stripeBalance, 'USD') });
+    rows.push({ label: LT('账户余额'), value: Format.money(stripeBalance, 'USD') });
     if (bool(cl, 'suspended')) {
-      rows.push({ label: '状态', value: `已暂停（${str(cl, 'suspend_reason', '未知原因')}）` });
+      rows.push({ label: LT('状态'), value: `${LT('已暂停（')}${str(cl, 'suspend_reason', LT('未知原因'))}${LT('）')}` });
     }
-    const section: ProviderDetailSection = { title: '计费', rows: rows };
+    const section: ProviderDetailSection = { title: LT('计费'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -406,14 +407,14 @@ class PerplexityProvider implements UsageProvider {
     title: 'Perplexity',
     authKind: AuthKind.SESSION,
     accentColor: '#20B2AA',
-    authHint: '粘贴 perplexity.ai 的会话 Cookie（浏览器 Network 面板整段复制）',
+    authHint: LT('粘贴 perplexity.ai 的会话 Cookie（浏览器 Network 面板整段复制）'),
     authUrl: 'https://www.perplexity.ai/account/usage',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -427,7 +428,7 @@ class PerplexityProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const balanceCents = num(root, 'balance_cents', 0);
     const usedCents = num(root, 'total_usage_cents', 0);
@@ -457,20 +458,20 @@ class PerplexityProvider implements UsageProvider {
       loginMethod: recurring <= 0 ? '' : (recurring < 5000 ? 'Pro' : 'Max'),
     };
     const rows: ProviderDetailRow[] = [];
-    rows.push({ label: '本期已购', value: Format.money(num(root, 'current_period_purchased_cents', 0) / 100, 'USD') });
-    rows.push({ label: '累计使用', value: Format.money(usedCents / 100, 'USD') });
+    rows.push({ label: LT('本期已购'), value: Format.money(num(root, 'current_period_purchased_cents', 0) / 100, 'USD') });
+    rows.push({ label: LT('累计使用'), value: Format.money(usedCents / 100, 'USD') });
     if (renewalMs > 0) {
-      rows.push({ label: '下次续费', value: Format.dateTime(renewalMs) });
+      rows.push({ label: LT('下次续费'), value: Format.dateTime(renewalMs) });
     }
     if (recurring > 0) {
-      rows.push({ label: '周期额度', value: `${whole(pools.recurringUsed)}/${whole(recurring)} credits` });
+      rows.push({ label: LT('周期额度'), value: `${whole(pools.recurringUsed)}/${whole(recurring)} credits` });
     }
     let promoLine = `${whole(pools.promoUsed)}/${whole(promo)} bonus`;
     if (pools.promoExpiry > 0) {
       promoLine += ` · exp. ${Format.dateTime(pools.promoExpiry * 1000)}`;
     }
-    rows.push({ label: '赠金额度', value: promoLine });
-    rows.push({ label: '已购额度', value: `${whole(pools.purchasedUsed)}/${whole(purchased)} credits` });
+    rows.push({ label: LT('赠金额度'), value: promoLine });
+    rows.push({ label: LT('已购额度'), value: `${whole(pools.purchasedUsed)}/${whole(purchased)} credits` });
     const grantRows: ProviderDetailRow[] = [];
     if (grants != null && grants.length > 0) {
       for (let i = 0; i < grants.length && i < 3; i++) {
@@ -483,12 +484,12 @@ class PerplexityProvider implements UsageProvider {
         let line = Format.money(amount, 'USD');
         if (exp != null && exp > 0) {
           const expMs = exp > 1e12 ? exp : exp * 1000;
-          line += `（${Format.dateTime(expMs)} 过期）`;
+          line += `${LT('（')}${Format.dateTime(expMs)}${LT(' 过期）')}`;
         }
-        grantRows.push({ label: `赠金 #${i + 1}`, value: line });
+        grantRows.push({ label: `${LT('赠金 #')}${i + 1}`, value: line });
       }
     }
-    const section: ProviderDetailSection = { title: '余额明细', rows: rows.concat(grantRows) };
+    const section: ProviderDetailSection = { title: LT('余额明细'), rows: rows.concat(grantRows) };
     snap.details = [section];
     return snap;
   }
@@ -501,10 +502,10 @@ class PerplexityProvider implements UsageProvider {
 class KimiCodingProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'kimi-coding',
-    title: 'Kimi 编码版',
+    title: LT('Kimi 编码版'),
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#FE603C',
-    authHint: '粘贴 kimi.com 的 authToken，或 Kimi Code API Key（sk-… 开头）',
+    authHint: LT('粘贴 kimi.com 的 authToken，或 Kimi Code API Key（sk-… 开头）'),
     authUrl: 'https://www.kimi.com/code/console',
   };
 
@@ -519,12 +520,12 @@ class KimiCodingProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // usages 池（limit_5h / limit_7d / limit_month_total）或 usage 明细，两者字段同构
     const pools = asObj(root['usages']) ?? asObj(root['usage']);
     if (pools == null) {
-      return UsageSnapshot.failure('未返回用量数据');
+      return UsageSnapshot.failure(LT('未返回用量数据'));
     }
     // 泳道绑定对照 macOS KimiProviderDescriptor：primary=.weekly(7 天)、secondary=.session(5 小时)，
     // 标签同源（sessionLabel "7-day usage" / weeklyLabel "5-hour usage"），故主窗口放 7 天池；
@@ -554,7 +555,7 @@ class KimiCodingProvider implements UsageProvider {
         'LEVEL_ADVANCED': 'Allegro',
       };
       const plan = names[level] != null ? names[level] : level;
-      snap.details = [{ title: '订阅', rows: [{ label: '计划', value: plan }] }];
+      snap.details = [{ title: LT('订阅'), rows: [{ label: LT('计划'), value: plan }] }];
     }
     return snap;
   }
@@ -592,7 +593,7 @@ class KimiCodingProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 authToken');
+      return UsageSnapshot.failure(LT('未配置 authToken'));
     }
     // sk- 开头视为 Kimi Code API Key
     if (token.startsWith('sk-')) {
@@ -606,11 +607,11 @@ class KimiCodingProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const usages = asArray(root['usages']);
     if (usages == null || usages.length === 0) {
-      return UsageSnapshot.failure('未返回用量数据（token 可能已失效）');
+      return UsageSnapshot.failure(LT('未返回用量数据（token 可能已失效）'));
     }
     let target: Record<string, Json> | null = null;
     for (let i = 0; i < usages.length; i++) {
@@ -625,7 +626,7 @@ class KimiCodingProvider implements UsageProvider {
       target = first;
     }
     if (target == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 与 API Key 路径同序：主窗口 = 7 天池（sessionLabel "7-day usage"），月度池仍走附加泳道
     const snap = UsageSnapshot.success(
@@ -719,14 +720,14 @@ class ChutesProvider implements UsageProvider {
     title: 'Chutes',
     authKind: AuthKind.API_KEY,
     accentColor: '#F97316',
-    authHint: '粘贴 Chutes API Key（chutes.ai 用户设置中获取）',
+    authHint: LT('粘贴 Chutes API Key（chutes.ai 用户设置中获取）'),
     authUrl: 'https://chutes.ai/settings/api',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -738,7 +739,7 @@ class ChutesProvider implements UsageProvider {
     }
     let root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 兼容 {data:...} / {result:...} 包裹
     const inner = asObj(firstOf(root, ['data', 'result']));
@@ -760,7 +761,7 @@ class ChutesProvider implements UsageProvider {
         if (q == null) {
           continue;
         }
-        const label = firstStr(q, ['label', 'name', 'title', 'type', 'period']) ?? `配额 ${i + 1}`;
+        const label = firstStr(q, ['label', 'name', 'title', 'type', 'period']) ?? `${LT('配额 ')}${i + 1}`;
         const w = chutesWindow(q, label);
         if (w != null) {
           extras.push({ id: `q_${i}`, title: label, window: w });
@@ -768,8 +769,8 @@ class ChutesProvider implements UsageProvider {
       }
     }
 
-    const rolling = rollingRaw != null ? chutesWindow(rollingRaw, '4 小时窗口') : null;
-    const monthly = monthlyRaw != null ? chutesWindow(monthlyRaw, '月度窗口') : null;
+    const rolling = rollingRaw != null ? chutesWindow(rollingRaw, LT('4 小时窗口')) : null;
+    const monthly = monthlyRaw != null ? chutesWindow(monthlyRaw, LT('月度窗口')) : null;
 
     // 过滤与主窗口重复的 extras
     const filtered: NamedRateWindow[] = [];
@@ -785,7 +786,7 @@ class ChutesProvider implements UsageProvider {
     const snap = UsageSnapshot.success(rolling ?? monthly, monthly, null);
     snap.extraRateWindows = filtered;
     if (snap.primary == null && snap.secondary == null && filtered.length === 0) {
-      return UsageSnapshot.failure('未识别到用量窗口（账户可能无订阅）');
+      return UsageSnapshot.failure(LT('未识别到用量窗口（账户可能无订阅）'));
     }
 
     // 订阅状态/计划名
@@ -795,13 +796,13 @@ class ChutesProvider implements UsageProvider {
       const status = firstStr(sub, ['status', 'state', 'subscription_status']);
       const rows: ProviderDetailRow[] = [];
       if (plan != null) {
-        rows.push({ label: '套餐', value: plan });
+        rows.push({ label: LT('套餐'), value: plan });
       }
       if (status != null) {
-        rows.push({ label: '状态', value: status });
+        rows.push({ label: LT('状态'), value: status });
       }
       if (rows.length > 0) {
-        const section: ProviderDetailSection = { title: '订阅', rows: rows };
+        const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
         snap.details = [section];
       }
     }

@@ -11,6 +11,7 @@
 
 import { Http } from '../net/Http';
 import { asObj, Json, parseJson, str } from '../net/Json';
+import { LT } from './I18n';
 
 // ---------------- Base64URL / SHA-256（纯 TS） ----------------
 
@@ -354,12 +355,12 @@ async function codexTokenRequest(formBody: string): Promise<CodexTokenSet> {
   if (!resp.ok || root == null) {
     const err = root != null ? str(root, 'error', '') : '';
     const msg = err.length > 0 ? err : `HTTP ${resp.code}`;
-    const fail: CodexTokenSet = { accessToken: '', refreshToken: '', accountId: '', error: `令牌交换失败（${msg}）` };
+    const fail: CodexTokenSet = { accessToken: '', refreshToken: '', accountId: '', error: `${LT('令牌交换失败（')}${msg}${LT('）')}` };
     return fail;
   }
   const token = str(root, 'access_token', '');
   if (token.length === 0) {
-    const fail: CodexTokenSet = { accessToken: '', refreshToken: '', accountId: '', error: '响应缺少 access_token' };
+    const fail: CodexTokenSet = { accessToken: '', refreshToken: '', accountId: '', error: LT('响应缺少 access_token') };
     return fail;
   }
   const set: CodexTokenSet = {

@@ -27,6 +27,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 // ---------------- 公共小工具 ----------------
 
@@ -89,14 +90,14 @@ class V0Provider implements UsageProvider {
     title: 'v0',
     authKind: AuthKind.API_KEY,
     accentColor: '#111111',
-    authHint: '粘贴 v0 Platform API Key（v0.app/settings/keys）',
+    authHint: LT('粘贴 v0 Platform API Key（v0.app/settings/keys）'),
     authUrl: 'https://v0.app/settings/keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 v0 API Key');
+      return UsageSnapshot.failure(LT('未配置 v0 API Key'));
     }
     const scope = extraValue(setting.extraConfig, 'scope');
     const query = scope.length > 0 ? `?scope=${encodeURIComponent(scope)}` : '';
@@ -111,15 +112,15 @@ class V0Provider implements UsageProvider {
     }
     const billing = asObj(billingResp.json());
     if (billing == null) {
-      return UsageSnapshot.failure('v0 计费响应解析失败');
+      return UsageSnapshot.failure(LT('v0 计费响应解析失败'));
     }
     const billingType = str(billing, 'billingType');
     if (billingType !== 'token' && billingType !== 'legacy') {
-      return UsageSnapshot.failure('无法解析 v0 计费类型');
+      return UsageSnapshot.failure(LT('无法解析 v0 计费类型'));
     }
     const data = asObj(billing['data']);
     if (data == null) {
-      return UsageSnapshot.failure('v0 计费数据缺失');
+      return UsageSnapshot.failure(LT('v0 计费数据缺失'));
     }
 
     let primary: RateWindow | null = null;
@@ -177,7 +178,7 @@ class V0Provider implements UsageProvider {
     const rows: ProviderDetailRow[] = [];
     rows.push({
       label: 'Billing remaining',
-      value: billingRemaining == null ? '不可用' : billingRemaining.toFixed(2),
+      value: billingRemaining == null ? LT('不可用') : billingRemaining.toFixed(2),
       secondary: billingRemaining == null ? `limit ${billingLimit.toFixed(2)}` : `of ${billingLimit.toFixed(2)}`,
     });
     if (onDemandBalance != null) {
@@ -185,7 +186,7 @@ class V0Provider implements UsageProvider {
     }
     rows.push({
       label: 'Rate-limit remaining',
-      value: rateRemaining == null ? '不可用' : rateRemaining.toFixed(2),
+      value: rateRemaining == null ? LT('不可用') : rateRemaining.toFixed(2),
       secondary: rateRemaining == null ? `limit ${rateLimit.toFixed(2)}` : `of ${rateLimit.toFixed(2)}`,
     });
     rows.push({ label: 'Billing type', value: billingType });
@@ -238,14 +239,14 @@ class AmpProvider implements UsageProvider {
     title: 'Amp',
     authKind: AuthKind.API_KEY,
     accentColor: '#DC2626',
-    authHint: '粘贴 Amp access token（ampcode.com 设置页的 AMP_API_KEY）',
+    authHint: LT('粘贴 Amp access token（ampcode.com 设置页的 AMP_API_KEY）'),
     authUrl: 'https://ampcode.com/settings',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 Amp access token');
+      return UsageSnapshot.failure(LT('未配置 Amp access token'));
     }
     const resp = await Http.post(
       'https://ampcode.com/api/internal?userDisplayBalanceInfo',
@@ -261,21 +262,21 @@ class AmpProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('Amp 响应解析失败');
+      return UsageSnapshot.failure(LT('Amp 响应解析失败'));
     }
     if (!bool(root, 'ok')) {
       const err = asObj(root['error']);
       const code = err != null ? str(err, 'code') : '';
       if (code === 'auth-required') {
-        return UsageSnapshot.failure('Amp access token 无效或已过期');
+        return UsageSnapshot.failure(LT('Amp access token 无效或已过期'));
       }
       const message = err != null ? str(err, 'message') : '';
-      return UsageSnapshot.failure(message.length > 0 ? message : 'Amp 查询失败');
+      return UsageSnapshot.failure(message.length > 0 ? message : LT('Amp 查询失败'));
     }
     const result = asObj(root['result']);
     const displayText = result != null ? str(result, 'displayText') : '';
     if (displayText.length === 0) {
-      return UsageSnapshot.failure('Amp 响应缺少用量文本');
+      return UsageSnapshot.failure(LT('Amp 响应缺少用量文本'));
     }
     return AmpProvider.build(displayText);
   }
@@ -399,7 +400,7 @@ class AmpProvider implements UsageProvider {
     }
 
     if (p.freeQuota < 0 && p.plan.length === 0 && p.individualCredits < 0 && p.workspaceNames.length === 0) {
-      return UsageSnapshot.failure('无法解析 Amp 用量数据');
+      return UsageSnapshot.failure(LT('无法解析 Amp 用量数据'));
     }
 
     // 免费额度窗口
@@ -531,7 +532,7 @@ class AzureOpenAIProvider implements UsageProvider {
     title: 'Azure OpenAI',
     authKind: AuthKind.API_KEY,
     accentColor: '#0078D4',
-    authHint: '粘贴 Azure OpenAI API Key；Endpoint / Deployment 填在下方输入框',
+    authHint: LT('粘贴 Azure OpenAI API Key；Endpoint / Deployment 填在下方输入框'),
     authUrl: 'https://portal.azure.com',
   };
 
@@ -541,16 +542,16 @@ class AzureOpenAIProvider implements UsageProvider {
     const deployment = extraValue(setting.extraConfig, 'deployment').trim();
     let apiVersion = extraValue(setting.extraConfig, 'apiVersion').trim();
     if (apiKey.length === 0) {
-      return UsageSnapshot.failure('未配置 Azure OpenAI API Key');
+      return UsageSnapshot.failure(LT('未配置 Azure OpenAI API Key'));
     }
     if (endpointRaw.length === 0) {
-      return UsageSnapshot.failure('未配置 Azure 端点（Endpoint）');
+      return UsageSnapshot.failure(LT('未配置 Azure 端点（Endpoint）'));
     }
     if (deployment.length === 0) {
-      return UsageSnapshot.failure('未配置 Deployment 名称');
+      return UsageSnapshot.failure(LT('未配置 Deployment 名称'));
     }
     if (!endpointRaw.startsWith('https://')) {
-      return UsageSnapshot.failure('Azure 端点必须是 HTTPS 地址');
+      return UsageSnapshot.failure(LT('Azure 端点必须是 HTTPS 地址'));
     }
     if (apiVersion.length === 0) {
       apiVersion = '2024-10-21';
@@ -580,12 +581,12 @@ class AzureOpenAIProvider implements UsageProvider {
     const rows: ProviderDetailRow[] = [
       { label: 'Deployment', value: deployment },
       { label: 'Endpoint', value: host },
-      { label: 'API 版本', value: apiVersion },
+      { label: LT('API 版本'), value: apiVersion },
     ];
     if (model.length > 0) {
       rows.push({ label: 'Model', value: model });
     }
-    rows.push({ label: '校验请求', value: detail });
+    rows.push({ label: LT('校验请求'), value: detail });
     snap.details = [{ title: 'Azure OpenAI', rows: rows }];
     snap.identity = { accountEmail: '', accountOrganization: host, loginMethod: `Deployment: ${deployment}` };
     return snap;
@@ -615,14 +616,14 @@ class OllamaProvider implements UsageProvider {
     title: 'Ollama',
     authKind: AuthKind.API_KEY,
     accentColor: '#111111',
-    authHint: '粘贴 ollama.com 的 API Key（ollama.com/settings/keys）',
+    authHint: LT('粘贴 ollama.com 的 API Key（ollama.com/settings/keys）'),
     authUrl: 'https://ollama.com/settings/keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 Ollama API Key');
+      return UsageSnapshot.failure(LT('未配置 Ollama API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -637,7 +638,7 @@ class OllamaProvider implements UsageProvider {
       'user-agent': 'CodexBar/1.0',
     }, '{"query":""}');
     if (probe.code === 401 || probe.code === 403) {
-      return UsageSnapshot.failure('Ollama API Key 无效或已撤销');
+      return UsageSnapshot.failure(LT('Ollama API Key 无效或已撤销'));
     }
     if (!probe.ok && probe.code !== 400) {
       return UsageSnapshot.failure(probe.errorText());
@@ -645,7 +646,7 @@ class OllamaProvider implements UsageProvider {
 
     const resp = await Http.get('https://ollama.com/api/tags', headers);
     if (resp.code === 401 || resp.code === 403) {
-      return UsageSnapshot.failure('Ollama API Key 无效或已撤销');
+      return UsageSnapshot.failure(LT('Ollama API Key 无效或已撤销'));
     }
     if (!resp.ok) {
       return UsageSnapshot.failure(resp.errorText());
@@ -658,7 +659,7 @@ class OllamaProvider implements UsageProvider {
     }
     const snap = UsageSnapshot.success(null, null, null);
     snap.primaryLabel = 'Models';
-    snap.details = [{ title: 'Ollama Cloud', rows: [{ label: '模型数量', value: `${count}` }] }];
+    snap.details = [{ title: 'Ollama Cloud', rows: [{ label: LT('模型数量'), value: `${count}` }] }];
     snap.identity = { accountEmail: '', accountOrganization: '', loginMethod: 'API key' };
     return snap;
   }
@@ -740,14 +741,14 @@ class CopilotProvider implements UsageProvider {
     title: 'Copilot',
     authKind: AuthKind.API_KEY,
     accentColor: '#A855F7',
-    authHint: '粘贴 GitHub Personal Access Token（需 copilot 读权限）',
+    authHint: LT('粘贴 GitHub Personal Access Token（需 copilot 读权限）'),
     authUrl: 'https://github.com/settings/tokens',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 GitHub Token');
+      return UsageSnapshot.failure(LT('未配置 GitHub Token'));
     }
     const host = CopilotProvider.apiHost(extraValue(setting.extraConfig, 'enterpriseHost'));
     const resp = await Http.get(`https://${host}/copilot_internal/user`, {
@@ -759,14 +760,14 @@ class CopilotProvider implements UsageProvider {
       'x-github-api-version': '2025-04-01',
     });
     if (resp.code === 401 || resp.code === 403) {
-      return UsageSnapshot.failure('GitHub Token 无效或缺少 Copilot 权限');
+      return UsageSnapshot.failure(LT('GitHub Token 无效或缺少 Copilot 权限'));
     }
     if (!resp.ok) {
       return UsageSnapshot.failure(resp.errorText());
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('Copilot 响应解析失败');
+      return UsageSnapshot.failure(LT('Copilot 响应解析失败'));
     }
 
     const snapshots = asObj(root['quota_snapshots']);
@@ -792,7 +793,7 @@ class CopilotProvider implements UsageProvider {
     } else if (chatWindow != null) {
       secondary = chatWindow;
     } else if (!tokenBased && !unlimited) {
-      return UsageSnapshot.failure('Copilot 配额数据不可用');
+      return UsageSnapshot.failure(LT('Copilot 配额数据不可用'));
     }
 
     const snap = UsageSnapshot.success(primary, secondary, null);

@@ -25,6 +25,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 const ALIBABA_ACTION = 'zeldaEasy.broadscope-bailian.codingPlan.queryCodingPlanInstanceInfoV2';
 
@@ -106,17 +107,17 @@ function findDictWithAnyKey(value: Json, keys: string[], depth: number): Record<
 class AlibabaCodingPlanProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'alibaba-coding',
-    title: '阿里云百炼编码计划',
+    title: LT('阿里云百炼编码计划'),
     authKind: AuthKind.API_KEY,
     accentColor: '#FF6A00',
-    authHint: '粘贴百炼/DashScope API Key（国际站或中国站均可）',
+    authHint: LT('粘贴百炼/DashScope API Key（国际站或中国站均可）'),
     authUrl: 'https://bailian.console.aliyun.com/cn-beijing/?tab=coding-plan',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     // 第二凭证可指定站点：intl / cn（默认先国际站后中国站）
     const site = setting.credential2.trim().toLowerCase();
@@ -156,7 +157,7 @@ class AlibabaCodingPlanProvider implements UsageProvider {
       ], 0);
     }
     if (quota == null) {
-      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '未获取到配额（Key 可能无效）');
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('未获取到配额（Key 可能无效）'));
     }
 
     const windowFrom = (usedKey: string, totalKey: string): RateWindow | null => {
@@ -209,18 +210,18 @@ class AlibabaCodingPlanProvider implements UsageProvider {
     const rows: ProviderDetailRow[] = [];
     const planName = optStr(quota, 'planName') ?? optStr(quota, 'instanceName');
     if (planName != null) {
-      rows.push({ label: '套餐', value: planName });
+      rows.push({ label: LT('套餐'), value: planName });
     }
     const instanceStatus = optStr(quota, 'instanceStatus');
     if (instanceStatus != null) {
-      rows.push({ label: '实例状态', value: instanceStatus });
+      rows.push({ label: LT('实例状态'), value: instanceStatus });
     }
     const expireTime = optStr(quota, 'expireTime');
     if (expireTime != null) {
-      rows.push({ label: '到期时间', value: expireTime });
+      rows.push({ label: LT('到期时间'), value: expireTime });
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '实例', rows: rows };
+      const section: ProviderDetailSection = { title: LT('实例'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -304,14 +305,14 @@ class FactoryProvider implements UsageProvider {
     title: 'Factory AI',
     authKind: AuthKind.API_KEY,
     accentColor: '#E8833A',
-    authHint: '粘贴 Factory API Key（fk-… 开头）',
+    authHint: LT('粘贴 Factory API Key（fk-… 开头）'),
     authUrl: 'https://factory.ai/account',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -406,13 +407,13 @@ class FactoryProvider implements UsageProvider {
           lastDay = str(day, 'date', lastDay);
         }
         const rows: ProviderDetailRow[] = [
-          { label: '可计费 tokens', value: Format.compact(billable) },
-          { label: '输入 / 输出', value: `${Format.compact(input)} / ${Format.compact(output)}` },
+          { label: LT('可计费 tokens'), value: Format.compact(billable) },
+          { label: LT('输入 / 输出'), value: `${Format.compact(input)} / ${Format.compact(output)}` },
         ];
         if (lastDay.length > 0) {
-          rows.push({ label: '统计截止', value: lastDay });
+          rows.push({ label: LT('统计截止'), value: lastDay });
         }
-        sections.push({ title: '近30天用量', rows: rows });
+        sections.push({ title: LT('近30天用量'), rows: rows });
       }
     } else {
       analyticsFail = aResp.errorText();
@@ -423,7 +424,7 @@ class FactoryProvider implements UsageProvider {
       return UsageSnapshot.failure(limitsFail.length > 0 ? limitsFail : analyticsFail);
     }
     if (limitsFail.length > 0 && snap.primary == null) {
-      sections.push({ title: '提示', rows: [{ label: '限额查询失败', value: limitsFail }] });
+      sections.push({ title: LT('提示'), rows: [{ label: LT('限额查询失败'), value: limitsFail }] });
     }
     snap.details = sections;
     return snap;

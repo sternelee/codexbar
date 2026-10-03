@@ -27,6 +27,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 function isoToMs2(iso: string | null): number {
   if (iso == null || iso.length === 0) {
@@ -366,14 +367,14 @@ class MiniMaxProvider implements UsageProvider {
     title: 'MiniMax',
     authKind: AuthKind.API_KEY,
     accentColor: '#F5222D',
-    authHint: '粘贴 MiniMax API Token（平台账户 API 密钥）；可选第二栏填平台会话 Cookie 以查看 Billing history',
+    authHint: LT('粘贴 MiniMax API Token（平台账户 API 密钥）；可选第二栏填平台会话 Cookie 以查看 Billing history'),
     authUrl: 'https://platform.minimaxi.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const token = setting.credential.trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 API Token');
+      return UsageSnapshot.failure(LT('未配置 API Token'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${token}`,
@@ -402,7 +403,7 @@ class MiniMaxProvider implements UsageProvider {
       }
     }
     if (root == null) {
-      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '未获取到用量数据');
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('未获取到用量数据'));
     }
 
     const intervalRemaining = firstNum2(root, ['current_interval_remaining_percent']);
@@ -427,15 +428,15 @@ class MiniMaxProvider implements UsageProvider {
 
     const rows: ProviderDetailRow[] = [];
     if (intervalTotal != null) {
-      rows.push({ label: '周期总量', value: `${intervalTotal}` });
+      rows.push({ label: LT('周期总量'), value: `${intervalTotal}` });
     }
     if (weeklyTotal != null) {
-      rows.push({ label: '每周总量', value: `${weeklyTotal}` });
+      rows.push({ label: LT('每周总量'), value: `${weeklyTotal}` });
     }
     const snap = UsageSnapshot.success(primary, secondary, null);
     const sections: ProviderDetailSection[] = [];
     if (rows.length > 0) {
-      sections.push({ title: '配额', rows: rows });
+      sections.push({ title: LT('配额'), rows: rows });
     }
 
     // Billing history（对照 Swift fetchBillingSummary）：需要网页会话 Cookie，尽力而为
@@ -543,17 +544,17 @@ class MiniMaxProvider implements UsageProvider {
 class MiMoProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'mimo',
-    title: 'MiMo (小米)',
+    title: LT('MiMo (小米)'),
     authKind: AuthKind.SESSION,
     accentColor: '#FF6900',
-    authHint: '粘贴 platform.xiaomimimo.com 的会话 Cookie',
+    authHint: LT('粘贴 platform.xiaomimimo.com 的会话 Cookie'),
     authUrl: 'https://platform.xiaomimimo.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -569,7 +570,7 @@ class MiMoProvider implements UsageProvider {
     const balRoot = asObj(balResp.json());
     const balData = balRoot != null ? asObj(balRoot['data']) : null;
     if (balData == null) {
-      return UsageSnapshot.failure('余额响应解析失败');
+      return UsageSnapshot.failure(LT('余额响应解析失败'));
     }
     const balance = firstNum2(balData, ['balance']) ?? 0;
     const currency = str(balData, 'currency', 'CNY');
@@ -604,7 +605,7 @@ class MiMoProvider implements UsageProvider {
           if (it == null) {
             continue;
           }
-          rows.push({ label: str(it, 'name', `项目${i + 1}`), value: `${Math.round(num(it, 'used', 0))} / ${Math.round(num(it, 'limit', 0))}` });
+          rows.push({ label: str(it, 'name', `${LT('项目')}${i + 1}`), value: `${Math.round(num(it, 'used', 0))} / ${Math.round(num(it, 'limit', 0))}` });
         }
       }
     }
@@ -615,7 +616,7 @@ class MiMoProvider implements UsageProvider {
       if (dData != null) {
         const planCode = optStr(dData, 'planCode');
         if (planCode != null && planCode.length > 0) {
-          rows.push({ label: '套餐', value: planCode });
+          rows.push({ label: LT('套餐'), value: planCode });
         }
       }
     }
@@ -637,14 +638,14 @@ class MistralProvider implements UsageProvider {
     title: 'Mistral',
     authKind: AuthKind.SESSION,
     accentColor: '#FA500F',
-    authHint: '粘贴 admin.mistral.ai 的会话 Cookie',
+    authHint: LT('粘贴 admin.mistral.ai 的会话 Cookie'),
     authUrl: 'https://admin.mistral.ai/organization/billing',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -658,7 +659,7 @@ class MistralProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const wallet = firstNum2(root, ['walletAmount', 'wallet_amount']) ?? 0;
     const notes = firstNum2(root, ['creditNotesAmount', 'credit_notes_amount']) ?? 0;
@@ -670,11 +671,11 @@ class MistralProvider implements UsageProvider {
       displayText: Format.money(wallet, currency),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '钱包余额', value: Format.money(wallet, currency) },
-      { label: '信用额度', value: Format.money(notes, currency) },
-      { label: '进行中消费', value: Format.money(ongoing, currency) },
+      { label: LT('钱包余额'), value: Format.money(wallet, currency) },
+      { label: LT('信用额度'), value: Format.money(notes, currency) },
+      { label: LT('进行中消费'), value: Format.money(ongoing, currency) },
     ];
-    const section: ProviderDetailSection = { title: '余额明细', rows: rows };
+    const section: ProviderDetailSection = { title: LT('余额明细'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -690,14 +691,14 @@ class KiloProvider implements UsageProvider {
     title: 'Kilo Code',
     authKind: AuthKind.API_KEY,
     accentColor: '#0D9488',
-    authHint: '粘贴 Kilo API Key；可选第二栏填组织 ID',
+    authHint: LT('粘贴 Kilo API Key；可选第二栏填组织 ID'),
     authUrl: 'https://app.kilo.ai',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -717,7 +718,7 @@ class KiloProvider implements UsageProvider {
     }
     const entries = asArray(resp.json());
     if (entries == null || entries.length < 2) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 第 0 项：信用块；第 1 项：Kilo Pass 状态
     const jsonOf = (entry: Json): Record<string, Json> | null => {
@@ -738,13 +739,13 @@ class KiloProvider implements UsageProvider {
         snap.primary = makeWindow(Math.min(100, (used / total) * 100), 0, true);
       }
       if (total != null) {
-        rows.push({ label: '总额度', value: `${Math.round(total)}` });
+        rows.push({ label: LT('总额度'), value: `${Math.round(total)}` });
       }
       if (used != null) {
-        rows.push({ label: '已使用', value: `${Math.round(used)}` });
+        rows.push({ label: LT('已使用'), value: `${Math.round(used)}` });
       }
       if (remaining != null) {
-        rows.push({ label: '剩余', value: `${Math.round(remaining)}` });
+        rows.push({ label: LT('剩余'), value: `${Math.round(remaining)}` });
       }
     }
     const blocksJson = jsonOf(entries[0]);
@@ -759,15 +760,15 @@ class KiloProvider implements UsageProvider {
         const available = firstNum2(b, ['available', 'remaining']);
         if (amount != null) {
           const line = available != null ? `${Math.round(available)} / ${Math.round(amount)}` : `${Math.round(amount)}`;
-          rows.push({ label: `信用块 #${i + 1}`, value: line });
+          rows.push({ label: `${LT('信用块 #')}${i + 1}`, value: line });
         }
       }
     }
     if (snap.primary == null && rows.length === 0) {
-      return UsageSnapshot.failure('未识别到额度数据');
+      return UsageSnapshot.failure(LT('未识别到额度数据'));
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '额度明细', rows: rows };
+      const section: ProviderDetailSection = { title: LT('额度明细'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -784,14 +785,14 @@ class PoeProvider implements UsageProvider {
     title: 'Poe',
     authKind: AuthKind.API_KEY,
     accentColor: '#5D5CDE',
-    authHint: '粘贴 Poe API Key（poe.com/api/keys 页面创建）',
+    authHint: LT('粘贴 Poe API Key（poe.com/api/keys 页面创建）'),
     authUrl: 'https://poe.com/api/keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -803,7 +804,7 @@ class PoeProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const balance = firstNum2(root, ['current_point_balance']) ?? 0;
     const compact = (value: number): string => value >= 1000
@@ -1013,14 +1014,14 @@ class T3ChatProvider implements UsageProvider {
     title: 'T3 Chat',
     authKind: AuthKind.SESSION,
     accentColor: '#F56647',
-    authHint: '粘贴 t3.chat 的会话 Cookie',
+    authHint: LT('粘贴 t3.chat 的会话 Cookie'),
     authUrl: 'https://t3.chat',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const input = encodeURIComponent('{"0":{"json":{"sessionId":null},"meta":{"values":{"sessionId":["undefined"]}}}}');
     const headers: Record<string, string> = {
@@ -1048,7 +1049,7 @@ class T3ChatProvider implements UsageProvider {
       }
     }
     if (data == null) {
-      return UsageSnapshot.failure('响应中缺少客户数据');
+      return UsageSnapshot.failure(LT('响应中缺少客户数据'));
     }
 
     const pct = (v: Json): number => {
@@ -1077,18 +1078,18 @@ class T3ChatProvider implements UsageProvider {
     const sub = asObj(data['subscription']);
     const rawPlan = (sub != null ? optStr(sub, 'productName') : null) ?? optStr(data, 'subTier');
     if (rawPlan != null && rawPlan.length > 0) {
-      rows.push({ label: '套餐', value: rawPlan });
+      rows.push({ label: LT('套餐'), value: rawPlan });
     }
     const lifetime = optNum(data, 'lifetimeBalance');
     if (lifetime != null) {
-      rows.push({ label: '历史消息余额', value: `${lifetime}` });
+      rows.push({ label: LT('历史消息余额'), value: `${lifetime}` });
     }
     const band = optStr(data, 'usageBand');
     if (band != null && band.length > 0) {
-      rows.push({ label: '用量档位', value: band });
+      rows.push({ label: LT('用量档位'), value: band });
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '订阅', rows: rows };
+      const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -1116,7 +1117,7 @@ function zaiWindowMinutes(unit: number, number: number): number {
 
 /** limit 窗口的时长文案（unit: 1=天 3=小时 5=分钟 6=周），用于区分同类配额的多个窗口 */
 function zaiWindowDurationLabel(unit: number, number: number): string {
-  const unitNames: Record<number, string> = { 1: '天', 3: '小时', 5: '分钟', 6: '周' };
+  const unitNames: Record<number, string> = { 1: LT('天'), 3: LT('小时'), 5: LT('分钟'), 6: LT('周') };
   const name = unitNames[unit];
   return name != null && number > 0 ? `${number} ${name}` : '';
 }
@@ -1133,7 +1134,7 @@ export function zaiDisambiguateWindowTitles(windows: NamedRateWindow[], labels: 
   }
   for (let i = 0; i < windows.length; i++) {
     if (titleCounts[windows[i].title] > 1 && labels[i] != null && labels[i].length > 0) {
-      windows[i].title = `${windows[i].title}（${labels[i]}）`;
+      windows[i].title = `${windows[i].title}${LT('（')}${labels[i]}${LT('）')}`;
     }
   }
 }
@@ -1247,20 +1248,20 @@ export function zaiLimitWindow(limit: Record<string, Json>): NamedRateWindow | n
 
   let title: string;
   if (type === 'TIME_LIMIT') {
-    const unitNames: Record<number, string> = { 1: '天', 3: '小时', 5: '分钟', 6: '周' };
+    const unitNames: Record<number, string> = { 1: LT('天'), 3: LT('小时'), 5: LT('分钟'), 6: LT('周') };
     const name = unitNames[unit];
-    title = number === 5 && unit === 5 ? '5 小时窗口' : name != null ? `${number} ${name}窗口` : '时间窗口';
+    title = number === 5 && unit === 5 ? LT('5 小时窗口') : name != null ? `${number} ${name}${LT('窗口')}` : LT('时间窗口');
   } else if (type === 'TOKENS_LIMIT') {
-    title = 'Token 配额';
+    title = LT('Token 配额');
   } else {
-    title = 'Credit 配额';
+    title = LT('Credit 配额');
   }
   const rows: ProviderDetailRow[] = [];
   if (usage != null) {
-    rows.push({ label: '限额', value: `${usage}` });
+    rows.push({ label: LT('限额'), value: `${usage}` });
   }
   if (remaining != null) {
-    rows.push({ label: '剩余', value: `${remaining}` });
+    rows.push({ label: LT('剩余'), value: `${remaining}` });
   }
   const w = makeWindow(percent, resets, true);
   return { id: `zai_${type}_${unit}_${number}`, title: title, window: w };
@@ -1269,17 +1270,17 @@ export function zaiLimitWindow(limit: Record<string, Json>): NamedRateWindow | n
 class ZaiProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'zai',
-    title: 'z.ai / GLM 智谱',
+    title: LT('z.ai / GLM 智谱'),
     authKind: AuthKind.API_KEY,
     accentColor: '#3859FF',
-    authHint: '粘贴 z.ai 或 BigModel/GLM 的 API Key',
+    authHint: LT('粘贴 z.ai 或 BigModel/GLM 的 API Key'),
     authUrl: 'https://z.ai',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     // 优先国际站 api.z.ai，401/403/404 时回退开放平台
     const hosts = ['https://api.z.ai', 'https://open.bigmodel.cn'];
@@ -1301,7 +1302,7 @@ class ZaiProvider implements UsageProvider {
             break;
           }
         }
-        lastError = '响应格式不符';
+        lastError = LT('响应格式不符');
       } else {
         lastError = resp.errorText();
       }
@@ -1330,11 +1331,11 @@ class ZaiProvider implements UsageProvider {
     let secondary: RateWindow | null = null;
     for (let i = 0; i < windows.length; i++) {
       const title = windows[i].title;
-      if (primary == null && title === '5 小时窗口') {
+      if (primary == null && title === LT('5 小时窗口')) {
         primary = windows[i].window;
         continue;
       }
-      if (secondary == null && title.indexOf('周') >= 0) {
+      if (secondary == null && title.indexOf(LT('周')) >= 0) {
         secondary = windows[i].window;
       }
     }

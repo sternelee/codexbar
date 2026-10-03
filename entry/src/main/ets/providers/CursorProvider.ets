@@ -36,6 +36,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 const CURSOR_WEB_BASE = 'https://cursor.com';
 const CURSOR_API_BASE = 'https://api.cursor.com';
@@ -366,14 +367,14 @@ class CursorProvider implements UsageProvider {
     title: 'Cursor',
     authKind: AuthKind.SESSION,
     accentColor: '#00BFA5',
-    authHint: '粘贴 Cursor 网页会话 Cookie（WorkosCursorSessionToken=…），或官方 API Key（crsr_…）',
+    authHint: LT('粘贴 Cursor 网页会话 Cookie（WorkosCursorSessionToken=…），或官方 API Key（crsr_…）'),
     authUrl: 'https://cursor.com/dashboard?tab=usage',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const credential = setting.credential.trim();
     if (credential.length === 0) {
-      return UsageSnapshot.failure('未配置凭证');
+      return UsageSnapshot.failure(LT('未配置凭证'));
     }
     if (isAdminKey(credential)) {
       return this.fetchWithAdminKey(credential);
@@ -394,14 +395,14 @@ class CursorProvider implements UsageProvider {
 
     const summaryResp = await Http.get(`${CURSOR_WEB_BASE}/api/usage-summary`, headers);
     if (summaryResp.code === 401 || summaryResp.code === 403) {
-      return UsageSnapshot.failure('凭证无效或已过期');
+      return UsageSnapshot.failure(LT('凭证无效或已过期'));
     }
     if (!summaryResp.ok) {
       return UsageSnapshot.failure(summaryResp.errorText());
     }
     const summary = cursorParseSummary(summaryResp.json());
     if (summary == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
 
     // 可选项：账号信息 / 旧版请求配额 / Grok Bot 窗口（失败都不影响主数据）
@@ -527,11 +528,11 @@ class CursorProvider implements UsageProvider {
     }
     const auto = clampPct(s.autoPercent);
     if (auto != null) {
-      rows.push({ label: 'Auto + Composer', value: `${Format.percent(auto)} 已用` });
+      rows.push({ label: 'Auto + Composer', value: `${Format.percent(auto)}${LT(' 已用')}` });
     }
     const api = clampPct(s.apiPercent);
     if (api != null) {
-      rows.push({ label: 'API (named models)', value: `${Format.percent(api)} 已用` });
+      rows.push({ label: 'API (named models)', value: `${Format.percent(api)}${LT(' 已用')}` });
     }
     if (s.onDemandUsedCents > 0 || (s.onDemandLimitCents ?? 0) > 0) {
       const used = cents(s.onDemandUsedCents);
@@ -572,10 +573,10 @@ class CursorProvider implements UsageProvider {
     // 1) 团队目录：既是密钥校验，也是成员数/身份来源
     const membersResp = await Http.get(`${CURSOR_API_BASE}/teams/members`, headers);
     if (membersResp.code === 401) {
-      return UsageSnapshot.failure('API Key 无效');
+      return UsageSnapshot.failure(LT('API Key 无效'));
     }
     if (membersResp.code === 403) {
-      return UsageSnapshot.failure('API Key 权限不足（Admin API 需要团队管理权限）');
+      return UsageSnapshot.failure(LT('API Key 权限不足（Admin API 需要团队管理权限）'));
     }
     if (!membersResp.ok) {
       return UsageSnapshot.failure(membersResp.errorText());
@@ -598,7 +599,7 @@ class CursorProvider implements UsageProvider {
     const daily = dailyResp.ok ? cursorParseDailyUsage(dailyResp.json()) : [];
 
     if (spendMembers.length === 0 && daily.length === 0) {
-      return UsageSnapshot.failure(spendResp.ok ? '响应解析失败' : spendResp.errorText());
+      return UsageSnapshot.failure(spendResp.ok ? LT('响应解析失败') : spendResp.errorText());
     }
 
     let spendCents = 0;

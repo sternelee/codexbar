@@ -37,6 +37,7 @@ import {
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
+import { LT } from '../common/I18n';
 
 function isoMs3(iso: string | null): number {
   if (iso == null || iso.length === 0) {
@@ -125,14 +126,14 @@ class ElevenLabsProvider implements UsageProvider {
     title: 'ElevenLabs',
     authKind: AuthKind.API_KEY,
     accentColor: '#000000',
-    authHint: '粘贴 ElevenLabs API Key',
+    authHint: LT('粘贴 ElevenLabs API Key'),
     authUrl: 'https://elevenlabs.io/app/settings/api-keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = { 'xi-api-key': key, 'accept': 'application/json' };
     const resp = await Http.get('https://api.elevenlabs.io/v1/user/subscription', headers);
@@ -141,7 +142,7 @@ class ElevenLabsProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const used = num(root, 'character_count', 0);
     const limit = num(root, 'character_limit', 0);
@@ -175,10 +176,10 @@ class ElevenLabsProvider implements UsageProvider {
       loginMethod: elevenLabsLoginMethod(tier, optStr(root, 'status')),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '字符用量', value: `${Format.compact(used)} / ${Format.compact(limit)}` },
+      { label: LT('字符用量'), value: `${Format.compact(used)} / ${Format.compact(limit)}` },
     ];
     if (tier != null) {
-      rows.push({ label: '套餐', value: tier });
+      rows.push({ label: LT('套餐'), value: tier });
     }
     for (let i = 0; i < slots.length; i++) {
       const s = slots[i];
@@ -186,7 +187,7 @@ class ElevenLabsProvider implements UsageProvider {
         rows.push({ label: s.title, value: `${s.used} / ${s.limit}` });
       }
     }
-    const section: ProviderDetailSection = { title: '订阅', rows: rows };
+    const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -202,14 +203,14 @@ class FireworksProvider implements UsageProvider {
     title: 'Fireworks',
     authKind: AuthKind.API_KEY,
     accentColor: '#FF5C00',
-    authHint: '粘贴 Fireworks API Key',
+    authHint: LT('粘贴 Fireworks API Key'),
     authUrl: 'https://app.fireworks.ai/settings/api-keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -222,12 +223,12 @@ class FireworksProvider implements UsageProvider {
     const accRoot = asObj(accountsResp.json());
     const accounts = accRoot != null ? asArray(accRoot['accounts']) : null;
     if (accounts == null || accounts.length === 0) {
-      return UsageSnapshot.failure('未找到账户');
+      return UsageSnapshot.failure(LT('未找到账户'));
     }
     const first = asObj(accounts[0]);
     let slug = first != null ? str(first, 'name') : '';
     if (slug.length === 0) {
-      return UsageSnapshot.failure('无法解析账户');
+      return UsageSnapshot.failure(LT('无法解析账户'));
     }
     if (slug.indexOf('accounts/') === 0) {
       slug = slug.substring('accounts/'.length);
@@ -273,10 +274,10 @@ class FireworksProvider implements UsageProvider {
       displayText: Format.money(total, currency),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '账户', value: slug },
-      { label: '近 30 天消费', value: Format.money(total, currency) },
+      { label: LT('账户'), value: slug },
+      { label: LT('近 30 天消费'), value: Format.money(total, currency) },
     ];
-    const section: ProviderDetailSection = { title: '计费', rows: rows };
+    const section: ProviderDetailSection = { title: LT('计费'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -385,14 +386,14 @@ class NeuralWattProvider implements UsageProvider {
     title: 'NeuralWatt',
     authKind: AuthKind.API_KEY,
     accentColor: '#3B82F6',
-    authHint: '粘贴 NeuralWatt API Key',
+    authHint: LT('粘贴 NeuralWatt API Key'),
     authUrl: 'https://portal.neuralwatt.com/dashboard',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -404,7 +405,7 @@ class NeuralWattProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // /v1/quota 的结构（对照插件 neuralwatt.js）：余额在 balance.*、订阅额度在 subscription.*、
     // 密钥限额在 key.allowance.*；root 上平铺的旧字段作为回退，兼容早期部署。
@@ -424,25 +425,25 @@ class NeuralWattProvider implements UsageProvider {
         : (q.accountingMethod.length > 0 ? titleCaseWords(q.accountingMethod) : ''),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '额度余量', value: Format.money(q.remainingUSD, 'USD') },
-      { label: '已使用', value: Format.money(q.usedUSD, 'USD') },
+      { label: LT('额度余量'), value: Format.money(q.remainingUSD, 'USD') },
+      { label: LT('已使用'), value: Format.money(q.usedUSD, 'USD') },
     ];
     if (q.totalUSD > 0) {
-      rows.push({ label: '总额度', value: Format.money(q.totalUSD, 'USD') });
+      rows.push({ label: LT('总额度'), value: Format.money(q.totalUSD, 'USD') });
     }
     if (q.kwhIncluded > 0) {
       rows.push({
-        label: '订阅用电',
+        label: LT('订阅用电'),
         value: `${q.kwhConsumed} / ${q.kwhIncluded} kWh`,
       });
     }
     if (q.allowanceLimitUSD != null && q.allowanceLimitUSD > 0) {
       rows.push({
-        label: '密钥限额',
+        label: LT('密钥限额'),
         value: `${Format.money(q.allowanceSpentUSD ?? 0, 'USD')} / ${Format.money(q.allowanceLimitUSD, 'USD')}`,
       });
     }
-    const section: ProviderDetailSection = { title: '配额', rows: rows };
+    const section: ProviderDetailSection = { title: LT('配额'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -458,14 +459,14 @@ class IBMBobProvider implements UsageProvider {
     title: 'IBM Bob',
     authKind: AuthKind.API_KEY,
     accentColor: '#0F62FE',
-    authHint: '粘贴 IBM Bob API Key（JWT 或 Apikey）',
+    authHint: LT('粘贴 IBM Bob API Key（JWT 或 Apikey）'),
     authUrl: 'https://bob.ibm.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const isJwt = key.split('.').length === 3;
     const headers: Record<string, string> = {
@@ -479,11 +480,11 @@ class IBMBobProvider implements UsageProvider {
     const profile = asObj(profileResp.json());
     const instances = profile != null ? asArray(profile['instances']) : null;
     if (instances == null || instances.length === 0) {
-      return UsageSnapshot.failure('未返回订阅实例');
+      return UsageSnapshot.failure(LT('未返回订阅实例'));
     }
     const inst = asObj(instances[0]);
     if (inst == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const regionDomain = str(inst, 'region_domain', 'https://api.us-east.bob.ibm.com');
     const instanceId = str(inst, 'instance_id');
@@ -521,7 +522,7 @@ class IBMBobProvider implements UsageProvider {
         // label = teamName（与 instanceName 不同时用 "instanceName · teamName"），
         // value = "used / limit Bobcoins"（无上限时 "used Bobcoins used"），副文本为套餐名。
         const instanceName = optStr(inst, 'instance_name') ?? optStr(inst, 'name') ?? instanceId;
-        const tName = str(t, 'team_name', str(t, 'name', `团队 ${i + 1}`));
+        const tName = str(t, 'team_name', str(t, 'name', `${LT('团队 ')}${i + 1}`));
         const label = tName === instanceName ? tName : `${instanceName} · ${tName}`;
         rows.push({
           label: label,
@@ -562,14 +563,14 @@ class AiAndProvider implements UsageProvider {
     title: 'Ai&',
     authKind: AuthKind.API_KEY,
     accentColor: '#F59E0B',
-    authHint: '粘贴 Ai& API Key',
+    authHint: LT('粘贴 Ai& API Key'),
     authUrl: 'https://console.aiand.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -595,7 +596,7 @@ class AiAndProvider implements UsageProvider {
       }
       const root = asObj(resp.json());
       if (root == null) {
-        return UsageSnapshot.failure('响应解析失败');
+        return UsageSnapshot.failure(LT('响应解析失败'));
       }
       const data = asArray(root['data']);
       if (data != null) {
@@ -633,9 +634,9 @@ class AiAndProvider implements UsageProvider {
       displayText: Format.money(total, currency.length > 0 ? currency : 'USD'),
     };
     const rows: ProviderDetailRow[] = [
-      { label: '近 30 天消费', value: Format.money(total, currency.length > 0 ? currency : 'USD') },
+      { label: LT('近 30 天消费'), value: Format.money(total, currency.length > 0 ? currency : 'USD') },
     ];
-    const section: ProviderDetailSection = { title: '消费', rows: rows };
+    const section: ProviderDetailSection = { title: LT('消费'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -651,14 +652,14 @@ class CodebuffProvider implements UsageProvider {
     title: 'Codebuff',
     authKind: AuthKind.API_KEY,
     accentColor: '#84CC16',
-    authHint: '粘贴 Codebuff API Key',
+    authHint: LT('粘贴 Codebuff API Key'),
     authUrl: 'https://www.codebuff.com',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -671,7 +672,7 @@ class CodebuffProvider implements UsageProvider {
     }
     const uRoot = asObj(usageResp.json());
     if (uRoot == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const quota = asObj(uRoot['quota']) ?? uRoot;
     const used = getNum3(quota, ['used']) ?? 0;
@@ -692,18 +693,18 @@ class CodebuffProvider implements UsageProvider {
         const tier = optStr(sData, 'tier');
         const status = optStr(sData, 'status');
         if (tier != null) {
-          rows.push({ label: '套餐', value: tier });
+          rows.push({ label: LT('套餐'), value: tier });
         }
         if (status != null) {
-          rows.push({ label: '状态', value: status });
+          rows.push({ label: LT('状态'), value: status });
         }
       }
     }
     if (remaining != null) {
-      rows.push({ label: '剩余', value: `${Math.round(remaining)}` });
+      rows.push({ label: LT('剩余'), value: `${Math.round(remaining)}` });
     }
     if (rows.length > 0) {
-      const section: ProviderDetailSection = { title: '订阅', rows: rows };
+      const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
       snap.details = [section];
     }
     return snap;
@@ -786,7 +787,7 @@ class Sub2ApiProvider implements UsageProvider {
     title: 'Sub2API',
     authKind: AuthKind.API_KEY,
     accentColor: '#0EA5E9',
-    authHint: '第二栏填 Sub2API 服务地址；首栏填 API Key',
+    authHint: LT('第二栏填 Sub2API 服务地址；首栏填 API Key'),
     authUrl: 'https://github.com/sub2api',
   };
 
@@ -794,7 +795,7 @@ class Sub2ApiProvider implements UsageProvider {
     const key = setting.credential.trim();
     const base = setting.credential2.trim().replace(/\/+$/, '');
     if (key.length === 0 || base.length === 0) {
-      return UsageSnapshot.failure('需要服务地址与 API Key');
+      return UsageSnapshot.failure(LT('需要服务地址与 API Key'));
     }
     const headers: Record<string, string> = {
       'authorization': `Bearer ${key}`,
@@ -806,10 +807,10 @@ class Sub2ApiProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     if (root['isValid'] != null && !bool(root, 'isValid')) {
-      return UsageSnapshot.failure('API Key 无效或未分配分组');
+      return UsageSnapshot.failure(LT('API Key 无效或未分配分组'));
     }
     const unit = str(root, 'unit', 'USD');
     const windows = sub2APIWindows(root);
@@ -830,15 +831,15 @@ class Sub2ApiProvider implements UsageProvider {
     const rows: ProviderDetailRow[] = [];
     const planName = optStr(root, 'planName');
     if (planName != null) {
-      rows.push({ label: '套餐', value: planName });
+      rows.push({ label: LT('套餐'), value: planName });
       // 身份（对照插件：organization 与 loginMethod 都是 planName）
       snap.identity = { accountEmail: '', accountOrganization: planName, loginMethod: planName };
     }
     if (sub != null) {
       const pairs: string[][] = [
-        ['今日', 'daily_usage_usd', 'daily_limit_usd'],
-        ['本周', 'weekly_usage_usd', 'weekly_limit_usd'],
-        ['本月', 'monthly_usage_usd', 'monthly_limit_usd'],
+        [LT('今日'), 'daily_usage_usd', 'daily_limit_usd'],
+        [LT('本周'), 'weekly_usage_usd', 'weekly_limit_usd'],
+        [LT('本月'), 'monthly_usage_usd', 'monthly_limit_usd'],
       ];
       for (let i = 0; i < pairs.length; i++) {
         const u = optNum(sub, pairs[i][1]);
@@ -850,12 +851,12 @@ class Sub2ApiProvider implements UsageProvider {
       }
       const expiresAt = optStr(sub, 'expires_at');
       if (expiresAt != null) {
-        rows.push({ label: '到期', value: Format.dateTime(isoMs3(expiresAt)) });
+        rows.push({ label: LT('到期'), value: Format.dateTime(isoMs3(expiresAt)) });
       }
     }
     const sections: ProviderDetailSection[] = [];
     if (rows.length > 0) {
-      sections.push({ title: '订阅', rows: rows });
+      sections.push({ title: LT('订阅'), rows: rows });
     }
 
     // Usage summary（对照插件 details：余额 + 今日/累计请求数、token 数（副文本为花费））
@@ -902,7 +903,7 @@ class DevinProvider implements UsageProvider {
     title: 'Devin',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#6D28D9',
-    authHint: '粘贴 Devin 会话 Bearer Token；可选第二栏填组织标识',
+    authHint: LT('粘贴 Devin 会话 Bearer Token；可选第二栏填组织标识'),
     authUrl: 'https://app.devin.ai',
   };
 
@@ -912,7 +913,7 @@ class DevinProvider implements UsageProvider {
       .replace(/^bearer /i, '')
       .trim();
     if (token.length === 0) {
-      return UsageSnapshot.failure('未配置 Bearer Token');
+      return UsageSnapshot.failure(LT('未配置 Bearer Token'));
     }
     const org = setting.credential2.trim();
     const headers: Record<string, string> = {
@@ -928,7 +929,7 @@ class DevinProvider implements UsageProvider {
         candidates.push(`api/org/${org}/billing/quota/usage`);
       }
     }
-    let lastError = '未识别组织';
+    let lastError = LT('未识别组织');
     for (let i = 0; i < candidates.length; i++) {
       const resp = await Http.get(`https://app.devin.ai/${candidates[i]}`, headers);
       if (resp.ok) {
@@ -986,14 +987,14 @@ class AbacusProvider implements UsageProvider {
     title: 'Abacus',
     authKind: AuthKind.SESSION,
     accentColor: '#38BDF8',
-    authHint: '粘贴 apps.abacus.ai 的会话 Cookie',
+    authHint: LT('粘贴 apps.abacus.ai 的会话 Cookie'),
     authUrl: 'https://apps.abacus.ai',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -1006,12 +1007,12 @@ class AbacusProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null || !bool(root, 'success')) {
-      return UsageSnapshot.failure('响应解析失败（Cookie 可能已失效）');
+      return UsageSnapshot.failure(LT('响应解析失败（Cookie 可能已失效）'));
     }
     const result = asObj(root['result']);
     const usage = result != null ? asObj(result['usage']) : null;
     if (usage == null) {
-      return UsageSnapshot.failure('响应缺少用量');
+      return UsageSnapshot.failure(LT('响应缺少用量'));
     }
     const used = getNum3(usage, ['computePointsLeft']) != null
       ? (getNum3(usage, ['totalComputePoints']) ?? 0) - (getNum3(usage, ['computePointsLeft']) ?? 0)
@@ -1025,12 +1026,12 @@ class AbacusProvider implements UsageProvider {
     }
     const snap = UsageSnapshot.success(primary, null, null);
     const rows: ProviderDetailRow[] = [
-      { label: '算力点', value: `${Math.round(used)} / ${Math.round(total)}` },
+      { label: LT('算力点'), value: `${Math.round(used)} / ${Math.round(total)}` },
     ];
     if (tier != null) {
-      rows.push({ label: '套餐', value: tier });
+      rows.push({ label: LT('套餐'), value: tier });
     }
-    const section: ProviderDetailSection = { title: '订阅', rows: rows };
+    const section: ProviderDetailSection = { title: LT('订阅'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -1308,14 +1309,14 @@ class CommandCodeProvider implements UsageProvider {
     title: 'Command Code',
     authKind: AuthKind.SESSION,
     accentColor: '#A04DFD',
-    authHint: '粘贴 commandcode.ai 的会话 Cookie（整段 Cookie 头 / cURL 抓包 / 裸令牌均可），或 user_ 开头的 API Key',
+    authHint: LT('粘贴 commandcode.ai 的会话 Cookie（整段 Cookie 头 / cURL 抓包 / 裸令牌均可），或 user_ 开头的 API Key'),
     authUrl: 'https://commandcode.ai/settings/billing',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const credential = setting.credential.trim();
     if (credential.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie 或 API Key');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie 或 API Key'));
     }
     const apiKey = commandCodeIsApiKey(credential);
     const headers = ccHeaders(credential, apiKey);
@@ -1340,15 +1341,15 @@ class CommandCodeProvider implements UsageProvider {
     }
     const cRoot = asObj(creditsResp.json());
     if (cRoot == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const credits = asObj(cRoot['credits']);
     if (credits == null) {
-      return UsageSnapshot.failure('响应缺少 credits 字段');
+      return UsageSnapshot.failure(LT('响应缺少 credits 字段'));
     }
     const monthly = ccNum(credits['monthlyCredits']);
     if (monthly == null) {
-      return UsageSnapshot.failure('响应缺少 monthlyCredits');
+      return UsageSnapshot.failure(LT('响应缺少 monthlyCredits'));
     }
     const purchased = ccNum(credits['purchasedCredits']) ?? 0;
     const premium = ccNum(credits['premiumMonthlyCredits']) ?? 0;
@@ -1390,32 +1391,32 @@ class CommandCodeProvider implements UsageProvider {
     };
 
     const rows: ProviderDetailRow[] = [
-      { label: '月度额度', value: `${monthly}` },
-      { label: '已购额度', value: `${purchased}` },
-      { label: '高级月度', value: `${premium}` },
-      { label: '开源月度', value: `${opensource}` },
+      { label: LT('月度额度'), value: `${monthly}` },
+      { label: LT('已购额度'), value: `${purchased}` },
+      { label: LT('高级月度'), value: `${premium}` },
+      { label: LT('开源月度'), value: `${opensource}` },
     ];
     if (plan != null) {
       // 总额来自套餐目录，credits 端点只给剩余（对照 CommandCodeUsageSnapshot.makeLoginMethod）
       const used = Math.max(0, Math.min(plan.monthlyCreditsUSD, plan.monthlyCreditsUSD - monthly));
-      rows.push({ label: '计划', value: plan.displayName });
+      rows.push({ label: LT('计划'), value: plan.displayName });
       rows.push({
-        label: '月度已用',
+        label: LT('月度已用'),
         value: `${commandCodeUSD(used)} of ${commandCodeUSD(plan.monthlyCreditsUSD)}`,
       });
     } else if (planId != null && planId.length > 0) {
       // 目录外的 planId：总额不可知（对照 macOS unknownPlan，但保留 credits 主数据不报错）
-      rows.push({ label: '计划', value: planId });
+      rows.push({ label: LT('计划'), value: planId });
     } else if (subscriptionAnswered && subStatus == null) {
-      rows.push({ label: '状态', value: '免费版' });
+      rows.push({ label: LT('状态'), value: LT('免费版') });
     }
     if (subStatus != null) {
-      rows.push({ label: '状态', value: subStatus });
+      rows.push({ label: LT('状态'), value: subStatus });
     }
     if (periodEnd > 0) {
-      rows.push({ label: '账期截止', value: Format.dateTime(periodEnd) });
+      rows.push({ label: LT('账期截止'), value: Format.dateTime(periodEnd) });
     }
-    snap.details = [{ title: '订阅', rows: rows }];
+    snap.details = [{ title: LT('订阅'), rows: rows }];
     return snap;
   }
 }
@@ -1430,14 +1431,14 @@ class LongCatProvider implements UsageProvider {
     title: 'LongCat',
     authKind: AuthKind.SESSION,
     accentColor: '#FFD100',
-    authHint: '粘贴 longcat.chat 平台的会话 Cookie',
+    authHint: LT('粘贴 longcat.chat 平台的会话 Cookie'),
     authUrl: 'https://longcat.chat/platform',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.length === 0) {
-      return UsageSnapshot.failure('未配置会话 Cookie');
+      return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -1459,12 +1460,12 @@ class LongCatProvider implements UsageProvider {
   private static parse(resp: HttpResult): UsageSnapshot {
     const root = asObj(resp.json());
     if (root == null || num(root, 'code', -1) !== 200) {
-      return UsageSnapshot.failure('响应解析失败（Cookie 可能已失效）');
+      return UsageSnapshot.failure(LT('响应解析失败（Cookie 可能已失效）'));
     }
     const data = asObj(root['data']);
     const list = data != null ? asArray(data['list']) : null;
     if (list == null || list.length === 0) {
-      return UsageSnapshot.failure('未返回 token 额度');
+      return UsageSnapshot.failure(LT('未返回 token 额度'));
     }
     let totalAvail = 0;
     let totalUsed = 0;
@@ -1486,9 +1487,9 @@ class LongCatProvider implements UsageProvider {
           earliestExpire = ms;
         }
       }
-      const name = str(lot, 'name', `份额 ${i + 1}`);
+      const name = str(lot, 'name', `${LT('份额 ')}${i + 1}`);
       if (i < 4) {
-        rows.push({ label: name, value: `${Format.compact(avail)} 可用` });
+        rows.push({ label: name, value: `${Format.compact(avail)}${LT(' 可用')}` });
       }
     }
     const totalAll = totalAvail + totalUsed;
@@ -1497,7 +1498,7 @@ class LongCatProvider implements UsageProvider {
       primary = makeWindow(Math.min(100, (totalUsed / totalAll) * 100), earliestExpire, true);
     }
     const snap = UsageSnapshot.success(primary, null, null);
-    const section: ProviderDetailSection = { title: 'Token 份额', rows: rows };
+    const section: ProviderDetailSection = { title: LT('Token 份额'), rows: rows };
     snap.details = [section];
     return snap;
   }
@@ -1759,7 +1760,7 @@ class ZoomMateProvider implements UsageProvider {
     title: 'ZoomMate',
     authKind: AuthKind.OAUTH_TOKEN,
     accentColor: '#0B5CFF',
-    authHint: '粘贴 ai.zoom.us / zoommate.zoom.us 的会话令牌（Bearer）或整段 Cookie',
+    authHint: LT('粘贴 ai.zoom.us / zoommate.zoom.us 的会话令牌（Bearer）或整段 Cookie'),
     authUrl: 'https://zoommate.zoom.us',
   };
 
@@ -1836,7 +1837,7 @@ class ZoomMateProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cred = setting.credential.trim();
     if (cred.length === 0) {
-      return UsageSnapshot.failure('未配置令牌');
+      return UsageSnapshot.failure(LT('未配置令牌'));
     }
     const headers = this.headers(cred);
 
@@ -1853,7 +1854,7 @@ class ZoomMateProvider implements UsageProvider {
           host = ZM_HOSTS[i];
           break;
         }
-        lastError = '响应解析失败';
+        lastError = LT('响应解析失败');
         break;
       }
       lastError = resp.errorText();
@@ -1863,7 +1864,7 @@ class ZoomMateProvider implements UsageProvider {
       }
     }
     if (status == null) {
-      return UsageSnapshot.failure(lastError.length > 0 ? lastError : '查询失败');
+      return UsageSnapshot.failure(lastError.length > 0 ? lastError : LT('查询失败'));
     }
 
     const snap = UsageSnapshot.success(zoomMateStatusWindow(status), null, null);
@@ -1899,14 +1900,14 @@ class NotionProvider implements UsageProvider {
     title: 'Notion AI',
     authKind: AuthKind.SESSION,
     accentColor: '#337EA9',
-    authHint: '粘贴 app.notion.com 的 Cookie（需含 token_v2）',
+    authHint: LT('粘贴 app.notion.com 的 Cookie（需含 token_v2）'),
     authUrl: 'https://www.notion.so/my-account',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const cookie = setting.credential.trim();
     if (cookie.indexOf('token_v2') < 0) {
-      return UsageSnapshot.failure('Cookie 需包含 token_v2');
+      return UsageSnapshot.failure(LT('Cookie 需包含 token_v2'));
     }
     const headers: Record<string, string> = {
       'cookie': cookie,
@@ -1922,7 +1923,7 @@ class NotionProvider implements UsageProvider {
     // 递归找 space 节点取 id/name
     const spaceId = NotionProvider.findSpaceId(spacesRoot);
     if (spaceId == null || spaceId.length === 0) {
-      return UsageSnapshot.failure('未找到工作区');
+      return UsageSnapshot.failure(LT('未找到工作区'));
     }
     const statusResp = await Http.post(
       'https://app.notion.com/api/v3/getCreditRateLimitStatus',
@@ -1934,12 +1935,12 @@ class NotionProvider implements UsageProvider {
     }
     const statusRoot = asObj(statusResp.json());
     if (statusRoot == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     // 两条泳道（对照 NotionUsageSnapshot.toUsageSnapshot）：滚动窗口 + 计费周期窗口
     const windows = notionWindows(statusRoot, Date.now());
     if (windows.primary == null && windows.secondary == null) {
-      return UsageSnapshot.failure('该套餐不适用额度限制');
+      return UsageSnapshot.failure(LT('该套餐不适用额度限制'));
     }
     return UsageSnapshot.success(windows.primary, windows.secondary, null);
   }

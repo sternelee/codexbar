@@ -28,6 +28,7 @@ import {
 import { UsageProvider } from './ProviderBase';
 import { Format } from '../common/Format';
 import { deepSeekPlatformHeaders } from '../common/OAuth';
+import { LT } from '../common/I18n';
 
 function bearer(key: string): Record<string, string> {
   const h: Record<string, string> = {
@@ -468,8 +469,8 @@ function dsBlockSpend(block: Record<string, Json>): number {
  */
 function deepseekUsageHint(text: string): ProviderDetailSection {
   return {
-    title: '用量明细',
-    rows: [{ label: '平台用量', value: text }],
+    title: LT('用量明细'),
+    rows: [{ label: LT('平台用量'), value: text }],
   };
 }
 
@@ -887,7 +888,7 @@ class OpenRouterProvider implements UsageProvider {
     title: 'OpenRouter',
     authKind: AuthKind.API_KEY,
     accentColor: '#8B5CF6',
-    authHint: '粘贴 OpenRouter API Key（sk-or-v1-… 开头）',
+    authHint: LT('粘贴 OpenRouter API Key（sk-or-v1-… 开头）'),
     authUrl: 'https://openrouter.ai/settings/credits',
   };
 
@@ -912,7 +913,7 @@ class OpenRouterProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers = bearer(key);
     headers['x-title'] = 'CodexBar';
@@ -934,10 +935,10 @@ class OpenRouterProvider implements UsageProvider {
         }
       }
       if (balance == null) {
-        creditsIssue = '响应解析失败';
+        creditsIssue = LT('响应解析失败');
       }
     } else if (creditsResp.code === 401 || creditsResp.code === 403) {
-      creditsIssue = '需要管理密钥（管理密钥才能读账户余额）';
+      creditsIssue = LT('需要管理密钥（管理密钥才能读账户余额）');
     } else {
       creditsIssue = creditsResp.errorText();
     }
@@ -950,7 +951,7 @@ class OpenRouterProvider implements UsageProvider {
       const root = asObj(keyResp.json());
       keyData = root != null ? asObj(root['data']) : null;
       if (keyData == null) {
-        keyIssue = '响应解析失败';
+        keyIssue = LT('响应解析失败');
       }
     } else {
       keyIssue = keyResp.errorText();
@@ -1007,13 +1008,13 @@ class OpenRouterProvider implements UsageProvider {
       // 对照源工程：拿不到余额时仍保留 Credits 分组并写清原因，而不是整块消失
       details.push({
         title: 'Credits',
-        rows: [{ label: 'Balance', value: '暂不可用', secondary: creditsIssue }],
+        rows: [{ label: 'Balance', value: LT('暂不可用'), secondary: creditsIssue }],
       });
     }
     if (keyData != null) {
       const rows: ProviderDetailRow[] = [];
       if (keyLimit != null && keyLimit > 0) {
-        rows.push({ label: 'API key limit', value: OpenRouterProvider.usd(keyLimit), secondary: '支出上限，非余额' });
+        rows.push({ label: 'API key limit', value: OpenRouterProvider.usd(keyLimit), secondary: LT('支出上限，非余额') });
         if (keyRemaining != null) {
           rows.push({ label: 'API key remaining', value: OpenRouterProvider.usd(keyRemaining) });
         }
@@ -1021,7 +1022,7 @@ class OpenRouterProvider implements UsageProvider {
           rows.push({ label: 'API key used', value: OpenRouterProvider.usd(keyUsage) });
         }
       } else {
-        rows.push({ label: 'API key limit', value: '未设置上限' });
+        rows.push({ label: 'API key limit', value: LT('未设置上限') });
       }
       if (resetWindow != null && resetWindow.length > 0) {
         rows.push({ label: 'Reset window', value: resetWindow });
@@ -1037,7 +1038,7 @@ class OpenRouterProvider implements UsageProvider {
     } else {
       details.push({
         title: 'API key',
-        rows: [{ label: 'API key limit', value: '暂不可用', secondary: keyIssue }],
+        rows: [{ label: 'API key limit', value: LT('暂不可用'), secondary: keyIssue }],
       });
     }
 
@@ -1133,14 +1134,14 @@ class DeepSeekProvider implements UsageProvider {
     title: 'DeepSeek',
     authKind: AuthKind.API_KEY,
     accentColor: '#4D6BFE',
-    authHint: '粘贴 DeepSeek 开放平台 API Key（sk-… 开头）；用量明细需「网页登录」一次自动获取平台会话',
+    authHint: LT('粘贴 DeepSeek 开放平台 API Key（sk-… 开头）；用量明细需「网页登录」一次自动获取平台会话'),
     authUrl: 'https://platform.deepseek.com/api_keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const resp = await Http.get('https://api.deepseek.com/user/balance', bearer(key));
     if (!resp.ok) {
@@ -1148,15 +1149,15 @@ class DeepSeekProvider implements UsageProvider {
     }
     const root = asObj(resp.json());
     if (root == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const infos = asArray(root['balance_infos']);
     if (infos == null || infos.length === 0) {
-      return UsageSnapshot.failure('未返回余额信息');
+      return UsageSnapshot.failure(LT('未返回余额信息'));
     }
     const info = asObj(infos[0]);
     if (info == null) {
-      return UsageSnapshot.failure('未返回余额信息');
+      return UsageSnapshot.failure(LT('未返回余额信息'));
     }
     const currency = str(info, 'currency', 'CNY');
     const total = parseMoney(optStr(info, 'total_balance'), currency);
@@ -1171,16 +1172,16 @@ class DeepSeekProvider implements UsageProvider {
         `Granted: ${Format.money(granted, currency)})`,
     };
     const sections: ProviderDetailSection[] = [{
-      title: '余额构成',
+      title: LT('余额构成'),
       rows: [
-        { label: '总额', value: Format.money(total, currency) },
-        { label: '充值余额', value: Format.money(paid, currency) },
-        { label: '赠送余额', value: Format.money(granted, currency) },
+        { label: LT('总额'), value: Format.money(total, currency) },
+        { label: LT('充值余额'), value: Format.money(paid, currency) },
+        { label: LT('赠送余额'), value: Format.money(granted, currency) },
       ],
     }];
     if (total <= 0) {
       // 对照 macOS：余额为 0 时附上充值提示
-      sections[0].rows.push({ label: '提示', value: '余额为 0，请在 platform.deepseek.com 充值' });
+      sections[0].rows.push({ label: LT('提示'), value: LT('余额为 0，请在 platform.deepseek.com 充值') });
     }
 
     // 平台 Web 使用量（对照 DeepSeekUsageFetcher：平台会话令牌，尽力而为）
@@ -1193,8 +1194,8 @@ class DeepSeekProvider implements UsageProvider {
     const usage = await this.fetchUsageSummary(credentialForPlatform, Date.now());
     if (usage == null) {
       sections.push(deepseekUsageHint(platformToken.length > 0
-        ? '暂不可用（平台会话可能已过期，可重新「网页登录」）'
-        : '点详情页「网页登录」自动获取平台会话后可见近 30 天用量与花费'));
+        ? LT('暂不可用（平台会话可能已过期，可重新「网页登录」）')
+        : LT('点详情页「网页登录」自动获取平台会话后可见近 30 天用量与花费')));
     } else {
       const detail = deepseekDetailSections(usage);
       for (let i = 0; i < detail.length; i++) {
@@ -1278,7 +1279,7 @@ class MoonshotProvider implements UsageProvider {
     title: 'Kimi (Moonshot)',
     authKind: AuthKind.API_KEY,
     accentColor: '#17C0AA',
-    authHint: '粘贴 Moonshot 开放平台 API Key（中国区/国际区自动识别）',
+    authHint: LT('粘贴 Moonshot 开放平台 API Key（中国区/国际区自动识别）'),
     authUrl: 'https://platform.moonshot.cn/console/api-keys',
   };
 
@@ -1301,14 +1302,14 @@ class MoonshotProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     // 双区域回退（对照 macOS MoonshotRegion）：key 属于哪个平台就哪个端点成功
     const regions: MoonshotRegionOption[] = [
-      { base: 'https://api.moonshot.cn', currency: 'CNY', label: '中国区' },
-      { base: 'https://api.moonshot.ai', currency: 'USD', label: '国际区' },
+      { base: 'https://api.moonshot.cn', currency: 'CNY', label: LT('中国区') },
+      { base: 'https://api.moonshot.ai', currency: 'USD', label: LT('国际区') },
     ];
-    let lastFail = '查询失败';
+    let lastFail = LT('查询失败');
     for (let i = 0; i < regions.length; i++) {
       const resp = await Http.get(`${regions[i].base}/v1/users/me/balance`, bearer(key));
       if (!resp.ok) {
@@ -1320,7 +1321,7 @@ class MoonshotProvider implements UsageProvider {
       const code = root != null ? optNum(root, 'code') : null;
       const ok = root != null && root['status'] === true && (code == null || code === 0);
       if (data == null || !ok) {
-        lastFail = `Moonshot ${regions[i].label} 响应异常`;
+        lastFail = `Moonshot ${regions[i].label}${LT(' 响应异常')}`;
         continue;
       }
       const currency = regions[i].currency;
@@ -1333,11 +1334,11 @@ class MoonshotProvider implements UsageProvider {
         displayText: Format.money(available, currency),
       };
       snap.details = [{
-        title: '余额构成',
+        title: LT('余额构成'),
         rows: [
-          { label: '可用余额', value: Format.money(available, currency) },
-          { label: '代金券', value: Format.money(voucher, currency) },
-          { label: '现金余额', value: Format.money(cash, currency) },
+          { label: LT('可用余额'), value: Format.money(available, currency) },
+          { label: LT('代金券'), value: Format.money(voucher, currency) },
+          { label: LT('现金余额'), value: Format.money(cash, currency) },
         ],
       }];
       return snap;
@@ -1370,7 +1371,7 @@ export function siliconflowErrorText(resp: HttpResult): string {
  *  其余状态码走通用文案。 */
 export function siliconflowCnErrorText(resp: HttpResult): string {
   if (resp.code === 410) {
-    return `SiliconFlow 国内站余额接口已由官方停止服务，暂无替代 API；这不表示 API Key 无效（${siliconflowErrorText(resp)}）`;
+    return `${LT('SiliconFlow 国内站余额接口已由官方停止服务，暂无替代 API；这不表示 API Key 无效（')}${siliconflowErrorText(resp)}${LT('）')}`;
   }
   return siliconflowErrorText(resp);
 }
@@ -1384,17 +1385,17 @@ export const SILICONFLOW_HOSTS: string[] = [
 class SiliconFlowProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'siliconflow',
-    title: 'SiliconFlow 硅基流动',
+    title: LT('SiliconFlow 硅基流动'),
     authKind: AuthKind.API_KEY,
     accentColor: '#7C3AED',
-    authHint: '粘贴 SiliconFlow API Key（sk-… 开头）',
+    authHint: LT('粘贴 SiliconFlow API Key（sk-… 开头）'),
     authUrl: 'https://cloud.siliconflow.cn/account/ak',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     // 国内站余额接口已被官方停用（410），仍保留逐站尝试：国际站 Key 可在
     // api.siliconflow.com 直接成功；全部失败时报告国内站错误（410 转译为止血提示）。
@@ -1416,7 +1417,7 @@ class SiliconFlowProvider implements UsageProvider {
     const root = asObj(resp.json());
     const data = root != null ? asObj(root['data']) : null;
     if (data == null) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
     const balance = parseMoney(optStr(data, 'balance'), 'CNY');
     const charge = parseMoney(optStr(data, 'chargeBalance'), 'CNY');
@@ -1427,11 +1428,11 @@ class SiliconFlowProvider implements UsageProvider {
       displayText: Format.money(total > 0 ? total : balance, 'CNY'),
     };
     snap.details = [{
-      title: '余额构成',
+      title: LT('余额构成'),
       rows: [
-        { label: '总余额', value: Format.money(total, 'CNY') },
-        { label: '充值余额', value: Format.money(charge, 'CNY') },
-        { label: '赠送余额', value: Format.money(balance, 'CNY') },
+        { label: LT('总余额'), value: Format.money(total, 'CNY') },
+        { label: LT('充值余额'), value: Format.money(charge, 'CNY') },
+        { label: LT('赠送余额'), value: Format.money(balance, 'CNY') },
       ],
     }];
     return snap;
@@ -1448,21 +1449,21 @@ class OpenAIPlatformProvider implements UsageProvider {
     title: 'OpenAI Platform',
     authKind: AuthKind.API_KEY,
     accentColor: '#10A37F',
-    authHint: '粘贴 OpenAI 平台 API Key（sk-… 开头）',
+    authHint: LT('粘贴 OpenAI 平台 API Key（sk-… 开头）'),
     authUrl: 'https://platform.openai.com/api-keys',
   };
 
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 API Key');
+      return UsageSnapshot.failure(LT('未配置 API Key'));
     }
     const headers = bearer(key);
 
     const subResp = await Http.get('https://api.openai.com/v1/dashboard/billing/subscription', headers);
     const grantResp = await Http.get('https://api.openai.com/v1/dashboard/billing/credit_grants', headers);
     if (!subResp.ok && !grantResp.ok) {
-      return UsageSnapshot.failure(subResp.code === 404 ? '服务商已下线该查询端点' : subResp.errorText());
+      return UsageSnapshot.failure(subResp.code === 404 ? LT('服务商已下线该查询端点') : subResp.errorText());
     }
 
     let accessUntil = 0;
@@ -1561,10 +1562,10 @@ class ClaudeAdminDay {
 class AnthropicConsoleProvider implements UsageProvider {
   descriptor: ProviderDescriptor = {
     id: 'anthropic-console',
-    title: 'Anthropic 控制台',
+    title: LT('Anthropic 控制台'),
     authKind: AuthKind.API_KEY,
     accentColor: '#D97757',
-    authHint: '粘贴 Anthropic Admin API Key（需要组织管理员权限，sk-ant-admin…）',
+    authHint: LT('粘贴 Anthropic Admin API Key（需要组织管理员权限，sk-ant-admin…）'),
     authUrl: 'https://console.anthropic.com/settings/keys',
   };
 
@@ -1584,7 +1585,7 @@ class AnthropicConsoleProvider implements UsageProvider {
   async fetch(setting: ProviderSetting): Promise<UsageSnapshot> {
     const key = setting.credential.trim();
     if (key.length === 0) {
-      return UsageSnapshot.failure('未配置 Admin API Key');
+      return UsageSnapshot.failure(LT('未配置 Admin API Key'));
     }
     const headers: Record<string, string> = {
       'x-api-key': key,
@@ -1615,7 +1616,7 @@ class AnthropicConsoleProvider implements UsageProvider {
 
     const daily = this.aggregate(costResp.json(), usageResp.json(), nowMs);
     if (daily.length === 0) {
-      return UsageSnapshot.failure('响应解析失败');
+      return UsageSnapshot.failure(LT('响应解析失败'));
     }
 
     const total = this.summary(daily);
@@ -1666,7 +1667,7 @@ class AnthropicConsoleProvider implements UsageProvider {
       period: 'Last 30 days',
       limit: 0,
     };
-    snap.identity = { accountEmail: '', accountOrganization: 'Anthropic 组织', loginMethod: 'Admin API' };
+    snap.identity = { accountEmail: '', accountOrganization: LT('Anthropic 组织'), loginMethod: 'Admin API' };
     return snap;
   }
 

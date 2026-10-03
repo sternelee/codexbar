@@ -22,7 +22,7 @@
 - **应用内网页登录**（Claude / Codex / DeepSeek）：设置页或详情页点「网页登录」进入内嵌网页——Claude 自动从登录会话中捕获 `sessionKey`，DeepSeek 从 `platform.deepseek.com` 的 `localStorage.userToken` 捕获平台会话（与 macOS 读浏览器数据同一个键，所以用户只需填 API Key），Codex 走 PKCE 授权（本地回调解析 + JWT 提取账号 ID）；刷新返回 401/403 时用保存的 refresh token 静默续期并重试一次，无需重新登录。
 - **额外配置字段**（`extraConfig`）：需要 3 个以上输入的服务商在设置页/详情页动态渲染字段——Azure OpenAI 的 Endpoint / Deployment / API 版本、Bedrock 的 Region / Session Token / 预算、v0 的 Scope、Copilot 的 Enterprise 域名。
 - **设置页**：逐服务商开关 + 凭证录入（含额外字段）、「展示可选用量明细」开关、「桌面组件显示」挑选（点选服务商 = 上卡片，带序号；一键恢复自动），凭证仅存本机（`@ohos.data.preferences`），刷新时直连服务商接口。
-- **中英文切换**：设置页顶部「显示语言」行（中文 / English）即点即切，全应用界面文案、时间单位（`3小时15分` / `3h 15m`）、错误提示与提醒通知随之切换；选择持久化（`app_lang`），默认中文。本轮覆盖界面框架与通用文案，**服务商生成的明细行/自定义标签暂仍为中文**（`providers/` ~1200 行内联文案，留待分批迁移）。
+- **中英文切换**：设置页顶部「显示语言」行（中文 / English）即点即切，全应用文案随之切换——界面框架用 `L(zh, en)` 内联双语，服务商/模型层（`providers/` + `Models` 的明细行标签、错误原因、authHint、窗口名）用 `LT(zh)` 集中查表翻译（`I18n.ets` 的 342 条词典，未收录自动回退中文），时间单位（`3小时15分` / `3h 15m`）、错误提示、提醒通知与桌面卡片一并覆盖；选择持久化（`app_lang`），默认中文。依赖中文串的运行时判定（如 zai 窗口识别 `title === '5 小时窗口'`、凭证失效检测）两侧同语言包裹，两种语言下行为一致。
 - **明亮 / 暗色自适配**：配色全部走资源引用，`resources/base/element/color.json`（明亮）与 `resources/dark/element/color.json`（暗色）各一套，跟随系统深浅色即时切换，无需手工监听；启动窗口背景、服务卡片、明细图表与品牌图标衬底一并适配（卡片数据只能传 JSON，所以传的是用量「等级」而不是色值）。
 
 ## 支持的服务商（61 家）

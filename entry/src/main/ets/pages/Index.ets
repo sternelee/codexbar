@@ -8,7 +8,7 @@ import { AppStore } from '../store/AppStore';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
-import { L } from '../common/I18n';
+import { L, AppLang, currentLang } from '../common/I18n';
 import { WindowBlock } from '../view/UsageBar';
 import { ProviderIcon } from '../view/ProviderIcon';
 
@@ -17,6 +17,8 @@ import { ProviderIcon } from '../view/ProviderIcon';
 struct Index {
   /** 同步 AppStore.version，用于触发重建 */
   @State ver: number = 0;
+  /** 显示语言；变化时经 build 根的 ForEach 整页重建，让所有 L()/LT() 文案立即切换 */
+  @State lang: AppLang = currentLang();
   /** 每秒 +1，驱动倒计时刷新 */
   @State tick: number = 0;
   @State isRefreshing: boolean = false;
@@ -39,6 +41,9 @@ struct Index {
     this.timerId = setInterval(() => {
       if (AppStore.get().version !== this.ver) {
         this.ver = AppStore.get().version;
+      }
+      if (currentLang() !== this.lang) {
+        this.lang = currentLang();
       }
       this.tick += 1;
     }, 1000);
@@ -145,6 +150,8 @@ struct Index {
 
   build() {
     Column() {
+    ForEach([this.lang], (l: AppLang) => {
+    Column() {
       // 顶栏
       Row({ space: Theme.rowGap }) {
         Column({ space: Theme.gapXxs }) {
@@ -229,6 +236,10 @@ struct Index {
     .width('100%')
     .height('100%')
     .backgroundColor(Theme.bg)
+    }, (l: AppLang) => l)
+    }
+    .width('100%')
+    .height('100%')
   }
 
   /** 路由过渡：进二级页时首页向左轻移做视差，返回时从左侧滑回 */

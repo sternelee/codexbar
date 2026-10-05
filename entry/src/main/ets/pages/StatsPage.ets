@@ -22,7 +22,7 @@ import {
   yAxisTicks,
 } from '../store/UsageHistory';
 import { Format } from '../common/Format';
-import { L } from '../common/I18n';
+import { L, AppLang, currentLang } from '../common/I18n';
 import { Theme } from '../common/Theme';
 import { Nav, parseDetailParam } from '../common/Nav';
 
@@ -33,6 +33,8 @@ struct StatsPage {
   @State @Watch('onChartSource') metric: string = 'usage';
   @State @Watch('onChartSource') range: number = 7;
   @State ver: number = 0;
+  /** 显示语言；变化时经 build 根的 ForEach 整页重建，让所有 L()/LT() 文案立即切换 */
+  @State lang: AppLang = currentLang();
   /** 点选的日期键（柱形图选中日） */
   @State selectedDay: string = '';
   /** 柱形图数值过渡进度 0..1（进场 / 换数据源时从 0 长到 1） */
@@ -62,6 +64,9 @@ struct StatsPage {
 
   onPageShow(): void {
     this.ver += 1;
+    if (currentLang() !== this.lang) {
+      this.lang = currentLang();
+    }
   }
 
   /** 换服务商 / 指标 / 区间：柱形图从基线重新长一遍（首次挂载的赋值不重播） */
@@ -150,6 +155,8 @@ struct StatsPage {
   }
 
   build() {
+    Column() {
+    ForEach([this.lang], (l: AppLang) => {
     Column() {
       // 顶栏
       Row({ space: Theme.rowGap }) {
@@ -355,6 +362,10 @@ struct StatsPage {
     .width('100%')
     .height('100%')
     .backgroundColor(Theme.bg)
+    }, (l: AppLang) => l)
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder

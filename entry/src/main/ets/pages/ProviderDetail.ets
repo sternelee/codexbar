@@ -29,7 +29,7 @@ import { Notify } from '../common/Notify';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
-import { L } from '../common/I18n';
+import { L, AppLang, currentLang } from '../common/I18n';
 import { RowProgressBar, WindowBlock } from '../view/UsageBar';
 import { DetailChart } from '../view/DetailChart';
 import { ProviderIcon } from '../view/ProviderIcon';
@@ -62,6 +62,8 @@ function leadPhrase(m: number): string {
 struct ProviderDetail {
   @State providerId: string = '';
   @State ver: number = 0;
+  /** 显示语言；变化时经 build 根的 ForEach 整页重建，让所有 L()/LT() 文案立即切换 */
+  @State lang: AppLang = currentLang();
   @State tick: number = 0;
   @State remEnabled: boolean = false;
   @State remThreshold: number = 90;
@@ -83,6 +85,9 @@ struct ProviderDetail {
       }
       if (AppStore.get().version !== this.ver) {
         this.ver = AppStore.get().version;
+      }
+      if (currentLang() !== this.lang) {
+        this.lang = currentLang();
       }
       this.tick += 1;
     }, 1000);
@@ -299,6 +304,8 @@ struct ProviderDetail {
   }
 
   build() {
+    Column() {
+    ForEach([this.lang], (l: AppLang) => {
     Stack() {
     Column() {
       // 顶栏
@@ -430,6 +437,10 @@ struct ProviderDetail {
     .width('100%')
     .height('100%')
     .backgroundColor(Theme.bg)
+    }, (l: AppLang) => l)
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder

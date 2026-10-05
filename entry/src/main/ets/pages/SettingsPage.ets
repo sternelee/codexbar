@@ -23,6 +23,9 @@ import { Nav } from '../common/Nav';
 import { L, AppLang, currentLang, setAppLang } from '../common/I18n';
 import { ProviderIcon } from '../view/ProviderIcon';
 
+/** 语言切换可选项（中文 / English） */
+const LANG_OPTIONS: AppLang[] = ['zh', 'en'];
+
 /** 单个服务商的设置卡片：内部持有编辑态 */
 @Component
 struct ProviderSettingCard {
@@ -343,6 +346,8 @@ struct ProviderSettingCard {
 @Component
 struct SettingsPage {
   @State ver: number = 0;
+  /** 显示语言；变化时经 build 根的 ForEach 整页重建，让所有 L()/LT() 文案立即切换 */
+  @State lang: AppLang = currentLang();
 
   aboutToAppear(): void {
     this.ver = AppStore.get().version;
@@ -480,6 +485,8 @@ struct SettingsPage {
   }
 
   build() {
+    Column() {
+    ForEach([this.lang], (l: AppLang) => {
     Stack() {
     Column() {
       Row({ space: Theme.rowGap }) {
@@ -548,7 +555,7 @@ struct SettingsPage {
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
             Flex({ wrap: FlexWrap.NoWrap }) {
-              ForEach(['zh', 'en'], (code: string) => {
+              ForEach(LANG_OPTIONS, (code: AppLang) => {
                 Text(code === 'zh' ? '中文' : 'English')
                   .fontSize(Theme.fsCaption)
                   .fontColor(currentLang() === code ? Theme.bg : Theme.textDim)
@@ -559,12 +566,13 @@ struct SettingsPage {
                   .margin({ left: Theme.gapSm })
                   .onClick(() => {
                     if (currentLang() !== code) {
-                      setAppLang(code as AppLang);
+                      setAppLang(code);
+                      this.lang = code;
                       this.ver += 1;
                       AppStore.get().bump();
                     }
                   })
-              }, (code: string) => `${code}_${currentLang() === code}`)
+              }, (code: AppLang) => `${code}_${currentLang() === code}`)
             }
           }
           .width('100%')
@@ -748,6 +756,10 @@ struct SettingsPage {
     .width('100%')
     .height('100%')
     .backgroundColor(Theme.bg)
+    }, (l: AppLang) => l)
+    }
+    .width('100%')
+    .height('100%')
   }
 
   /** 路由过渡：从右侧滑入 / 滑出 */

@@ -2,7 +2,14 @@
  * CodexBar Mobile — 中英文显示切换
  *
  * L(zh, en) 按当前语言返回对应文案；语言持久化在 Settings（键 app_lang），
- * 未设置时默认中文。切换经 setAppLang 持久化，由设置页自行 bump 触发重渲染。
+ * 未设置时默认中文。
+ *
+ * ArkUI 最小更新按依赖收集：L()/LT() 不读任何 @State，语言切换后这些表达式
+ * 不会被重新求值。因此各 @Entry 页在 build 根部用「以 this.lang 为键的 ForEach」
+ * 包住整页内容（外层再包一个布局中性的 Column 满足 @Entry 单容器根的限制）——
+ * 页面 @State lang 变化 → key 变化 → 整页重建，所有文案立即切换。
+ * Index/ProviderDetail 的 1 秒定时器与 StatsPage 的 onPageShow 负责把
+ * currentLang() 同步回 @State lang。
  *
  * 单测环境（preferences 不可用）getString 回退默认值，语言恒为 zh，
  * 既有断言中文文案的用例不受影响。

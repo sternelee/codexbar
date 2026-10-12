@@ -98,6 +98,7 @@ struct WidgetCard {
             .width('100%')
             .height('100%')
             .justifyContent(FlexAlign.Center)
+            .padding({ bottom: 12 })
           }, (item: WidgetCardItem, idx: number) => `${idx}_${item.name}_${item.pct}`)
         }
         .indicator(true)

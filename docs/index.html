@@ -1,0 +1,2867 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>CodexBar · 每个 AI 编码额度，尽在掌上</title>
+    <meta
+      name="description"
+      content="CodexBar HarmonyOS 版：在鸿蒙手机上追踪 61 家 AI 服务商的用量窗口、余额与重置倒计时。免费开源，凭证仅存本机。"
+    />
+    <link rel="icon" type="image/png" href="images/icon.png" />
+    <link rel="canonical" href="https://sternelee.github.io/codexbar/" />
+    <meta name="theme-color" id="metaTheme" content="#f6f7f9" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="CodexBar · 每个 AI 编码额度，尽在掌上" />
+    <meta
+      property="og:description"
+      content="在鸿蒙手机上追踪 61 家 AI 服务商的用量窗口、余额与重置倒计时。免费开源，凭证仅存本机。"
+    />
+    <meta property="og:url" content="https://sternelee.github.io/codexbar/" />
+    <meta
+      property="og:image"
+      content="https://sternelee.github.io/codexbar/images/icon.png"
+    />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "CodexBar",
+        "operatingSystem": "HarmonyOS",
+        "applicationCategory": "UtilitiesApplication",
+        "inLanguage": "zh-CN",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "CNY" },
+        "description": "在鸿蒙手机上追踪 61 家 AI 服务商的用量窗口、余额与重置倒计时。macOS 版 CodexBar 的 HarmonyOS ArkTS 移植版。"
+      }
+    </script>
+    <script>
+      /* theme boot: resolve before first paint (?theme= > localStorage > system) */
+      (function () {
+        var t = null;
+        try {
+          var m = window.location.search.match(/[?&]theme=(dark|light)/);
+          t = m ? m[1] : localStorage.getItem("cb-theme");
+        } catch (e) {}
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      })();
+    </script>
+    <script defer src="js/alpine-i18n.min.js"></script>
+    <script defer src="js/alpine.min.js"></script>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --bg-soft: #eef1f3;
+        --card: #ffffff;
+        --text: #18202b;
+        --dim: #5c6673;
+        --accent: #16d3b4;
+        --accent-text: #087a68;
+        --accent-ink: #07231e;
+        --stroke: #e3e7ec;
+        --ok: #1f9e6a;
+        --warn: #c07f00;
+        --bad: #d0453f;
+        --phone-shadow: 0 30px 70px -24px rgba(14, 34, 30, 0.28);
+        --r-card: 16px;
+        --r-chip: 10px;
+      }
+      :root[data-theme="dark"] {
+        --bg: #10151b;
+        --bg-soft: #0c1116;
+        --card: #171e26;
+        --text: #e8ecf1;
+        --dim: #98a2ae;
+        --accent: #2fe3c5;
+        --accent-text: #57f0d8;
+        --accent-ink: #052722;
+        --stroke: #252e38;
+        --ok: #35c58e;
+        --warn: #e8a832;
+        --bad: #f0716b;
+        --phone-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "HarmonyOS Sans SC", "PingFang SC",
+          "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+        line-height: 1.7;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      a {
+        color: inherit;
+      }
+      .icon {
+        width: 18px;
+        height: 18px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      [x-cloak] {
+        display: none !important;
+      }
+
+      /* ---------- nav ---------- */
+      header {
+        position: fixed;
+        inset: 0 0 auto 0;
+        height: 64px;
+        z-index: 50;
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        border-bottom: 1px solid transparent;
+        transition: border-color 0.3s;
+      }
+      header.scrolled {
+        border-bottom-color: var(--stroke);
+      }
+      .nav {
+        height: 64px;
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 17px;
+        letter-spacing: -0.01em;
+        text-decoration: none;
+      }
+      .brand img {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        display: block;
+      }
+      .nav-links {
+        display: flex;
+        gap: 22px;
+        margin-left: 8px;
+      }
+      .nav-links a {
+        text-decoration: none;
+        color: var(--dim);
+        font-size: 14px;
+        transition: color 0.2s;
+      }
+      .nav-links a:hover {
+        color: var(--text);
+      }
+      .nav-cta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .gh-link {
+        display: inline-flex;
+        color: var(--dim);
+        transition: color 0.2s;
+      }
+      .gh-link:hover {
+        color: var(--text);
+      }
+      .nav-ico,
+      .nav-lang {
+        height: 34px;
+        min-width: 34px;
+        border-radius: 999px;
+        border: 1px solid var(--stroke);
+        background: var(--card);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--dim);
+        cursor: pointer;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 0;
+        transition:
+          color 0.2s,
+          border-color 0.2s;
+      }
+      .nav-lang {
+        padding: 0 10px;
+        letter-spacing: 0.02em;
+      }
+      .nav-ico:hover,
+      .nav-lang:hover {
+        color: var(--text);
+        border-color: color-mix(in srgb, var(--accent) 45%, var(--stroke));
+      }
+      .nav-ico:focus-visible,
+      .nav-lang:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .nav-ico .icon {
+        width: 15px;
+        height: 15px;
+      }
+      .ico-sun {
+        display: none;
+      }
+      html[data-theme="dark"] .ico-sun {
+        display: block;
+      }
+      html[data-theme="dark"] .ico-moon {
+        display: none;
+      }
+
+      /* ---------- buttons ---------- */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 11px 22px;
+        font-size: 15px;
+        font-weight: 600;
+        text-decoration: none;
+        border: 1px solid transparent;
+        cursor: pointer;
+        font-family: inherit;
+        transition:
+          transform 0.15s,
+          box-shadow 0.2s,
+          border-color 0.2s,
+          background 0.2s;
+      }
+      .btn:active {
+        transform: scale(0.97);
+      }
+      .btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+        box-shadow: 0 8px 22px -10px rgba(22, 211, 180, 0.55);
+      }
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 26px -10px rgba(22, 211, 180, 0.6);
+      }
+      .btn-ghost {
+        border-color: var(--stroke);
+        color: var(--text);
+        background: var(--card);
+      }
+      .btn-ghost:hover {
+        border-color: var(--accent);
+        color: var(--accent-text);
+      }
+      .btn-sm {
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+
+      /* ---------- hero ---------- */
+      .hero {
+        padding: 96px 0 72px;
+        position: relative;
+        overflow: clip;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        top: -120px;
+        right: -80px;
+        width: 640px;
+        height: 640px;
+        background: radial-gradient(
+          circle at center,
+          color-mix(in srgb, var(--accent) 14%, transparent),
+          transparent 65%
+        );
+        pointer-events: none;
+      }
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 56px;
+        align-items: center;
+        position: relative;
+      }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent-text);
+        background: color-mix(in srgb, var(--accent) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+        border-radius: 999px;
+        padding: 5px 14px;
+        letter-spacing: 0.02em;
+      }
+      .eyebrow .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      h1 {
+        font-size: clamp(34px, 5vw, 54px);
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+        font-weight: 750;
+        margin: 20px 0 16px;
+      }
+      .hero-sub {
+        font-size: 17px;
+        color: var(--dim);
+        max-width: 34em;
+        margin: 0 0 28px;
+      }
+      .hero-sub strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .hero-ctas {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      /* ---------- phone mockup ---------- */
+      .phone-stage {
+        display: flex;
+        justify-content: center;
+        position: relative;
+      }
+      .phone {
+        width: min(318px, 82vw);
+        border-radius: 44px;
+        border: 1px solid var(--stroke);
+        background: var(--bg);
+        box-shadow: var(--phone-shadow);
+        padding: 10px;
+        position: relative;
+      }
+      .screen {
+        border-radius: 36px;
+        background: var(--bg);
+        overflow: hidden;
+        position: relative;
+        padding: 14px 14px 0;
+      }
+      .notch {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 96px;
+        height: 22px;
+        border-radius: 999px;
+        background: var(--text);
+        opacity: 0.92;
+        z-index: 5;
+      }
+      .statusbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 10px 4px;
+        color: var(--text);
+      }
+      .statusbar .sicons {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+      }
+      .statusbar .sicons i {
+        display: inline-block;
+        background: currentColor;
+      }
+      .sicons .sig {
+        width: 10px;
+        height: 8px;
+        clip-path: polygon(
+          0 100%,
+          40% 0,
+          40% 35%,
+          75% 35%,
+          75% 65%,
+          100% 65%,
+          100% 100%
+        );
+      }
+      .sicons .batt {
+        width: 20px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1.4px solid currentColor;
+        position: relative;
+      }
+      .sicons .batt::after {
+        content: "";
+        position: absolute;
+        inset: 1.5px 5.5px 1.5px 1.5px;
+        background: currentColor;
+        border-radius: 1px;
+      }
+      .sicons .batt::before {
+        content: "";
+        position: absolute;
+        right: -3.5px;
+        top: 3px;
+        width: 2px;
+        height: 4px;
+        background: currentColor;
+        border-radius: 0 1px 1px 0;
+      }
+      .app-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 8px 10px;
+      }
+      .app-title {
+        font-size: 17px;
+        font-weight: 750;
+        letter-spacing: -0.01em;
+      }
+      .app-sub {
+        font-size: 10.5px;
+        color: var(--dim);
+        margin-top: 1px;
+      }
+      .app-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .refresh-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        color: var(--accent-text);
+        font-size: 11.5px;
+        font-weight: 650;
+        border-radius: 999px;
+        padding: 5px 11px;
+      }
+      .gear-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--dim);
+      }
+      .gear-btn .icon {
+        width: 14px;
+        height: 14px;
+      }
+      .cards {
+        padding-bottom: 26px;
+      }
+      .pcard {
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        padding: 10px 12px 11px;
+        margin-bottom: 8px;
+      }
+      .pcard-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .pcard-head img {
+        width: 17px;
+        height: 17px;
+        border-radius: 4.5px;
+        display: block;
+      }
+      .pcard-name {
+        font-size: 12.5px;
+        font-weight: 650;
+      }
+      .pcard-plan {
+        font-size: 9px;
+        color: var(--dim);
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        padding: 0.5px 7px;
+        margin-left: auto;
+      }
+      .prow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 7px;
+        font-size: 10.5px;
+      }
+      .prow .wname {
+        color: var(--dim);
+        width: 52px;
+        flex: none;
+      }
+      .prow .bar {
+        flex: 1;
+        height: 4.5px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--text) 8%, transparent);
+        overflow: hidden;
+      }
+      .prow .bar i {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+        width: 0;
+        transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .in .prow .bar i {
+        width: var(--w);
+      }
+      .lv-ok {
+        background: var(--ok);
+      }
+      .lv-warn {
+        background: var(--warn);
+      }
+      .lv-bad {
+        background: var(--bad);
+      }
+      .prow .left {
+        font-weight: 650;
+        min-width: 34px;
+        text-align: right;
+      }
+      .prow .cd {
+        color: var(--dim);
+        min-width: 46px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .pbal {
+        margin-top: 7px;
+        font-size: 10.5px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .pbal b {
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .fade-out {
+        position: relative;
+      }
+      .fade-out::after {
+        content: "";
+        position: absolute;
+        inset: auto 0 -26px 0;
+        height: 26px;
+        background: linear-gradient(transparent, var(--bg));
+      }
+
+      /* ---------- sections ---------- */
+      section {
+        padding: 88px 0;
+      }
+      .sec-head {
+        max-width: 640px;
+        margin-bottom: 40px;
+      }
+      h2 {
+        font-size: clamp(26px, 3.4vw, 36px);
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        margin: 0 0 12px;
+        font-weight: 720;
+      }
+      .sec-sub {
+        color: var(--dim);
+        font-size: 16px;
+        margin: 0;
+      }
+      .band {
+        background: var(--bg-soft);
+        border-top: 1px solid var(--stroke);
+        border-bottom: 1px solid var(--stroke);
+      }
+
+      /* ---------- providers ---------- */
+      .prov-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+        gap: 10px;
+      }
+      .prov {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: var(--r-chip);
+        padding: 10px 12px;
+        text-decoration: none;
+        transition:
+          transform 0.18s,
+          border-color 0.18s,
+          box-shadow 0.18s;
+      }
+      .prov:hover {
+        transform: translateY(-2px);
+        border-color: color-mix(in srgb, var(--accent) 55%, var(--stroke));
+        box-shadow: 0 8px 18px -12px rgba(8, 40, 34, 0.35);
+      }
+      .prov img {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        display: block;
+        flex: none;
+      }
+      .prov .pname {
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.25;
+      }
+      .prov .ptag {
+        display: block;
+        font-size: 10.5px;
+        color: var(--dim);
+        font-weight: 450;
+      }
+      .prov-all {
+        justify-content: center;
+        border-style: dashed;
+        color: var(--accent-text);
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .prov-note {
+        margin-top: 18px;
+        font-size: 13.5px;
+        color: var(--dim);
+      }
+      .prov-note a {
+        color: var(--accent-text);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .prov-note a:hover {
+        text-decoration: underline;
+      }
+
+      /* ---------- bento ---------- */
+      .bento {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-areas: "cd cd bal" "cd cd rem" "st st st";
+        gap: 16px;
+      }
+      .cell {
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: var(--r-card);
+        padding: 26px 26px 24px;
+        position: relative;
+        overflow: hidden;
+      }
+      .cell-cd {
+        grid-area: cd;
+      }
+      .cell-bal {
+        grid-area: bal;
+      }
+      .cell-rem {
+        grid-area: rem;
+      }
+      .cell-st {
+        grid-area: st;
+      }
+      .cell-ico {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: color-mix(in srgb, var(--accent) 13%, transparent);
+        color: var(--accent-text);
+        margin-bottom: 14px;
+      }
+      .cell-ico .icon {
+        width: 19px;
+        height: 19px;
+      }
+      .cell h3 {
+        font-size: 17.5px;
+        margin: 0 0 6px;
+        letter-spacing: -0.01em;
+      }
+      .cell p {
+        font-size: 14px;
+        color: var(--dim);
+        margin: 0;
+      }
+      .cd-demo {
+        margin-top: 20px;
+        display: grid;
+        gap: 10px;
+      }
+      .cd-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        padding: 10px 14px;
+        background: var(--bg);
+      }
+      .cd-row .lbl {
+        font-size: 13px;
+        color: var(--dim);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .cd-row .lbl img {
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+      }
+      .cd-row .val {
+        font-size: 19px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+      }
+      .cd-row .val small {
+        font-size: 11px;
+        color: var(--dim);
+        font-weight: 500;
+        margin-right: 8px;
+      }
+      .bal-list {
+        margin-top: 18px;
+        display: grid;
+        gap: 9px;
+      }
+      .bal-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13.5px;
+      }
+      .bal-row .who {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--dim);
+      }
+      .bal-row .who img {
+        width: 17px;
+        height: 17px;
+        border-radius: 5px;
+      }
+      .bal-row b {
+        font-variant-numeric: tabular-nums;
+        font-size: 14.5px;
+      }
+
+      /* ---------- chart ---------- */
+      .chart-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+      .chart-title {
+        font-size: 15px;
+        font-weight: 650;
+      }
+      .chart-note {
+        font-size: 12.5px;
+        color: var(--dim);
+        margin-top: 2px;
+      }
+      .seg {
+        display: inline-flex;
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        padding: 3px;
+        background: var(--bg);
+      }
+      .seg button {
+        border: 0;
+        background: transparent;
+        color: var(--dim);
+        font-size: 12.5px;
+        font-weight: 600;
+        font-family: inherit;
+        border-radius: 999px;
+        padding: 5px 14px;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .chart-flex {
+        display: grid;
+        grid-template-columns: 1fr 220px;
+        gap: 28px;
+        align-items: end;
+      }
+      .chart {
+        display: flex;
+        align-items: flex-end;
+        gap: 6px;
+        height: 170px;
+      }
+      .chart .cbar {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        height: 100%;
+        position: relative;
+      }
+      .chart .cbar i {
+        display: block;
+        border-radius: 5px 5px 2px 2px;
+        background: color-mix(in srgb, var(--accent) 55%, var(--card));
+        min-height: 2px;
+        animation: barGrow 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes barGrow {
+        from {
+          height: 0% !important;
+        }
+      }
+      .chart .cbar.peak i {
+        background: var(--warn);
+      }
+      .chart .cbar.peak::before {
+        content: attr(data-v);
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--warn);
+        white-space: nowrap;
+      }
+      .chart-x {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .chart-x span {
+        flex: 1;
+        text-align: center;
+        font-size: 10px;
+        color: var(--dim);
+        line-height: 1.3;
+      }
+      .totals {
+        display: grid;
+        gap: 0;
+        border: 1px solid var(--stroke);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .totals .trow {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 11px 16px;
+        background: var(--card);
+        font-size: 13px;
+        color: var(--dim);
+      }
+      .totals .trow + .trow {
+        border-top: 1px solid var(--stroke);
+      }
+      .totals b {
+        font-size: 16px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+      }
+
+      /* ---------- widgets ---------- */
+      .wid-grid {
+        display: grid;
+        grid-template-columns: 0.9fr 1.1fr;
+        gap: 56px;
+        align-items: center;
+      }
+      .wid-stage {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .widget {
+        border-radius: 22px;
+        padding: 16px;
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        box-shadow: 0 14px 34px -18px rgba(10, 30, 26, 0.3);
+      }
+      .w-2x2 {
+        width: 168px;
+      }
+      .w-2x4 {
+        width: min(348px, 100%);
+      }
+      .widget .wtitle {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+        margin-bottom: 10px;
+      }
+      .wbig {
+        font-size: 34px;
+        font-weight: 750;
+        letter-spacing: -0.02em;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      .wbig small {
+        font-size: 12px;
+        color: var(--dim);
+        font-weight: 500;
+        margin-left: 4px;
+      }
+      .wlbl {
+        font-size: 11px;
+        color: var(--dim);
+        margin: 4px 0 10px;
+      }
+      .wbar {
+        height: 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--text) 8%, transparent);
+        overflow: hidden;
+      }
+      .wbar i {
+        display: block;
+        height: 100%;
+        border-radius: 999px;
+      }
+      .wcd {
+        font-size: 11px;
+        color: var(--dim);
+        margin-top: 8px;
+        font-variant-numeric: tabular-nums;
+      }
+      .wrow {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 0;
+      }
+      .wrow + .wrow {
+        border-top: 1px solid var(--stroke);
+      }
+      .wrow img {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+      }
+      .wrow .wname {
+        font-size: 11.5px;
+        font-weight: 600;
+        width: 74px;
+      }
+      .wrow .wbar {
+        flex: 1;
+      }
+      .wrow .wpct {
+        font-size: 11.5px;
+        font-weight: 650;
+        width: 32px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .wrow .wcd2 {
+        font-size: 10px;
+        color: var(--dim);
+        width: 52px;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .wid-feats {
+        margin-top: 22px;
+        display: grid;
+        gap: 10px;
+      }
+      .wid-feats li {
+        list-style: none;
+        display: flex;
+        gap: 10px;
+        font-size: 14.5px;
+        color: var(--dim);
+      }
+      .wid-feats .icon {
+        color: var(--accent-text);
+        margin-top: 4px;
+        width: 16px;
+        height: 16px;
+      }
+      .wid-feats b {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .wid-feats {
+        padding: 0;
+        margin-left: 0;
+      }
+      ul.wid-feats {
+        padding: 0;
+        margin: 22px 0 0;
+      }
+
+      /* ---------- login cards ---------- */
+      .tri-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .tri {
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: var(--r-card);
+        padding: 26px;
+      }
+      .tri .cell-ico {
+        margin-bottom: 12px;
+      }
+      .tri h3 {
+        font-size: 17px;
+        margin: 0 0 6px;
+      }
+      .tri p {
+        font-size: 14px;
+        color: var(--dim);
+        margin: 0;
+      }
+      .chips {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .chip {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--dim);
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        padding: 3px 11px;
+      }
+      .chip.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: transparent;
+      }
+
+      /* ---------- privacy ---------- */
+      .priv-inner {
+        text-align: center;
+        max-width: 620px;
+        margin: 0 auto;
+      }
+      .priv-inner .cell-ico {
+        margin: 0 auto 16px;
+      }
+      .priv-points {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin: 26px 0;
+      }
+      .priv-point {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: 999px;
+        padding: 8px 18px;
+        font-size: 14px;
+        color: var(--dim);
+      }
+      .priv-point .icon {
+        width: 15px;
+        height: 15px;
+        color: var(--ok);
+      }
+
+      /* ---------- download ---------- */
+      .dl-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 8px;
+      }
+      .dl {
+        background: var(--card);
+        border: 1px solid var(--stroke);
+        border-radius: var(--r-card);
+        padding: 26px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .dl h3 {
+        font-size: 17px;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .dl h3 .icon {
+        color: var(--accent-text);
+      }
+      .dl p {
+        font-size: 14px;
+        color: var(--dim);
+        margin: 0 0 14px;
+        flex: 1;
+      }
+      .dl-meta {
+        margin-top: 30px;
+        text-align: center;
+        font-size: 13.5px;
+        color: var(--dim);
+      }
+
+      /* ---------- footer ---------- */
+      footer {
+        border-top: 1px solid var(--stroke);
+        padding: 44px 0 52px;
+        background: var(--bg-soft);
+      }
+      .foot-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      .foot-links {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        font-size: 13.5px;
+      }
+      .foot-links a {
+        color: var(--dim);
+        text-decoration: none;
+      }
+      .foot-links a:hover {
+        color: var(--accent-text);
+      }
+      .foot-meta {
+        margin-top: 22px;
+        font-size: 12.5px;
+        color: var(--dim);
+        line-height: 1.9;
+      }
+
+      /* ---------- reveal ---------- */
+      .reveal {
+        opacity: 0;
+        transform: translateY(16px);
+      }
+      .reveal.in {
+        opacity: 1;
+        transform: none;
+        transition:
+          opacity 0.65s ease,
+          transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+        transition-delay: var(--d, 0s);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        .reveal {
+          opacity: 1;
+          transform: none;
+        }
+        .prow .bar i {
+          transition: none;
+        }
+        .chart .cbar i {
+          animation: none;
+        }
+        .btn:hover {
+          transform: none;
+        }
+      }
+
+      /* ---------- responsive ---------- */
+      @media (max-width: 960px) {
+        .hero-grid {
+          grid-template-columns: 1fr;
+          gap: 48px;
+        }
+        .hero {
+          padding-top: 88px;
+        }
+        .bento {
+          grid-template-columns: 1fr 1fr;
+          grid-template-areas: "cd cd" "bal rem" "st st";
+        }
+        .wid-grid {
+          grid-template-columns: 1fr;
+          gap: 40px;
+        }
+        .tri-grid,
+        .dl-grid {
+          grid-template-columns: 1fr;
+        }
+        .chart-flex {
+          grid-template-columns: 1fr;
+        }
+        .totals {
+          max-width: 420px;
+        }
+      }
+      @media (max-width: 720px) {
+        .nav-links {
+          display: none;
+        }
+        .nav {
+          gap: 14px;
+        }
+        .nav-cta {
+          gap: 8px;
+        }
+        .gh-link {
+          display: none;
+        }
+      }
+      @media (max-width: 480px) {
+        .hero-ctas {
+          flex-direction: column;
+        }
+        .hero-ctas .btn {
+          width: 100%;
+        }
+      }
+      @media (max-width: 620px) {
+        .wrap {
+          padding: 0 18px;
+        }
+        section {
+          padding: 56px 0;
+        }
+        .hero {
+          padding: 72px 0 48px;
+        }
+        h1 {
+          font-size: clamp(30px, 8.6vw, 40px);
+        }
+        .hero-sub {
+          font-size: 15.5px;
+        }
+        .hero-ctas .btn {
+          flex: 1;
+        }
+        .bento {
+          grid-template-columns: 1fr;
+          grid-template-areas: "cd" "bal" "rem" "st";
+        }
+        .prov-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .cell,
+        .tri,
+        .dl {
+          padding: 20px 18px;
+        }
+        .chart {
+          height: 128px;
+          gap: 3px;
+        }
+        .chart-x {
+          gap: 3px;
+        }
+        .chart .cbar.peak::before {
+          font-size: 9.5px;
+          top: -18px;
+        }
+        .totals .trow {
+          padding: 10px 12px;
+        }
+        .wid-stage {
+          gap: 14px;
+        }
+        .sec-head {
+          margin-bottom: 28px;
+        }
+        .btn-sm {
+          padding: 8px 14px;
+        }
+        .foot-meta {
+          line-height: 1.7;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app" x-data="site">
+      <header id="topbar">
+        <div class="wrap nav">
+          <a class="brand" href="#top">
+            <img src="images/icon.png" alt="CodexBar" />
+            <span>CodexBar</span>
+          </a>
+          <nav
+            class="nav-links"
+            aria-label="页面导航"
+            :aria-label="$t('aria.nav')"
+          >
+            <a href="#features" x-text="$t('nav.features')">功能</a>
+            <a href="#providers" x-text="$t('nav.providers')">服务商</a>
+            <a href="#widgets" x-text="$t('nav.widgets')">桌面卡片</a>
+            <a href="#privacy" x-text="$t('nav.privacy')">隐私</a>
+          </nav>
+          <div class="nav-cta">
+            <a
+              class="gh-link"
+              href="https://github.com/sternelee/codexbar"
+              aria-label="GitHub"
+              target="_blank"
+              rel="noopener"
+            >
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"
+                />
+              </svg>
+            </a>
+            <button
+              type="button"
+              class="nav-lang"
+              id="langBtn"
+              @click="toggleLang()"
+              x-text="lang === 'zh' ? 'EN' : '中文'"
+              :aria-label="lang === 'zh' ? 'Switch to English' : '切换到中文'"
+            >
+              EN
+            </button>
+            <button
+              type="button"
+              class="nav-ico"
+              id="themeBtn"
+              @click="toggleTheme()"
+              aria-label="切换深浅色"
+              :aria-label="$t('aria.theme')"
+            >
+              <svg class="icon ico-moon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+              <svg class="icon ico-sun" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2" />
+                <path d="M12 20v2" />
+                <path d="m4.93 4.93 1.41 1.41" />
+                <path d="m17.66 17.66 1.41 1.41" />
+                <path d="M2 12h2" />
+                <path d="M20 12h2" />
+                <path d="m6.34 17.66-1.41 1.41" />
+                <path d="m19.07 4.93-1.41 1.41" />
+              </svg>
+            </button>
+            <a
+              class="btn btn-primary btn-sm"
+              href="#download"
+              x-text="$t('nav.download')"
+              >下载</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <!-- hero -->
+      <section class="hero" id="top">
+        <div class="wrap hero-grid">
+          <div class="reveal in">
+            <span class="eyebrow"
+              ><span class="dot"></span
+              ><span x-text="$t('hero.eyebrow')"
+                >开源免费 · HarmonyOS ArkTS · ArkUI-X 三端</span
+              ></span
+            >
+            <h1 x-html="$t('hero.h1')">每个 AI 编码额度，<br />尽在掌上。</h1>
+            <p class="hero-sub" x-html="$t('hero.sub')">
+              在鸿蒙手机上追踪
+              <strong>61 家 AI 服务商</strong
+              >的用量窗口、余额与重置倒计时，长任务什么时候该跑，一看便知。
+            </p>
+            <div class="hero-ctas">
+              <a class="btn btn-primary" href="#download">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span x-text="$t('hero.cta1')">下载 App</span>
+              </a>
+              <a
+                class="btn btn-ghost"
+                href="https://github.com/sternelee/codexbar"
+                target="_blank"
+                rel="noopener"
+              >
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"
+                  />
+                </svg>
+                <span x-text="$t('hero.cta2')">GitHub 源码</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="phone-stage reveal in" style="--d: 0.12s">
+            <div
+              class="phone"
+              role="img"
+              aria-label="CodexBar 界面示意：服务商用量卡片、进度条与实时重置倒计时"
+              :aria-label="$t('aria.phone')"
+            >
+              <div class="notch"></div>
+              <div class="screen">
+                <div class="statusbar">
+                  <span id="clock" x-text="clockStr">10:05</span>
+                  <span class="sicons" aria-hidden="true"
+                    ><i class="sig"></i><i class="batt"></i
+                  ></span>
+                </div>
+                <div class="app-head">
+                  <div>
+                    <div class="app-title">CodexBar</div>
+                    <div class="app-sub" x-text="$t('ph.sub')">
+                      AI 额度速览 · 7 家已启用
+                    </div>
+                  </div>
+                  <div class="app-actions">
+                    <span class="refresh-pill">
+                      <svg
+                        class="icon"
+                        style="width: 11px; height: 11px"
+                        viewBox="0 0 24 24"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"
+                        />
+                        <path d="M21 3v5h-5" />
+                      </svg>
+                      <span x-text="$t('ph.refresh')">刷新</span>
+                    </span>
+                    <span class="gear-btn">
+                      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+                        />
+                        <circle cx="12" cy="12" r="3" />
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div class="cards fade-out">
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/claude-color.svg" alt="" /><span
+                        class="pcard-name"
+                        >Claude</span
+                      >
+                      <span class="pcard-plan">Pro</span>
+                    </div>
+                    <div class="prow">
+                      <span class="wname">Session</span
+                      ><span class="bar"
+                        ><i class="lv-ok" style="--w: 38%"></i></span
+                      ><span class="left">62%</span
+                      ><span class="cd" x-text="fmtSession(sessionLeft)"
+                        >2:14:38</span
+                      >
+                    </div>
+                    <div class="prow">
+                      <span class="wname">Weekly</span
+                      ><span class="bar"
+                        ><i class="lv-bad" style="--w: 96%"></i></span
+                      ><span class="left">4%</span
+                      ><span class="cd" x-text="fmtWeekly(weeklyLeft)"
+                        >6d 03:12</span
+                      >
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/openai.svg" alt="" /><span
+                        class="pcard-name"
+                        >Codex (ChatGPT)</span
+                      >
+                      <span class="pcard-plan">Plus</span>
+                    </div>
+                    <div class="prow">
+                      <span class="wname">Session</span
+                      ><span class="bar"
+                        ><i class="lv-warn" style="--w: 59%"></i></span
+                      ><span class="left">41%</span
+                      ><span class="cd" x-text="fmtSession(sessionLeft)"
+                        >2:14:38</span
+                      >
+                    </div>
+                    <div class="prow">
+                      <span class="wname">Credits</span
+                      ><span
+                        class="left"
+                        style="min-width: auto"
+                        x-text="$t('ph.left')"
+                        >1 可用</span
+                      ><span class="cd">27d 22h</span>
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/deepseek-color.svg" alt="" /><span
+                        class="pcard-name"
+                        >DeepSeek</span
+                      >
+                    </div>
+                    <div class="pbal">
+                      <span x-text="$t('ph.balance')">余额</span><b>¥23.47</b>
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/cursor.svg" alt="" /><span
+                        class="pcard-name"
+                        >Cursor</span
+                      >
+                    </div>
+                    <div class="prow">
+                      <span class="wname">Total</span
+                      ><span class="bar"
+                        ><i class="lv-ok" style="--w: 25%"></i></span
+                      ><span class="left">75%</span
+                      ><span class="cd" x-text="fmtWeekly(weeklyLeft)"
+                        >6d 03:12</span
+                      >
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img
+                        src="images/icons/openrouter-color.svg"
+                        alt=""
+                      /><span class="pcard-name">OpenRouter</span>
+                    </div>
+                    <div class="pbal">
+                      <span x-text="$t('ph.remaining')">剩余额度</span
+                      ><b>$12.80</b>
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/kimi-color.svg" alt="" /><span
+                        class="pcard-name"
+                        x-text="$t('ph.kimi')"
+                        >Kimi 编码版</span
+                      >
+                    </div>
+                    <div class="prow">
+                      <span class="wname" x-text="$t('ph.win5h')">5h 窗口</span
+                      ><span class="bar"
+                        ><i class="lv-ok" style="--w: 10%"></i></span
+                      ><span class="left">90%</span
+                      ><span class="cd" x-text="fmtSession(sessionLeft)"
+                        >2:14:38</span
+                      >
+                    </div>
+                  </div>
+                  <div class="pcard">
+                    <div class="pcard-head">
+                      <img src="images/icons/doubao-color.svg" alt="" /><span
+                        class="pcard-name"
+                        x-text="$t('ph.doubao')"
+                        >豆包</span
+                      >
+                    </div>
+                    <div class="prow">
+                      <span class="wname" x-text="$t('ph.win5h')">5h 窗口</span
+                      ><span class="bar"
+                        ><i class="lv-warn" style="--w: 36%"></i></span
+                      ><span class="left">64%</span
+                      ><span class="cd" x-text="fmtSession(sessionLeft)"
+                        >2:14:38</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- providers -->
+      <section id="providers" class="band">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <h2 x-text="$t('prov.h2')">61 家服务商，一块屏幕</h2>
+            <p class="sec-sub" x-text="$t('prov.sub')">
+              API Key、访问令牌、AK-SK 签名直连，或网页 Cookie
+              与应用内网页登录：两条凭证线并存，同一家服务商按需选用。
+            </p>
+          </div>
+          <div class="prov-grid reveal" id="provGrid">
+            <template x-for="p in providers" :key="p.i + '-' + (p.nk || p.n)">
+              <a
+                class="prov"
+                href="https://github.com/sternelee/codexbar#支持的服务商61-家"
+                target="_blank"
+                rel="noopener"
+              >
+                <img
+                  :src="'images/icons/' + p.i + '.svg'"
+                  alt=""
+                  loading="lazy"
+                />
+                <span
+                  ><span class="pname" x-text="p.nk ? $t(p.nk) : p.n"
+                    >Claude</span
+                  ><span class="ptag" x-text="$t(p.t)">网页登录</span></span
+                >
+              </a>
+            </template>
+            <a
+              class="prov prov-all"
+              href="https://github.com/sternelee/codexbar#支持的服务商61-家"
+              target="_blank"
+              rel="noopener"
+              x-text="$t('prov.all')"
+              >还有 25 家 · 共 61 家 →</a
+            >
+          </div>
+          <p class="prov-note reveal" x-html="$t('prov.note')">
+            每家服务商的端点与解析逻辑均对照 macOS 版 Swift
+            源码逐一迁移；凭证方式与展示范围详见
+            <a
+              href="https://github.com/sternelee/codexbar#支持的服务商61-家"
+              target="_blank"
+              rel="noopener"
+              >README 服务商总表</a
+            >。
+          </p>
+        </div>
+      </section>
+
+      <!-- features bento -->
+      <section id="features">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <h2 x-text="$t('feat.h2')">限额、余额与提醒，一处看清</h2>
+            <p class="sec-sub" x-text="$t('feat.sub')">
+              会话 / 每周 /
+              每月用量窗口，秒级刷新的重置倒计时，把「现在还剩多少」变成一个不用猜的数字。
+            </p>
+          </div>
+          <div class="bento">
+            <div class="cell cell-cd reveal">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" /></svg
+              ></span>
+              <h3 x-text="$t('feat.cdh3')">可以规划的重置时间</h3>
+              <p x-text="$t('feat.cdp')">
+                每个服务商的会话、每周与每月窗口独立倒计时，秒级刷新；重置前该不该开一个长任务，答案就在卡片上。
+              </p>
+              <div
+                class="cd-demo"
+                aria-label="重置倒计时示例"
+                :aria-label="$t('aria.cddemo')"
+              >
+                <div class="cd-row">
+                  <span class="lbl"
+                    ><img src="images/icons/openai.svg" alt="" />Codex ·
+                    Session</span
+                  >
+                  <span class="val"
+                    ><small x-text="$t('feat.reset')">重置</small
+                    ><span x-text="fmtSession(sessionLeft)">2:14:38</span></span
+                  >
+                </div>
+                <div class="cd-row">
+                  <span class="lbl"
+                    ><img src="images/icons/claude-color.svg" alt="" />Claude ·
+                    Weekly</span
+                  >
+                  <span class="val"
+                    ><small x-text="$t('feat.reset')">重置</small
+                    ><span x-text="fmtWeekly(weeklyLeft)">6d 03:12</span></span
+                  >
+                </div>
+                <div class="cd-row">
+                  <span class="lbl"
+                    ><img src="images/icons/doubao-color.svg" alt="" /><span
+                      x-text="$t('feat.cdDoubao')"
+                      >豆包 · 5h 窗口</span
+                    ></span
+                  >
+                  <span class="val"
+                    ><small x-text="$t('feat.reset')">重置</small
+                    ><span x-text="fmtSession(sessionLeft)">2:14:38</span></span
+                  >
+                </div>
+              </div>
+            </div>
+            <div class="cell cell-bal reveal" style="--d: 0.08s">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+                  <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+                  <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" /></svg
+              ></span>
+              <h3 x-text="$t('feat.balh3')">余额与花费</h3>
+              <p x-text="$t('feat.balp')">
+                服务商暴露多少就显示多少：余额、剩余额度、Credits 与消费估算。
+              </p>
+              <div class="bal-list">
+                <div class="bal-row">
+                  <span class="who"
+                    ><img
+                      src="images/icons/deepseek-color.svg"
+                      alt=""
+                    />DeepSeek</span
+                  ><b>¥23.47</b>
+                </div>
+                <div class="bal-row">
+                  <span class="who"
+                    ><img
+                      src="images/icons/openrouter-color.svg"
+                      alt=""
+                    />OpenRouter</span
+                  ><b>$12.80</b>
+                </div>
+                <div class="bal-row">
+                  <span class="who"
+                    ><img src="images/icons/openai.svg" alt="" />Codex
+                    Credits</span
+                  ><b x-text="$t('feat.left')">1 可用</b>
+                </div>
+              </div>
+            </div>
+            <div class="cell cell-rem reveal" style="--d: 0.14s">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg
+              ></span>
+              <h3 x-text="$t('feat.remh3')">阈值与恢复提醒</h3>
+              <p x-text="$t('feat.remp')">
+                用量到达 50%～95% 阈值（默认 90%）提醒「即将用尽」；重置前 5 /
+                15 / 30 / 60
+                分钟提醒「即将恢复」。走系统代理提醒，应用被杀也照发不误。
+              </p>
+            </div>
+            <div class="cell cell-st reveal">
+              <div class="chart-head">
+                <div>
+                  <div class="chart-title" x-text="$t('st.title')">
+                    用量统计
+                  </div>
+                  <div class="chart-note" x-text="$t('st.note')">
+                    每日用量增量（百分点），本地采样估算，峰值日高亮
+                  </div>
+                </div>
+                <div
+                  class="seg"
+                  role="group"
+                  aria-label="统计范围"
+                  :aria-label="$t('st.aria')"
+                >
+                  <button
+                    type="button"
+                    :aria-pressed="String(range === 7)"
+                    @click="range = 7"
+                    x-text="$t('st.d7')"
+                  >
+                    近 7 天
+                  </button>
+                  <button
+                    type="button"
+                    :aria-pressed="String(range === 30)"
+                    @click="range = 30"
+                    x-text="$t('st.d30')"
+                  >
+                    近 30 天
+                  </button>
+                </div>
+              </div>
+              <div class="chart-flex">
+                <div>
+                  <div class="chart" id="chart" aria-hidden="true">
+                    <template
+                      x-for="(v, i) in chartData"
+                      :key="range + '-' + i"
+                    >
+                      <div
+                        class="cbar"
+                        :class="{ peak: v === chartMax }"
+                        :data-v="v + 'pt'"
+                      >
+                        <i :style="'height:' + pct(v) + '%'"></i>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="chart-x" id="chartX" aria-hidden="true">
+                    <template
+                      x-for="(v, i) in chartData"
+                      :key="range + '-x-' + i"
+                    >
+                      <span x-text="xLabel(i)">一</span>
+                    </template>
+                  </div>
+                </div>
+                <div class="totals" id="totals">
+                  <div class="trow">
+                    <span x-text="$t('st.today')">今日</span
+                    ><b x-text="today + 'pt'">21pt</b>
+                  </div>
+                  <div class="trow">
+                    <span x-text="$t('st.sum7')">近 7 天合计</span
+                    ><b x-text="sum7 + 'pt'">223pt</b>
+                  </div>
+                  <div class="trow">
+                    <span x-text="$t('st.sum30')">近 30 天合计</span
+                    ><b x-text="sum30 + 'pt'">678pt</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- widgets -->
+      <section id="widgets" class="band">
+        <div class="wrap wid-grid">
+          <div class="reveal">
+            <div class="sec-head" style="margin-bottom: 0">
+              <h2 x-text="$t('wid.h2')">桌面卡片，抬眼即见</h2>
+              <p class="sec-sub" x-text="$t('wid.sub')">
+                HarmonyOS 服务卡片与 Android 原生 AppWidget 各两枚：2×2 速览与
+                2×4 列表，把最紧的那个窗口钉在桌面与锁屏。
+              </p>
+            </div>
+            <ul class="wid-feats">
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span x-html="$t('wid.f1')"
+                  ><b>hero 泳道</b>：同服务商多个窗口里最紧的一条做大号数字，如
+                  Claude 周窗 96% 比会话窗更紧时直接显示 96%。</span
+                >
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span x-html="$t('wid.f2')"
+                  ><b>轮播与挑选</b>：鸿蒙卡片 Swiper
+                  一页一家；显示哪几家在设置页点选，顺序即卡片顺序。</span
+                >
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span x-html="$t('wid.f3')"
+                  ><b>余额回退</b
+                  >：无配额窗口但快照成功的服务商显示余额数字，不再整条消失。</span
+                >
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <span x-html="$t('wid.f4')"
+                  ><b>深浅色自适应</b
+                  >：卡片配色跟随系统；点击任意位置直达应用。刷新成功即时推送，另有
+                  30 分钟定时兜底。</span
+                >
+              </li>
+            </ul>
+          </div>
+          <div class="wid-stage reveal" style="--d: 0.1s">
+            <div
+              class="widget w-2x2"
+              role="img"
+              aria-label="2x2 桌面卡片示意：大号剩余百分比、用量条与重置倒计时"
+              :aria-label="$t('aria.w1')"
+            >
+              <div class="wtitle">CODEXBAR · CODEX</div>
+              <div class="wbig">
+                41%<small x-text="$t('wid.left')">剩余</small>
+              </div>
+              <div class="wlbl" x-text="$t('wid.sessionwin')">Session 窗口</div>
+              <div class="wbar"><i class="lv-warn" style="width: 59%"></i></div>
+              <div class="wcd">
+                <span x-text="$t('wid.resets')">重置</span>
+                <span x-text="fmtSession(sessionLeft)">2:14:38</span>
+              </div>
+            </div>
+            <div
+              class="widget w-2x4"
+              role="img"
+              aria-label="2x4 列表卡片示意：多家服务商的用量条与倒计时"
+              :aria-label="$t('aria.w2')"
+            >
+              <div class="wtitle" x-text="$t('wid.all')">CODEXBAR · 全部</div>
+              <div class="wrow">
+                <img src="images/icons/claude-color.svg" alt="" /><span
+                  class="wname"
+                  x-text="$t('wid.claudew')"
+                  >Claude 周窗</span
+                >
+                <span class="wbar"
+                  ><i class="lv-bad" style="width: 96%"></i
+                ></span>
+                <span class="wpct">4%</span
+                ><span class="wcd2"
+                  ><span x-text="fmtWeekly(weeklyLeft)">6d 03:12</span></span
+                >
+              </div>
+              <div class="wrow">
+                <img src="images/icons/openai.svg" alt="" /><span
+                  class="wname"
+                  x-text="$t('wid.codexs')"
+                  >Codex 会话</span
+                >
+                <span class="wbar"
+                  ><i class="lv-warn" style="width: 59%"></i
+                ></span>
+                <span class="wpct">41%</span
+                ><span class="wcd2"
+                  ><span x-text="fmtSession(sessionLeft)">2:14:38</span></span
+                >
+              </div>
+              <div class="wrow">
+                <img src="images/icons/deepseek-color.svg" alt="" /><span
+                  class="wname"
+                  >DeepSeek</span
+                >
+                <span class="wbar"
+                  ><i
+                    class="lv-ok"
+                    style="width: 18%; background: var(--dim); opacity: 0.55"
+                  ></i
+                ></span>
+                <span class="wpct" style="font-size: 10.5px">¥23.47</span
+                ><span class="wcd2" x-text="$t('wid.balance')">余额</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- login & accounts -->
+      <section id="login">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <h2 x-text="$t('log.h2')">登录一次，到处是你的账号</h2>
+            <p class="sec-sub" x-text="$t('log.sub')">
+              凭证两条线并存：API Key
+              直连，或应用内网页登录自动捕获会话；同一服务商可挂多套账号。
+            </p>
+          </div>
+          <div class="tri-grid">
+            <div class="tri reveal">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                  <polyline points="10 17 15 12 15 12 10 7" />
+                  <line x1="15" y1="12" x2="3" y2="12" /></svg
+              ></span>
+              <h3 x-text="$t('log.webh3')">应用内网页登录</h3>
+              <p x-text="$t('log.webp')">
+                Codex 走 PKCE 授权，refresh token 静默续期；Claude 自动捕获
+                sessionKey；DeepSeek 直接抓取平台会话。401
+                时无感重试，不用反复登录。
+              </p>
+            </div>
+            <div class="tri reveal" style="--d: 0.08s">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg
+              ></span>
+              <h3 x-text="$t('log.acch3')">多账号管理</h3>
+              <p x-text="$t('log.accp')">
+                点账号 chip
+                立即切换并刷新，长按重命名或删除；同凭证自动去重，删除后自动转移到剩余账号。
+              </p>
+              <div class="chips" aria-hidden="true">
+                <span class="chip on" x-text="$t('log.main')">主账号</span
+                ><span class="chip" x-text="$t('log.work')">工作号</span
+                ><span class="chip">＋</span>
+              </div>
+            </div>
+            <div class="tri reveal" style="--d: 0.16s">
+              <span class="cell-ico"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+                  <path d="M2 12h20" /></svg
+              ></span>
+              <h3 x-text="$t('log.langh3')">中英双语 · 深浅色</h3>
+              <p x-text="$t('log.langp')">
+                设置页一键切换显示语言，342
+                条词典覆盖全部文案与提醒；配色跟随系统深浅色即时切换，卡片与图表一并适配。
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- privacy -->
+      <section id="privacy" class="band">
+        <div class="wrap">
+          <div class="priv-inner reveal">
+            <span class="cell-ico"
+              ><svg
+                class="icon"
+                viewBox="0 0 24 24"
+                style="width: 21px; height: 21px"
+                aria-hidden="true"
+              >
+                <path
+                  d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+                /></svg
+            ></span>
+            <h2 x-text="$t('priv.h2')">凭证只存在你的手机里</h2>
+            <p class="sec-sub" x-text="$t('priv.sub')">
+              CodexBar
+              不内置任何统计或账号系统：没有后端，没有埋点，刷新即直连服务商官方接口。
+            </p>
+            <div class="priv-points">
+              <span class="priv-point"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" /></svg
+                ><span x-text="$t('priv.p1')"
+                  >不收集、不上传任何数据</span
+                ></span
+              >
+              <span class="priv-point"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" /></svg
+                ><span x-text="$t('priv.p2')"
+                  >凭证仅存本机（Preferences）</span
+                ></span
+              >
+              <span class="priv-point"
+                ><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 6 9 17l-5-5" /></svg
+                ><span x-text="$t('priv.p3')">刷新直连服务商接口</span></span
+              >
+            </div>
+            <a class="btn btn-ghost" href="privacy.html" x-text="$t('priv.btn')"
+              >阅读隐私政策</a
+            >
+          </div>
+        </div>
+      </section>
+
+      <!-- download -->
+      <section id="download">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <h2 x-text="$t('dl.h2')">获取 CodexBar</h2>
+            <p class="sec-sub" x-text="$t('dl.sub')">
+              免费开源（MIT）。兼容 HarmonyOS 6.1.1（API 24）及以上；经 ArkUI-X
+              亦可构建 Android 与 iOS 版本。
+            </p>
+          </div>
+          <div class="dl-grid">
+            <div class="dl reveal">
+              <h3>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                GitHub Releases
+              </h3>
+              <p x-text="$t('dl.ghp')">
+                下载 HAP 安装包与更新说明，随版本发布提供。
+              </p>
+              <a
+                class="btn btn-primary btn-sm"
+                href="https://github.com/sternelee/codexbar/releases/latest"
+                target="_blank"
+                rel="noopener"
+                x-text="$t('dl.ghbtn')"
+                >前往下载</a
+              >
+            </div>
+            <div class="dl reveal" style="--d: 0.08s">
+              <h3>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2" />
+                  <path d="M12 18h.01" />
+                </svg>
+                <span x-text="$t('dl.agh3')">华为应用市场</span>
+              </h3>
+              <p x-text="$t('dl.agp')">
+                AppGallery
+                上架流程推进中：发布证书、代理提醒权益与灰度发布步骤已整理成指南。
+              </p>
+              <a
+                class="btn btn-ghost btn-sm"
+                href="appgallery-release.md"
+                x-text="$t('dl.agbtn')"
+                >查看上架指南</a
+              >
+            </div>
+            <div class="dl reveal" style="--d: 0.16s">
+              <h3>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m16 18 6-6-6-6" />
+                  <path d="m8 6-6 6 6 6" />
+                </svg>
+                <span x-text="$t('dl.bh3')">自行构建</span>
+              </h3>
+              <p x-text="$t('dl.bp')">
+                DevEco Studio 打开工程、配置签名即可运行；ArkUI-X 产物可同时跑在
+                Android 与 iOS 上。
+              </p>
+              <a
+                class="btn btn-ghost btn-sm"
+                href="https://github.com/sternelee/codexbar"
+                target="_blank"
+                rel="noopener"
+                x-text="$t('dl.bbtn')"
+                >获取源码</a
+              >
+            </div>
+          </div>
+          <p class="dl-meta reveal" x-text="$t('dl.meta')">
+            macOS 菜单栏原版 CodexBar 由 Peter Steinberger
+            创作，本项目将其能力带到 HarmonyOS，特此致敬。
+          </p>
+        </div>
+      </section>
+
+      <footer>
+        <div class="wrap">
+          <div class="foot-top">
+            <a class="brand" href="#top">
+              <img src="images/icon.png" alt="CodexBar" />
+              <span>CodexBar</span>
+            </a>
+            <nav class="foot-links" aria-label="页脚链接">
+              <a
+                href="https://github.com/sternelee/codexbar"
+                target="_blank"
+                rel="noopener"
+                >GitHub</a
+              >
+              <a href="privacy.html" x-text="$t('foot.privacy')">隐私政策</a>
+              <a
+                href="https://codexbar.app/"
+                target="_blank"
+                rel="noopener"
+                x-text="$t('foot.mac')"
+                >macOS 原版</a
+              >
+            </nav>
+          </div>
+          <p class="foot-meta">
+            MIT License · Built with HarmonyOS ArkTS + ArkUI-X<br />
+            May your tokens never run out.
+          </p>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      /* ===================== i18n messages ===================== */
+      var MESSAGES = {
+        zh: {
+          meta: {
+            title: "CodexBar · 每个 AI 编码额度，尽在掌上",
+            desc: "CodexBar HarmonyOS 版：在鸿蒙手机上追踪 61 家 AI 服务商的用量窗口、余额与重置倒计时。免费开源，凭证仅存本机。",
+          },
+          aria: {
+            nav: "页面导航",
+            theme: "切换深浅色",
+            phone: "CodexBar 界面示意：服务商用量卡片、进度条与实时重置倒计时",
+            cddemo: "重置倒计时示例",
+            w1: "2x2 桌面卡片示意：大号剩余百分比、用量条与重置倒计时",
+            w2: "2x4 列表卡片示意：多家服务商的用量条与倒计时",
+          },
+          nav: {
+            features: "功能",
+            providers: "服务商",
+            widgets: "桌面卡片",
+            privacy: "隐私",
+            download: "下载",
+          },
+          hero: {
+            eyebrow: "开源免费 · HarmonyOS ArkTS · ArkUI-X 三端",
+            h1: "每个 AI 编码额度，<br />尽在掌上。",
+            sub: "在鸿蒙手机上追踪 <strong>61 家 AI 服务商</strong>的用量窗口、余额与重置倒计时，长任务什么时候该跑，一看便知。",
+            cta1: "下载 App",
+            cta2: "GitHub 源码",
+          },
+          ph: {
+            sub: "AI 额度速览 · 7 家已启用",
+            refresh: "刷新",
+            left: "1 可用",
+            balance: "余额",
+            remaining: "剩余额度",
+            kimi: "Kimi 编码版",
+            doubao: "豆包",
+            win5h: "5h 窗口",
+          },
+          prov: {
+            h2: "61 家服务商，一块屏幕",
+            sub: "API Key、访问令牌、AK-SK 签名直连，或网页 Cookie 与应用内网页登录：两条凭证线并存，同一家服务商按需选用。",
+            all: "还有 25 家 · 共 61 家 →",
+            note: '每家服务商的端点与解析逻辑均对照 macOS 版 Swift 源码逐一迁移；凭证方式与展示范围详见 <a href="https://github.com/sternelee/codexbar#支持的服务商61-家" target="_blank" rel="noopener">README 服务商总表</a>。',
+            anthropic: "Anthropic 控制台",
+            doubao: "豆包 (Doubao)",
+            bailian: "阿里云百炼",
+            kimicoding: "Kimi 编码版",
+          },
+          tag: {
+            web: "网页登录",
+            oauth: "OAuth 网页登录",
+            cookiekey: "Cookie / API Key",
+            apikey: "API Key",
+            apikeyweb: "API Key / 网页登录",
+            admin: "Admin Key",
+            token: "访问令牌",
+            ghtoken: "GitHub Token",
+            aksk: "AK / SK 签名",
+            apitoken: "API Token",
+            adminkey: "管理密钥",
+            cookie: "Cookie",
+            session: "会话令牌",
+            access: "Access Token",
+            vkey: "虚拟密钥",
+            bearer: "Bearer Token",
+            token2: "Token",
+          },
+          feat: {
+            h2: "限额、余额与提醒，一处看清",
+            sub: "会话 / 每周 / 每月用量窗口，秒级刷新的重置倒计时，把「现在还剩多少」变成一个不用猜的数字。",
+            cdh3: "可以规划的重置时间",
+            cdp: "每个服务商的会话、每周与每月窗口独立倒计时，秒级刷新；重置前该不该开一个长任务，答案就在卡片上。",
+            reset: "重置",
+            cdDoubao: "豆包 · 5h 窗口",
+            balh3: "余额与花费",
+            balp: "服务商暴露多少就显示多少：余额、剩余额度、Credits 与消费估算。",
+            left: "1 可用",
+            remh3: "阈值与恢复提醒",
+            remp: "用量到达 50%～95% 阈值（默认 90%）提醒「即将用尽」；重置前 5 / 15 / 30 / 60 分钟提醒「即将恢复」。走系统代理提醒，应用被杀也照发不误。",
+          },
+          st: {
+            title: "用量统计",
+            note: "每日用量增量（百分点），本地采样估算，峰值日高亮",
+            aria: "统计范围",
+            d7: "近 7 天",
+            d30: "近 30 天",
+            today: "今日",
+            sum7: "近 7 天合计",
+            sum30: "近 30 天合计",
+          },
+          wid: {
+            h2: "桌面卡片，抬眼即见",
+            sub: "HarmonyOS 服务卡片与 Android 原生 AppWidget 各两枚：2×2 速览与 2×4 列表，把最紧的那个窗口钉在桌面与锁屏。",
+            f1: "<b>hero 泳道</b>：同服务商多个窗口里最紧的一条做大号数字，如 Claude 周窗 96% 比会话窗更紧时直接显示 96%。",
+            f2: "<b>轮播与挑选</b>：鸿蒙卡片 Swiper 一页一家；显示哪几家在设置页点选，顺序即卡片顺序。",
+            f3: "<b>余额回退</b>：无配额窗口但快照成功的服务商显示余额数字，不再整条消失。",
+            f4: "<b>深浅色自适应</b>：卡片配色跟随系统；点击任意位置直达应用。刷新成功即时推送，另有 30 分钟定时兜底。",
+            left: "剩余",
+            sessionwin: "Session 窗口",
+            resets: "重置",
+            all: "CODEXBAR · 全部",
+            claudew: "Claude 周窗",
+            codexs: "Codex 会话",
+            balance: "余额",
+          },
+          log: {
+            h2: "登录一次，到处是你的账号",
+            sub: "凭证两条线并存：API Key 直连，或应用内网页登录自动捕获会话；同一服务商可挂多套账号。",
+            webh3: "应用内网页登录",
+            webp: "Codex 走 PKCE 授权，refresh token 静默续期；Claude 自动捕获 sessionKey；DeepSeek 直接抓取平台会话。401 时无感重试，不用反复登录。",
+            acch3: "多账号管理",
+            accp: "点账号 chip 立即切换并刷新，长按重命名或删除；同凭证自动去重，删除后自动转移到剩余账号。",
+            main: "主账号",
+            work: "工作号",
+            langh3: "中英双语 · 深浅色",
+            langp:
+              "设置页一键切换显示语言，342 条词典覆盖全部文案与提醒；配色跟随系统深浅色即时切换，卡片与图表一并适配。",
+          },
+          priv: {
+            h2: "凭证只存在你的手机里",
+            sub: "CodexBar 不内置任何统计或账号系统：没有后端，没有埋点，刷新即直连服务商官方接口。",
+            p1: "不收集、不上传任何数据",
+            p2: "凭证仅存本机（Preferences）",
+            p3: "刷新直连服务商接口",
+            btn: "阅读隐私政策",
+          },
+          dl: {
+            h2: "获取 CodexBar",
+            sub: "免费开源（MIT）。兼容 HarmonyOS 6.1.1（API 24）及以上；经 ArkUI-X 亦可构建 Android 与 iOS 版本。",
+            ghp: "下载 HAP 安装包与更新说明，随版本发布提供。",
+            ghbtn: "前往下载",
+            agh3: "华为应用市场",
+            agp: "AppGallery 上架流程推进中：发布证书、代理提醒权益与灰度发布步骤已整理成指南。",
+            agbtn: "查看上架指南",
+            bh3: "自行构建",
+            bp: "DevEco Studio 打开工程、配置签名即可运行；ArkUI-X 产物可同时跑在 Android 与 iOS 上。",
+            bbtn: "获取源码",
+            meta: "macOS 菜单栏原版 CodexBar 由 Peter Steinberger 创作，本项目将其能力带到 HarmonyOS，特此致敬。",
+          },
+          foot: { privacy: "隐私政策", mac: "macOS 原版" },
+        },
+        en: {
+          meta: {
+            title: "CodexBar · Every AI coding limit, in your pocket",
+            desc: "CodexBar for HarmonyOS: track usage windows, balances and reset countdowns across 61 AI providers on your phone. Free and open source; credentials never leave the device.",
+          },
+          aria: {
+            nav: "Site navigation",
+            theme: "Toggle light or dark theme",
+            phone:
+              "CodexBar UI mock: provider usage cards, progress bars and live reset countdowns",
+            cddemo: "Reset countdown demo",
+            w1: "2x2 home screen widget mock: large remaining percentage, usage bar and reset countdown",
+            w2: "2x4 list widget mock: usage bars and countdowns for several providers",
+          },
+          nav: {
+            features: "Features",
+            providers: "Providers",
+            widgets: "Widgets",
+            privacy: "Privacy",
+            download: "Get",
+          },
+          hero: {
+            eyebrow: "Open source · HarmonyOS ArkTS · ArkUI-X",
+            h1: "Every AI coding limit,<br />in your pocket.",
+            sub: "Track usage windows, balances and reset countdowns across <strong>61 AI providers</strong> on your HarmonyOS phone, so you always know when it is safe to fire a long task.",
+            cta1: "Download App",
+            cta2: "Source Code",
+          },
+          ph: {
+            sub: "AI limits at a glance · 7 enabled",
+            refresh: "Refresh",
+            left: "1 left",
+            balance: "Balance",
+            remaining: "Remaining",
+            kimi: "Kimi Coding",
+            doubao: "Doubao",
+            win5h: "5h window",
+          },
+          prov: {
+            h2: "61 providers, one screen",
+            sub: "API keys, access tokens, AK/SK signing, or cookies via in-app web login: two credential tracks coexist, pick whichever each provider needs.",
+            all: "25 more · 61 total →",
+            note: 'Every endpoint and parser was ported one by one from the macOS Swift source; credential types and display ranges are documented in the <a href="https://github.com/sternelee/codexbar#支持的服务商61-家" target="_blank" rel="noopener">provider table in the README</a>.',
+            anthropic: "Anthropic Console",
+            doubao: "Doubao",
+            bailian: "Alibaba Bailian",
+            kimicoding: "Kimi Coding",
+          },
+          tag: {
+            web: "Web login",
+            oauth: "OAuth web login",
+            cookiekey: "Cookie / API key",
+            apikey: "API key",
+            apikeyweb: "API key / web login",
+            admin: "Admin key",
+            token: "Access token",
+            ghtoken: "GitHub token",
+            aksk: "AK / SK signing",
+            apitoken: "API token",
+            adminkey: "Admin key",
+            cookie: "Cookie",
+            session: "Session token",
+            access: "Access token",
+            vkey: "Virtual key",
+            bearer: "Bearer token",
+            token2: "Token",
+          },
+          feat: {
+            h2: "Limits, balances and alerts in one view",
+            sub: "Session / weekly / monthly windows with second-fresh countdowns turn how much is left into a number you never have to guess.",
+            cdh3: "Reset times you can plan around",
+            cdp: "Each provider counts down its session, weekly and monthly windows independently, refreshing every second. Whether a long task fits before the reset, the answer is right on the card.",
+            reset: "Resets",
+            cdDoubao: "Doubao · 5h window",
+            balh3: "Balances and spend",
+            balp: "Whatever providers expose gets shown: balance, remaining credit, credits and spend estimates.",
+            left: "1 left",
+            remh3: "Threshold and recovery alerts",
+            remp: "Get an almost-out alert at a 50-95% threshold (90% by default), and an about-to-reset alert 5 / 15 / 30 / 60 minutes before each window recovers. Delivered through system agent reminders, they fire even if the app has been killed.",
+          },
+          st: {
+            title: "Usage stats",
+            note: "Daily usage delta in percentage points, sampled locally, peak day highlighted",
+            aria: "Stats range",
+            d7: "7 days",
+            d30: "30 days",
+            today: "Today",
+            sum7: "7-day total",
+            sum30: "30-day total",
+          },
+          wid: {
+            h2: "Widgets, at a glance",
+            sub: "Two HarmonyOS service cards and two native Android AppWidgets: a 2x2 quick view and a 2x4 list keep your tightest window pinned to the home screen and lock screen.",
+            f1: "<b>Hero lane</b>: when one provider has several windows, the tightest one becomes the big number; if Claude weekly 96% is tighter than its session, the card shows 96%.",
+            f2: "<b>Carousel and picker</b>: the HarmonyOS card swipes one provider per page; pick which providers appear in settings, and the list order is the card order.",
+            f3: "<b>Balance fallback</b>: providers without quota windows but with a successful snapshot show their balance instead of dropping off the card.",
+            f4: "<b>Adaptive theming</b>: widget colors follow the system theme, and tapping anywhere opens the app. Successful refreshes push instantly, with a 30-minute timer as a safety net.",
+            left: "left",
+            sessionwin: "Session window",
+            resets: "Resets",
+            all: "CODEXBAR · ALL",
+            claudew: "Claude weekly",
+            codexs: "Codex session",
+            balance: "Balance",
+          },
+          log: {
+            h2: "Log in once, your accounts everywhere",
+            sub: "Two credential tracks coexist: direct API keys, or in-app web login that captures the session automatically; stack multiple accounts on the same provider.",
+            webh3: "In-app web login",
+            webp: "Codex authorizes with PKCE and renews silently with refresh tokens; Claude has its sessionKey captured automatically; DeepSeek grabs the platform session directly. 401s retry without prompting, so you rarely log in twice.",
+            acch3: "Multi-account management",
+            accp: "Tap an account chip to switch and refresh instantly; long-press to rename or delete; duplicate credentials are deduped, and deleting falls back to the remaining accounts.",
+            main: "Main",
+            work: "Work",
+            langh3: "Bilingual · Light and dark",
+            langp:
+              "One tap in settings switches the display language, with a 342-entry dictionary covering every string and alert; the color scheme follows the system theme instantly, cards and charts included.",
+          },
+          priv: {
+            h2: "Credentials live only on your phone",
+            sub: "CodexBar ships with no analytics and no account system: no backend, no tracking, every refresh goes straight to the provider APIs.",
+            p1: "No data collected or uploaded",
+            p2: "Credentials stay on device (Preferences)",
+            p3: "Refreshes hit provider APIs directly",
+            btn: "Read the privacy policy",
+          },
+          dl: {
+            h2: "Get CodexBar",
+            sub: "Free and open source under MIT. Requires HarmonyOS 6.1.1 (API 24) or newer; via ArkUI-X the same code also builds for Android and iOS.",
+            ghp: "Download HAP packages and release notes, published with every release.",
+            ghbtn: "Download",
+            agh3: "Huawei AppGallery",
+            agp: "The AppGallery listing is in progress: release certificates, agent-reminder entitlements and staged rollout steps are already documented.",
+            agbtn: "Listing guide",
+            bh3: "Build it yourself",
+            bp: "Open the project in DevEco Studio, configure signing and run; ArkUI-X outputs also run on Android and iOS.",
+            bbtn: "Get the source",
+            meta: "The original macOS menu-bar CodexBar was created by Peter Steinberger; this project brings it to HarmonyOS with full credit.",
+          },
+          foot: { privacy: "Privacy policy", mac: "macOS original" },
+        },
+      };
+
+      document.addEventListener("alpine-i18n:ready", function () {
+        var lang = document.documentElement.getAttribute("data-lang");
+        if (lang !== "en" && lang !== "zh") lang = "zh";
+        window.AlpineI18n.create(lang, MESSAGES);
+        window.AlpineI18n.fallbackLocale = "zh";
+      });
+
+      /* ===================== chart demo data ===================== */
+      var D7 = [18, 42, 9, 55, 63, 24, 12];
+      var D30 = [
+        8, 15, 32, 6, 11, 40, 58, 22, 4, 17, 36, 49, 12, 8, 25, 61, 33, 7, 14,
+        28, 45, 19, 5, 38, 52, 16, 9, 27, 44, 21,
+      ];
+
+      /* ===================== icon theme swap ===================== */
+      var DARK_ICONS = [
+        "amp",
+        "bedrock",
+        "copilot",
+        "cursor",
+        "elevenlabs",
+        "groq",
+        "manus",
+        "moonshot",
+        "notion",
+        "ollama",
+        "openai",
+        "opencode",
+        "poe-color",
+        "qoder-color",
+        "v0",
+        "xai",
+      ];
+      function applyIconTheme(dark) {
+        document
+          .querySelectorAll('img[src*="images/icons/"]')
+          .forEach(function (img) {
+            var m = img
+              .getAttribute("src")
+              .match(/images\/icons\/([a-z0-9-]+)\.svg$/);
+            if (!m) return;
+            var base = m[1].replace(/-dark$/, "");
+            if (DARK_ICONS.indexOf(base) === -1) return;
+            img.setAttribute(
+              "src",
+              "images/icons/" + base + (dark ? "-dark" : "") + ".svg",
+            );
+          });
+      }
+
+      /* ===================== site component ===================== */
+      document.addEventListener("alpine:init", function () {
+        window.Alpine.data("site", function () {
+          return {
+            theme: "light",
+            lang: "zh",
+            now: Date.now(),
+            range: 7,
+            weekdays: {
+              zh: ["日", "一", "二", "三", "四", "五", "六"],
+              en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            },
+            providers: [
+              { i: "claude-color", n: "Claude", t: "tag.web" },
+              { i: "openai", n: "Codex (ChatGPT)", t: "tag.oauth" },
+              { i: "cursor", n: "Cursor", t: "tag.cookiekey" },
+              { i: "openai", n: "OpenAI Platform", t: "tag.apikey" },
+              {
+                i: "claude-color",
+                n: "",
+                nk: "prov.anthropic",
+                t: "tag.admin",
+              },
+              { i: "openrouter-color", n: "OpenRouter", t: "tag.apikey" },
+              { i: "deepseek-color", n: "DeepSeek", t: "tag.apikeyweb" },
+              { i: "kimi-color", n: "", nk: "prov.kimicoding", t: "tag.token" },
+              { i: "moonshot", n: "Kimi (Moonshot)", t: "tag.apikey" },
+              { i: "copilot", n: "GitHub Copilot", t: "tag.ghtoken" },
+              { i: "bedrock", n: "AWS Bedrock", t: "tag.aksk" },
+              { i: "doubao-color", n: "", nk: "prov.doubao", t: "tag.aksk" },
+              { i: "alibaba", n: "", nk: "prov.bailian", t: "tag.apikey" },
+              { i: "zhipu-color", n: "z.ai / GLM", t: "tag.apikey" },
+              { i: "minimax-color", n: "MiniMax", t: "tag.apitoken" },
+              { i: "xai", n: "xAI Grok", t: "tag.adminkey" },
+              { i: "groq", n: "Groq", t: "tag.cookie" },
+              { i: "perplexity-color", n: "Perplexity", t: "tag.cookie" },
+              { i: "mistral-color", n: "Mistral", t: "tag.cookie" },
+              { i: "manus", n: "Manus", t: "tag.session" },
+              { i: "notion", n: "Notion AI", t: "tag.cookie" },
+              { i: "elevenlabs", n: "ElevenLabs", t: "tag.apikey" },
+              { i: "v0", n: "v0", t: "tag.apikey" },
+              { i: "amp", n: "Amp", t: "tag.access" },
+              { i: "fireworks-color", n: "Fireworks", t: "tag.apikey" },
+              { i: "litellm", n: "LiteLLM", t: "tag.vkey" },
+              { i: "opencode", n: "OpenCode", t: "tag.cookie" },
+              { i: "devin-color", n: "Devin", t: "tag.bearer" },
+              { i: "huggingface-color", n: "HuggingFace", t: "tag.token2" },
+              { i: "warp", n: "Warp", t: "tag.apikey" },
+              { i: "qoder-color", n: "Qoder", t: "tag.cookie" },
+              { i: "t3chat", n: "T3 Chat", t: "tag.cookie" },
+              { i: "siliconcloud-color", n: "SiliconFlow", t: "tag.apikey" },
+              { i: "poe-color", n: "Poe", t: "tag.apikey" },
+              { i: "ollama", n: "Ollama", t: "tag.apikey" },
+              { i: "deepinfra-color", n: "DeepInfra", t: "tag.apikey" },
+            ],
+
+            init: function () {
+              var q = new URLSearchParams(window.location.search);
+              var qt = q.get("theme");
+              var ql = q.get("lang");
+              var st = null,
+                sl = null;
+              try {
+                st = localStorage.getItem("cb-theme");
+                sl = localStorage.getItem("cb-lang");
+              } catch (e) {}
+              this.theme =
+                qt === "dark" || qt === "light"
+                  ? qt
+                  : st === "dark" || st === "light"
+                    ? st
+                    : window.matchMedia("(prefers-color-scheme: dark)").matches
+                      ? "dark"
+                      : "light";
+              this.lang =
+                ql === "en" || ql === "zh"
+                  ? ql
+                  : sl === "en" || sl === "zh"
+                    ? sl
+                    : (navigator.language || "zh")
+                          .toLowerCase()
+                          .indexOf("en") === 0
+                      ? "en"
+                      : "zh";
+              document.documentElement.setAttribute("data-lang", this.lang);
+              this.applyTheme(false);
+              this.applyLang(false);
+
+              var self = this;
+              var mq = window.matchMedia("(prefers-color-scheme: dark)");
+              if (mq.addEventListener) {
+                mq.addEventListener("change", function (e) {
+                  var pref = null;
+                  try {
+                    pref = localStorage.getItem("cb-theme");
+                  } catch (err) {}
+                  if (!pref) {
+                    self.theme = e.matches ? "dark" : "light";
+                    self.applyTheme(false);
+                  }
+                });
+              }
+              if (
+                !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+              ) {
+                setInterval(function () {
+                  self.now = Date.now();
+                }, 1000);
+              }
+            },
+
+            get dark() {
+              return this.theme === "dark";
+            },
+            get clockStr() {
+              var d = new Date(this.now);
+              return (
+                String(d.getHours()).padStart(2, "0") +
+                ":" +
+                String(d.getMinutes()).padStart(2, "0")
+              );
+            },
+            get chartData() {
+              return this.range === 7 ? D7 : D30;
+            },
+            get chartMax() {
+              return Math.max.apply(null, this.chartData);
+            },
+            get today() {
+              return D30[D30.length - 1];
+            },
+            get sum7() {
+              return D7.reduce(function (a, b) {
+                return a + b;
+              }, 0);
+            },
+            get sum30() {
+              return D30.reduce(function (a, b) {
+                return a + b;
+              }, 0);
+            },
+            get sessionLeft() {
+              return this.nextSession(this.now) - this.now;
+            },
+            get weeklyLeft() {
+              return this.nextWeekly(this.now) - this.now;
+            },
+
+            toggleTheme: function () {
+              this.theme = this.dark ? "light" : "dark";
+              this.applyTheme(true);
+            },
+            toggleLang: function () {
+              this.lang = this.lang === "zh" ? "en" : "zh";
+              this.applyLang(true);
+            },
+            applyTheme: function (persist) {
+              document.documentElement.setAttribute("data-theme", this.theme);
+              if (persist) {
+                try {
+                  localStorage.setItem("cb-theme", this.theme);
+                } catch (e) {}
+              }
+              var meta = document.getElementById("metaTheme");
+              if (meta)
+                meta.setAttribute("content", this.dark ? "#10151b" : "#f6f7f9");
+              var self = this;
+              this.$nextTick(function () {
+                applyIconTheme(self.dark);
+              });
+            },
+            applyLang: function (persist) {
+              document.documentElement.setAttribute("data-lang", this.lang);
+              document.documentElement.lang =
+                this.lang === "en" ? "en" : "zh-CN";
+              if (persist) {
+                try {
+                  localStorage.setItem("cb-lang", this.lang);
+                } catch (e) {}
+              }
+              if (window.AlpineI18n) {
+                window.AlpineI18n.locale = this.lang;
+                document.title = window.AlpineI18n.t("meta.title");
+                var md = document.querySelector('meta[name="description"]');
+                if (md)
+                  md.setAttribute("content", window.AlpineI18n.t("meta.desc"));
+                var ot = document.querySelector('meta[property="og:title"]');
+                if (ot)
+                  ot.setAttribute("content", window.AlpineI18n.t("meta.title"));
+                var od = document.querySelector(
+                  'meta[property="og:description"]',
+                );
+                if (od)
+                  od.setAttribute("content", window.AlpineI18n.t("meta.desc"));
+              }
+            },
+
+            nextSession: function (ts) {
+              var n = new Date(ts);
+              var base = Date.UTC(
+                n.getUTCFullYear(),
+                n.getUTCMonth(),
+                n.getUTCDate(),
+              );
+              return base + (Math.floor(n.getUTCHours() / 5) + 1) * 5 * 3600000;
+            },
+            nextWeekly: function (ts) {
+              var n = new Date(ts);
+              var d = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+              var day = (d.getDay() + 6) % 7;
+              d.setDate(d.getDate() + (7 - day));
+              if (d.getTime() <= n.getTime()) d.setDate(d.getDate() + 7);
+              return d.getTime();
+            },
+            fmtSession: function (ms) {
+              var s = Math.max(0, Math.floor(ms / 1000));
+              return (
+                Math.floor(s / 3600) +
+                ":" +
+                String(Math.floor((s % 3600) / 60)).padStart(2, "0") +
+                ":" +
+                String(s % 60).padStart(2, "0")
+              );
+            },
+            fmtWeekly: function (ms) {
+              var s = Math.max(0, Math.floor(ms / 1000));
+              return (
+                Math.floor(s / 86400) +
+                "d " +
+                String(Math.floor((s % 86400) / 3600)).padStart(2, "0") +
+                ":" +
+                String(Math.floor((s % 3600) / 60)).padStart(2, "0")
+              );
+            },
+            pct: function (v) {
+              return Math.max(3, Math.round((v / this.chartMax) * 100));
+            },
+            xLabel: function (i) {
+              var len = this.chartData.length;
+              var d = new Date(this.now);
+              d.setDate(d.getDate() - (len - 1 - i));
+              if (this.range === 7) return this.weekdays[this.lang][d.getDay()];
+              return i % 5 === 0 || i === len - 1
+                ? d.getMonth() + 1 + "/" + d.getDate()
+                : "";
+            },
+          };
+        });
+      });
+
+      /* ===================== nav border + reveal (vanilla) ===================== */
+      (function () {
+        "use strict";
+        var RM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var topbar = document.getElementById("topbar");
+        function onScroll() {
+          topbar.classList.toggle("scrolled", window.scrollY > 8);
+        }
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+
+        var reveals = document.querySelectorAll(".reveal:not(.in)");
+        if ("IntersectionObserver" in window && !RM) {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (e) {
+                if (e.isIntersecting) {
+                  e.target.classList.add("in");
+                  io.unobserve(e.target);
+                }
+              });
+            },
+            { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
+          );
+          reveals.forEach(function (el) {
+            io.observe(el);
+          });
+        } else {
+          reveals.forEach(function (el) {
+            el.classList.add("in");
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -94,10 +94,6 @@ struct WidgetCard {
           ForEach(this.items, (item: WidgetCardItem, idx: number) => {
             Column({ space: 6 }) {
               this.itemRow(item)
-              // 轮播位置提示：第 x / n 家
-              Text(`${idx + 1} / ${this.items.length}`)
-                .fontSize(8)
-                .fontColor($r('app.color.text_dim'))
             }
             .width('100%')
             .height('100%')

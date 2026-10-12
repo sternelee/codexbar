@@ -116,9 +116,6 @@ struct WidgetListCard {
                   .width('100%')
               }
 
-              Text(`${idx + 1} / ${this.items.length}`)
-                .fontSize(8)
-                .fontColor($r('app.color.text_dim'))
             }
             .width('100%')
             .height('100%')

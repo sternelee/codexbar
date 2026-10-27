@@ -30,7 +30,7 @@ import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
 import { L, AppLang, currentLang } from '../common/I18n';
-import { RowProgressBar, WindowBlock } from '../view/UsageBar';
+import { DetailWindowRow, RowProgressBar } from '../view/UsageBar';
 import { DetailChart } from '../view/DetailChart';
 import { ProviderIcon } from '../view/ProviderIcon';
 
@@ -708,20 +708,25 @@ struct ProviderDetail {
         .shadow(Theme.cardShadow())
       }
 
-      // 全部用量窗口
+      // 全部用量窗口（Nowdex 展开卡风格：所有窗口一张卡，
+      // 每行大号百分比 + 剩余读数 + 点阵刻度尺 + ⏱ 倒计时）
       if (s.snapshot != null && s.snapshot.ok) {
-        ForEach(s.allWindows(), (w: NamedRateWindow) => {
-          Column({ space: Theme.gapSm }) {
-            WindowBlock({ title: w.title, win: this.laneForDisplay(w, s), compact: false, animKey: `${s.descriptor.id}_${w.id}` })
-          }
-          .width('100%')
-          .padding(Theme.cardPad)
-          .borderRadius(Theme.radius)
-          .backgroundColor(Theme.card)
-          .border({ width: 1, color: Theme.stroke })
-          .shadow(Theme.cardShadow())
-        }, (w: NamedRateWindow) =>
-          `${w.id}_${this.laneForDisplay(w, s).usedPercent}_${Math.floor(this.tick / 30)}`)
+        Column({ space: Theme.gapLg }) {
+          ForEach(s.allWindows(), (w: NamedRateWindow) => {
+            DetailWindowRow({
+              title: w.title,
+              win: this.laneForDisplay(w, s),
+              animKey: `${s.descriptor.id}_${w.id}`
+            })
+          }, (w: NamedRateWindow) =>
+            `${w.id}_${this.laneForDisplay(w, s).usedPercent}_${Math.floor(this.tick / 30)}`)
+        }
+        .width('100%')
+        .padding(Theme.cardPad)
+        .borderRadius(Theme.radius)
+        .backgroundColor(Theme.card)
+        .border({ width: 1, color: Theme.stroke })
+        .shadow(Theme.cardShadow())
       }
 
       // 余额（providerCost.period 非空时用它作标题，如 "Monthly cap" / "Extra usage"）

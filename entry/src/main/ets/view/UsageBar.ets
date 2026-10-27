@@ -5,6 +5,7 @@
 import { RateWindow, makeWindow } from '../model/Models';
 import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
+import { L } from '../common/I18n';
 
 /**
  * 数值过渡记忆：animKey → 上一次展示的百分比。
@@ -207,6 +208,78 @@ export struct CompactWindowBlock {
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
+    .onAppear(() => {
+      if (this.animKey.length === 0 || this.animPercent === this.win.usedPercent) {
+        return;
+      }
+      this.getUIContext().animateTo({ duration: TWEEN_MS, curve: Curve.Friction }, () => {
+        this.animPercent = this.win.usedPercent;
+      });
+    })
+  }
+}
+
+/**
+ * 详情页 Nowdex 风格窗口行（对标官网展开卡片）：
+ * 大号百分比 + 剩余读数在左，窗口名 + ⏱ 倒计时在右，下方全宽点阵刻度尺；
+ * 传 animKey 时百分比做数值过渡（与首页卡片共用 percentMemory）。
+ */
+@Component
+export struct DetailWindowRow {
+  @Prop title: string = '';
+  @Prop win: RateWindow = makeWindow(0, 0, false);
+  /** 数值过渡锚点（服务商 id + 窗口 id）；空串 = 不做过渡 */
+  @Prop animKey: string = '';
+  @State animPercent: number = -1;
+
+  aboutToAppear(): void {
+    if (this.animKey.length > 0) {
+      this.animPercent = rememberedPercent(this.animKey);
+      rememberPercent(this.animKey, this.win.usedPercent);
+    }
+  }
+
+  private shownPercent(): number {
+    return this.animPercent >= 0 ? this.animPercent : this.win.usedPercent;
+  }
+
+  build() {
+    Column({ space: Theme.gapXs }) {
+      Row() {
+        Column() {
+          Text(Format.percent(this.shownPercent()))
+            .fontSize(Theme.fsMetric)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Theme.barColor(this.win.usedPercent, this.win.usageKnown))
+          if (this.win.usageKnown) {
+            Text(`${L('剩余', 'Remaining')} ${Format.percent(Math.max(0, 100 - this.shownPercent()))}`)
+              .fontSize(Theme.fsMicro)
+              .fontColor(Theme.textDim)
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+
+        Blank()
+
+        Column({ space: Theme.gapXxs }) {
+          Text(this.title)
+            .fontSize(Theme.fsLabel)
+            .fontColor(Theme.textDim)
+          if (this.win.resetsAt > 0) {
+            Text(`⏱ ${Format.resetIn(this.win.resetsAt - Date.now())}`)
+              .fontSize(Theme.fsCaption)
+              .fontColor(Theme.textDim)
+          }
+        }
+        .alignItems(HorizontalAlign.End)
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Top)
+
+      SegmentScaleBar({ percent: this.shownPercent() })
+        .width('100%')
+    }
+    .width('100%')
     .onAppear(() => {
       if (this.animKey.length === 0 || this.animPercent === this.win.usedPercent) {
         return;

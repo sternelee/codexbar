@@ -62,6 +62,7 @@ import {
   createZoomMateProvider
 } from './MoreProviders4';
 import { createAlibabaCodingPlanProvider, createFactoryProvider } from './MoreProviders6';
+import { createTraeCnProvider, createVercelProvider, createZedProvider } from './MoreProviders7';
 import {
   createAmpProvider,
   createAzureOpenAIProvider,
@@ -148,6 +149,9 @@ export class ProviderRegistry {
         createOllamaProvider(),
         createCopilotProvider(),
         createBedrockProvider(),
+        createTraeCnProvider(),
+        createZedProvider(),
+        createVercelProvider(),
       ];
     }
     return ProviderRegistry.providers;

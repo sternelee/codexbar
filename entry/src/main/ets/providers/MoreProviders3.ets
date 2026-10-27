@@ -234,8 +234,20 @@ class QoderProvider implements UsageProvider {
     if (cookie.length === 0) {
       return UsageSnapshot.failure(LT('未配置会话 Cookie'));
     }
-    const sites = ['https://qoder.com', 'https://qoder.com.cn'];
+    // 第二凭证可指定站点（对照 macOS manualCookieOrigin）；空则按粘贴内容自动路由
+    const explicit = setting.credential2.trim().toLowerCase();
+    let sites: string[];
+    if (explicit === 'cn' || explicit.indexOf('.cn') >= 0) {
+      sites = ['https://qoder.com.cn'];
+    } else if (explicit.length > 0) {
+      sites = ['https://qoder.com'];
+    } else {
+      const routed = qoderRouteSites(cookie);
+      sites = routed != null ? routed : ['https://qoder.com', 'https://qoder.com.cn'];
+    }
     let root: Record<string, Json> | null = null;
+    let sourceSite = '';
+    let rejected = false;
     let lastError = '';
     for (let i = 0; i < sites.length && root == null; i++) {
       const headers: Record<string, string> = {
@@ -251,8 +263,13 @@ class QoderProvider implements UsageProvider {
         const parsed = asObj(resp.json());
         if (parsed != null) {
           root = parsed;
+          sourceSite = sites[i];
           break;
         }
+      } else if (resp.code === 401 || resp.code === 403) {
+        // 凭证被该站点拒绝：换另一站再试（对照源工程 rejectCookie 后继续候选）
+        rejected = true;
+        lastError = resp.errorText();
       } else {
         lastError = resp.errorText();
       }
@@ -287,6 +304,9 @@ class QoderProvider implements UsageProvider {
       resets = isoMs(resetRaw as string);
     }
     const snap = UsageSnapshot.success(makeWindow(Math.max(0, Math.min(100, percent)), resets, true), null, null);
+    // 对照源工程「source / domain」身份：标明这次查询命中的站点（.com / .com.cn）
+    const host = sourceSite.replace('https://', '');
+    snap.identity = { accountEmail: '', accountOrganization: '', loginMethod: `web / ${host}` };
     const rows: ProviderDetailRow[] = [
       { label: LT('已用 / 总量'), value: `${Math.round(used)} / ${Math.round(total)}` },
     ];
@@ -294,6 +314,47 @@ class QoderProvider implements UsageProvider {
     snap.details = [section];
     return snap;
   }
+}
+
+/**
+ * Qoder Cookie 站点路由（对照 QoderCookieRouting.swift 的精简版）：
+ * 从粘贴内容（裸 Cookie / cURL 捕获 / HTTP 原始报文）中提取 host，
+ * 判定该请求 qoder.com（国际站）还是 qoder.com.cn（中国站）。
+ * 两个站都出现（矛盾）或都识别不出时返回 null，由调用方双站轮询兜底。
+ * 导出供单元测试覆盖。
+ */
+export function qoderRouteSites(raw: string): string[] | null {
+  const text = raw.toLowerCase();
+  const comCount = qoderCountHost(text, 'qoder.com');
+  const cnCount = qoderCountHost(text, 'qoder.com.cn');
+  if (comCount > 0 && cnCount === 0) {
+    return ['https://qoder.com'];
+  }
+  if (cnCount > 0 && comCount === 0) {
+    return ['https://qoder.com.cn'];
+  }
+  return null;
+}
+
+/** 统计 host 出现次数（含端口变体；.cn 域名里的 qoder.com 不计入国际站） */
+function qoderCountHost(text: string, host: string): number {
+  let count = 0;
+  let from = 0;
+  for (;;) {
+    const idx = text.indexOf(host, from);
+    if (idx < 0) {
+      break;
+    }
+    // 后随字符必须是端口、路径或结束，防止 qoder.com.cn 被当成 qoder.com
+    const next = idx + host.length;
+    const boundary = next >= text.length || text.charAt(next) === ':' ||
+      text.charAt(next) === '/' || text.charAt(next) === '"' || text.charAt(next) === "'";
+    if (boundary) {
+      count += 1;
+    }
+    from = next;
+  }
+  return count;
 }
 
 function firstOfObj(o: Record<string, Json>, keys: string[]): Json {

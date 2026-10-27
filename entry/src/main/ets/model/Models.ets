@@ -401,6 +401,11 @@ export function extraFields(providerId: string): ExtraField[] {
       { key: 'seatEntitlement', hint: LT('可选：席位包含额度（分母，用于明细行的用量进度条）') },
     ];
   }
+  if (providerId === 'zed') {
+    return [
+      { key: 'api_url', hint: LT('可选：Editor API URL（如 https://cloud.zed.dev/api/…，填了就走 API 模式）') },
+    ];
+  }
   return [];
 }
 
@@ -1128,8 +1133,9 @@ export function needsSecondCredential(providerId: string): boolean {
     providerId === 'xai' || providerId === 'litellm' || providerId === 'llmproxy' ||
     providerId === 'sub2api' || providerId === 'devin' || providerId === 'bedrock' ||
     providerId === 'clawrouter' || providerId === 'doubao' ||
-    // 可选：网页会话 Cookie（对照 MiniMaxProviderDescriptor：requiresManualCookieSource = true）
-    providerId === 'minimax';
+    providerId === 'minimax' ||
+    // 可选：站点（qoder.com / qoder.com.cn；空 = 按粘贴内容自动路由）
+    providerId === 'qoder';
 }
 
 /** 第二凭证输入框提示文案 */
@@ -1145,6 +1151,9 @@ export function secondCredentialHint(providerId: string): string {
   }
   if (providerId === 'minimax') {
     return LT('可选：platform.minimaxi.com 的会话 Cookie（用于 Billing history 明细）');
+  }
+  if (providerId === 'qoder') {
+    return LT('可选：站点（qoder.com 或 qoder.com.cn，默认自动识别）');
   }
 
   return LT('可选：组织 / 账号 ID');

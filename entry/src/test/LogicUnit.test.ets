@@ -14,6 +14,8 @@ import { makeWindow, UsageSnapshot, RateWindow, ProviderDescriptor, ProviderDeta
 import { parseDetailParam, DetailRouteParam } from '../main/ets/common/Nav';
 import { chutesWindow, manusLanes, perplexityLanes, perplexityPools } from '../main/ets/providers/MoreProviders';
 import { nousLane } from '../main/ets/providers/MoreProviders3';
+import { qoderRouteSites } from '../main/ets/providers/MoreProviders3';
+import { moneyNumber } from '../main/ets/providers/MoreProviders7';
 import { deepseekCostText, deepseekCountText, deepseekDetailSections, deepseekMonthlyUsage,
   deepseekPlatformUsage, siliconflowErrorText, siliconflowCnErrorText, SILICONFLOW_HOSTS } from '../main/ets/providers/ApiKeyProviders';
 import { HttpResult } from '../main/ets/net/Http';
@@ -2783,6 +2785,28 @@ const EXTRA_REGION_JSON = `{"region":"ap-1"}`;
       invalid.code = 401;
       invalid.body = '{"code":30014,"message":"Token is invalid."}';
       expect(siliconflowCnErrorText(invalid)).assertEqual('Token is invalid. (HTTP 401)');
+    });
+
+    it('Qoder_cookie_site_routing', 0, () => {
+      // 裸 Cookie / cURL 捕获 / HTTP 报文 → 自动路由到对应站点
+      expect(qoderRouteSites('session=abc; domain=qoder.com.cn'))
+        .assertEqual(['https://qoder.com.cn']);
+      expect(qoderRouteSites('curl https://qoder.com/account/usage -H "Cookie: a=1"'))
+        .assertEqual(['https://qoder.com']);
+      expect(qoderRouteSites('GET /account/usage HTTP/1.1\nHost: qoder.com.cn'))
+        .assertEqual(['https://qoder.com.cn']);
+      expect(qoderRouteSites('token=xyz')).assertEqual(null);
+      // 两个站都出现（矛盾）→ 回退双站轮询
+      expect(qoderRouteSites('a=1; domain=qoder.com; b=2; domain=qoder.com.cn')).assertEqual(null);
+    });
+
+    it('Vercel_money_number', 0, () => {
+      expect(moneyNumber('42.50')).assertEqual(42.5);
+      expect(moneyNumber('0')).assertEqual(0);
+      expect(moneyNumber('-3.25')).assertEqual(-3.25);
+      expect(moneyNumber('abc')).assertEqual(null);
+      expect(moneyNumber(null)).assertEqual(null);
+      expect(moneyNumber('1.2.3')).assertEqual(null);
     });
   });
 }

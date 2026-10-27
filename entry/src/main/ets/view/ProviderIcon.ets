@@ -126,6 +126,10 @@ export function iconFileFor(providerId: string): string | null {
       return 'ollama.svg';
     case 'bedrock':
       return 'bedrock.svg';
+    case 'traecn':
+      return 'trae.svg';
+    case 'vercel':
+      return 'vercel.svg';
     case 'copilot':
       return 'copilot.svg';
     case 'doubao':

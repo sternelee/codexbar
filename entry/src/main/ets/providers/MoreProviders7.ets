@@ -15,7 +15,9 @@ import {
   ProviderDescriptor,
   ProviderDetailRow,
   ProviderDetailSection,
+  ProviderIdentitySnapshot,
   ProviderSetting,
+  RateWindow,
   UsageSnapshot
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
@@ -66,7 +68,9 @@ class TraeCnProvider implements UsageProvider {
 
     // 2. JWT → 权益用量（对照源工程 user_current_entitlement_list）
     const usageHeaders: Record<string, string> = {
-      ...baseHeaders,
+      'cookie': cookie,
+      'origin': 'https://www.trae.cn',
+      'referer': 'https://www.trae.cn/',
       'authorization': `Cloud-IDE-JWT ${token.trim()}`,
       'content-type': 'application/json',
     };
@@ -234,18 +238,18 @@ class ZedProvider implements UsageProvider {
         used: spent,
         currency: 'USD',
         displayText: Format.money(spent, 'USD'),
-        period: LT('本计费周期', 'Current billing period'),
+        period: LT('本计费周期'),
         limit: limitCents / 100,
       };
     }
     const rows: ProviderDetailRow[] = [
-      { label: LT('已花费', 'Spent'), value: Format.money(spent, 'USD') },
-      { label: LT('花费上限', 'Spend limit'), value: limitCents != null ? Format.money(limitCents / 100, 'USD') : LT('未上报', 'Not reported') },
+      { label: LT('已花费'), value: Format.money(spent, 'USD') },
+      { label: LT('花费上限'), value: limitCents != null ? Format.money(limitCents / 100, 'USD') : LT('未上报') },
     ];
     if (limitCents != null) {
-      rows.push({ label: LT('剩余预算', 'Remaining budget'), value: Format.money(Math.max(0, limitCents / 100 - spent), 'USD') });
+      rows.push({ label: LT('剩余预算'), value: Format.money(Math.max(0, limitCents / 100 - spent), 'USD') });
     }
-    snap.details = [{ title: LT('Token 花费', 'Token spend'), rows: rows }];
+    snap.details = [{ title: LT('Token 花费'), rows: rows }];
     return snap;
   }
 
@@ -275,7 +279,7 @@ class ZedProvider implements UsageProvider {
 
     // 身份：GitHub 登录名 + 显示名
     const user = asObj(root['user']);
-    const identity = {
+    const identity: ProviderIdentitySnapshot = {
       accountEmail: user != null ? optStr(user, 'github_login') ?? '' : '',
       accountOrganization: user != null ? optStr(user, 'name') ?? '' : '',
       loginMethod: planName.length > 0 ? planName : 'Zed',
@@ -306,7 +310,7 @@ class ZedProvider implements UsageProvider {
     if (plan != null && plan['has_overdue_invoices'] === true) {
       const overdue: NamedRateWindow[] = [{
         id: 'zed.overdue-invoices',
-        title: LT('账单', 'Billing'),
+        title: LT('账单'),
         window: makeWindow(100, 0, false),
       }];
       snap.extraRateWindows = overdue;
@@ -383,10 +387,10 @@ class VercelProvider implements UsageProvider {
     };
     snap.identity = { accountEmail: '', accountOrganization: '', loginMethod: 'API' };
     snap.details = [{
-      title: LT('团队额度', 'Team credits'),
+      title: LT('团队额度'),
       rows: [
-        { label: LT('可用余额', 'Available balance'), value: Format.money(balance, 'USD') },
-        { label: LT('累计消费', 'Lifetime spend'), value: Format.money(spent, 'USD') },
+        { label: LT('可用余额'), value: Format.money(balance, 'USD') },
+        { label: LT('累计消费'), value: Format.money(spent, 'USD') },
       ],
     }];
     return snap;

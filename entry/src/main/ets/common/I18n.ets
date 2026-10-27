@@ -248,6 +248,7 @@ const PROVIDER_TEXTS: Record<string, string> = {
   '未返回配额组': 'No quota groups returned',
   '未返回额度信息': 'No quota info returned',
   '已花费': 'Spent',
+  '本计费周期': 'Current billing period',
   '剩余预算': 'Remaining budget',
   '周期已结束': 'Cycle ended',
   '团队额度': 'Team credits',

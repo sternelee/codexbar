@@ -15,7 +15,9 @@ import {
   ProviderDescriptor,
   ProviderDetailRow,
   ProviderDetailSection,
+  ProviderIdentitySnapshot,
   ProviderSetting,
+  RateWindow,
   UsageSnapshot
 } from '../model/Models';
 import { UsageProvider } from './ProviderBase';
@@ -65,11 +67,12 @@ class TraeCnProvider implements UsageProvider {
     }
 
     // 2. JWT → 权益用量（对照源工程 user_current_entitlement_list）
-    const usageHeaders: Record<string, string> = {
-      ...baseHeaders,
-      'authorization': `Cloud-IDE-JWT ${token.trim()}`,
-      'content-type': 'application/json',
-    };
+    const usageHeaders: Record<string, string> = {};
+    usageHeaders['cookie'] = baseHeaders['cookie'];
+    usageHeaders['origin'] = baseHeaders['origin'];
+    usageHeaders['referer'] = baseHeaders['referer'];
+    usageHeaders['authorization'] = `Cloud-IDE-JWT ${token.trim()}`;
+    usageHeaders['content-type'] = 'application/json';
     const usageResp = await Http.post(
       'https://api.trae.cn/trae/api/v2/pay/user_current_entitlement_list',
       usageHeaders,
@@ -275,7 +278,7 @@ class ZedProvider implements UsageProvider {
 
     // 身份：GitHub 登录名 + 显示名
     const user = asObj(root['user']);
-    const identity = {
+    const identity: ProviderIdentitySnapshot = {
       accountEmail: user != null ? optStr(user, 'github_login') ?? '' : '',
       accountOrganization: user != null ? optStr(user, 'name') ?? '' : '',
       loginMethod: planName.length > 0 ? planName : 'Zed',

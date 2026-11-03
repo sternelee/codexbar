@@ -414,11 +414,17 @@ const PROVIDER_TEXTS: Record<string, string> = {
   '）': ')',
 };
 
-/** 服务商/模型层文案按当前语言翻译：英文查表，未收录与中文模式均原样返回 */
-export function LT(text: string): string {
+/**
+ * 服务商/模型层文案按当前语言翻译：英文查表，未收录时回退到调用方给的首选译文，
+ * 中文模式原样返回中文原文。
+ */
+export function LT(text: string, fallback?: string): string {
   if (currentLang() !== 'en') {
     return text;
   }
   const t = PROVIDER_TEXTS[text];
-  return t !== undefined ? t : text;
+  if (t !== undefined) {
+    return t;
+  }
+  return fallback !== undefined ? fallback : text;
 }

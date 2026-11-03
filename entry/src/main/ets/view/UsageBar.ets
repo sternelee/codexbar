@@ -30,63 +30,6 @@ function rememberPercent(key: string, target: number): void {
 /** 数值过渡的公共节奏：与进场动画同一套减速曲线 */
 const TWEEN_MS = 480;
 
-/** Nowdex 风格点阵刻度尺：SEGMENTS 段圆角竖条，按百分比点亮（满/半/暗） */
-const SEGMENTS: number = 24;
-
-/** 绘制点阵刻度尺（单 Canvas 一次绘制，避免几十个 Row 节点） */
-function drawSegmentScaleOn(canvas: CanvasRenderingContext2D, w: number, h: number, percent: number, tint: string): void {
-  if (w <= 0 || h <= 0) {
-    return;
-  }
-  canvas.clearRect(0, 0, w, h);
-  const gap = 2;
-  const segW = (w - gap * (SEGMENTS - 1)) / SEGMENTS;
-  const segH = h * 0.7;
-  const y = (h - segH) / 2;
-  const filled = (Math.max(0, Math.min(100, percent)) / 100) * SEGMENTS;
-  for (let i = 0; i < SEGMENTS; i++) {
-    const x = i * (segW + gap);
-    const illum = filled - i;
-    canvas.globalAlpha = 1;
-    if (illum >= 1) {
-      canvas.fillStyle = tint;
-    } else if (illum >= 0.5) {
-      canvas.fillStyle = tint;
-      canvas.globalAlpha = 0.5;
-    } else {
-      canvas.fillStyle = '#00000022';
-    }
-    const r = segW / 2;
-    canvas.beginPath();
-    canvas.moveTo(x + r, y);
-    canvas.arcTo(x + segW, y, x + segW, y + segH, r);
-    canvas.arcTo(x + segW, y + segH, x, y + segH, r);
-    canvas.arcTo(x, y + segH, x, y, r);
-    canvas.arcTo(x, y, x + segW, y, r);
-    canvas.closePath();
-    canvas.fill();
-  }
-  canvas.globalAlpha = 1;
-}
-
-@Component
-export struct SegmentScaleBar {
-  percent: number = 0;
-  tint: ResourceColor = Theme.accent;
-  private canvasContext: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true));
-
-  build() {
-    Canvas(this.canvasContext)
-      .width('100%')
-      .height(12)
-      .onReady(() => {
-        const c = this.canvasContext;
-        // Canvas 需要字面色值，统一走 Theme 用量色板（随系统深浅色）
-        drawSegmentScaleOn(c, c.width, c.height, this.percent, Theme.chartAccent());
-      })
-  }
-}
-
 @Component
 export struct UsageBar {
   @Prop percent: number = 0;
@@ -96,13 +39,13 @@ export struct UsageBar {
     Stack({ alignContent: Alignment.Start }) {
       Row()
         .width('100%')
-        .height(8)
-        .borderRadius(4)
+        .height(6)
+        .borderRadius(3)
         .backgroundColor(Theme.stroke)
       Row()
         .width(`${Math.max(0, Math.min(100, this.percent))}%`)
-        .height(8)
-        .borderRadius(4)
+        .height(6)
+        .borderRadius(3)
         .backgroundColor(Theme.barColor(this.percent, this.usageKnown))
     }
     .width('100%')
@@ -155,69 +98,6 @@ export struct RowProgressBar {
   }
 }
 
-/**
- * 首页紧凑卡片的 Nowdex 风格窗口块：
- * 大号百分比在左下（38%），右上为窗口名 + ⏱ 倒计时，下方点阵刻度尺；传 animKey 时做数值过渡。
- * 详情页继续使用 WindowBlock（标题行 + 进度条 + 倒计时）。
- */
-@Component
-export struct CompactWindowBlock {
-  @Prop title: string = '';
-  @Prop win: RateWindow = makeWindow(0, 0, false);
-  /** 数值过渡锚点（服务商 id + 窗口 id）；空串 = 不做过渡 */
-  @Prop animKey: string = '';
-  @State animPercent: number = -1;
-
-  aboutToAppear(): void {
-    if (this.animKey.length > 0) {
-      this.animPercent = rememberedPercent(this.animKey);
-      rememberPercent(this.animKey, this.win.usedPercent);
-    }
-  }
-
-  private shownPercent(): number {
-    return this.animPercent >= 0 ? this.animPercent : this.win.usedPercent;
-  }
-
-  build() {
-    Row() {
-      Column({ space: Theme.gapXxs }) {
-        Text(Format.percent(this.shownPercent()))
-          .fontSize(Theme.fsMetricSm)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(Theme.barColor(this.win.usedPercent, this.win.usageKnown))
-        SegmentScaleBar({ percent: this.shownPercent() })
-          .width(120)
-      }
-      .alignItems(HorizontalAlign.Start)
-
-      Blank()
-
-      Column({ space: Theme.gapXxs }) {
-        Text(this.title)
-          .fontSize(Theme.fsCaption)
-          .fontColor(Theme.textDim)
-        if (this.win.resetsAt > 0) {
-          Text(`⏱ ${Format.resetIn(this.win.resetsAt - Date.now())}`)
-            .fontSize(Theme.fsMicro)
-            .fontColor(Theme.textDim)
-        }
-      }
-      .alignItems(HorizontalAlign.End)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-    .onAppear(() => {
-      if (this.animKey.length === 0 || this.animPercent === this.win.usedPercent) {
-        return;
-      }
-      this.getUIContext().animateTo({ duration: TWEEN_MS, curve: Curve.Friction }, () => {
-        this.animPercent = this.win.usedPercent;
-      });
-    })
-  }
-}
-
 /** 一个用量窗口块：名称 + 百分比 + 进度条 + 重置倒计时；传 animKey 时百分比数字与进度条做数值过渡 */
 @Component
 export struct WindowBlock {
@@ -256,7 +136,7 @@ export struct WindowBlock {
       UsageBar({ percent: this.shownPercent(), usageKnown: this.win.usageKnown })
 
       if (this.win.resetsAt > 0) {
-        Text(`⏱ ${Format.resetIn(this.win.resetsAt - Date.now())}`)
+        Text(` ${Format.resetIn(this.win.resetsAt - Date.now())}`)
           .fontSize(Theme.fsMicro)
           .fontColor(Theme.textDim)
           .margin({ top: Theme.gapXxs })

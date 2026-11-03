@@ -9,7 +9,7 @@ import { Theme } from '../common/Theme';
 import { Format } from '../common/Format';
 import { Nav } from '../common/Nav';
 import { L, AppLang, currentLang } from '../common/I18n';
-import { CompactWindowBlock } from '../view/UsageBar';
+import { WindowBlock } from '../view/UsageBar';
 import { ProviderIcon } from '../view/ProviderIcon';
 
 @Entry
@@ -134,6 +134,11 @@ struct Index {
         return L(`余额 ${balance}`, `Balance ${balance}`);
       }
       return `余额 ${snap.providerCost.displayText}`;
+    }
+    if (snap.primary != null) {
+      // 主泳道被更长的绑定泳道卡住时按投影展示（对照菜单卡片的 bindingQuotaProjection）
+      const shown = primaryDisplayWindow(s.descriptor.id, snap, Date.now());
+      return Format.percent(shown != null ? shown.usedPercent : snap.primary.usedPercent);
     }
     return L('已更新', 'Updated');
   }
@@ -266,35 +271,23 @@ struct Index {
       }
       .width('100%')
 
-      // 用量窗口（最多两个，详情页看全部）；Nowdex 风格紧凑块：大号百分比 + 点阵刻度尺 + ⏱ 倒计时
+      // 用量窗口（最多两个，详情页看全部）
       if (s.snapshot != null && s.snapshot.ok) {
         if (s.snapshot.primary != null) {
-          CompactWindowBlock({
+          WindowBlock({
             title: s.snapshot.primaryLabel.length > 0 ? s.snapshot.primaryLabel : L('会话', 'Session'),
             win: this.primaryWindow(s) ?? s.snapshot.primary,
+            compact: true,
             animKey: `${s.descriptor.id}_primary`
           })
         }
         if (s.snapshot.secondary != null) {
-          CompactWindowBlock({
+          WindowBlock({
             title: s.snapshot.secondaryLabel.length > 0 ? s.snapshot.secondaryLabel : L('每周', 'Weekly'),
             win: s.snapshot.secondary,
+            compact: true,
             animKey: `${s.descriptor.id}_secondary`
           })
-        }
-        // 第三窗：紧凑行（标签 + 小号百分比，无进度条；对照 Nowdex cursor-row）
-        if (s.snapshot.tertiary != null) {
-          Row() {
-            Text(s.snapshot.tertiaryLabel.length > 0 ? s.snapshot.tertiaryLabel : L('月度', 'Monthly'))
-              .fontSize(Theme.fsCaption)
-              .fontColor(Theme.textDim)
-            Blank()
-            Text(Format.percent(s.snapshot.tertiary.usedPercent))
-              .fontSize(Theme.fsCaption)
-              .fontWeight(FontWeight.Medium)
-              .fontColor(Theme.barColor(s.snapshot.tertiary.usedPercent, s.snapshot.tertiary.usageKnown))
-          }
-          .width('100%')
         }
         if (s.snapshot.providerCost != null && s.snapshot.primary == null) {
           Row() {
